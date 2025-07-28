@@ -1,0 +1,22 @@
+# Mapping from Cog-Load Tobii TSV columns to GFM schema fields.
+mappings:
+  "TimeStamp": "time-rel-seconds"                          # relative timestamp (µs)
+  "Event": "event-id"                                   # drop event markers or handle separately
+
+  # Gaze coordinates
+  "GazePointXLeft": "x-left"
+  "GazePointYLeft": "y-left"
+  "ValidityLeft": "confidence-gaze-left"
+  "GazePointXRight": "x-right"
+  "GazePointYRight": "y-right"
+  "ValidityRight": "confidence-gaze-right"
+  "GazePointX": "x-avg"
+  "GazePointY": "y-avg"
+
+  # Pupil data
+  "PupilSizeLeft": "pupil-size-left-avg"
+  "PupilSizeRight": "pupil-size-right-avg"
+  "PupilValidityLeft": "confidence-pupil-left"
+  "PupilValidityRight": "confidence-pupil-right"
+
+  # All other TSV columns will be dropped by mapping to empty strings.

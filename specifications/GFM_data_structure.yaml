@@ -1,0 +1,94 @@
+
+# Metadata
+mask_vec: [bool,...]         # which fields are present
+screen-width: int | null       # width of the screen in pixels
+screen-height: int | null      # height of the screen in pixels
+screen-dpi: float | null        # screen DPI (dots per inch)
+screen-width-mm: float | null   # width of the screen in millimeters
+screen-height-mm: float | null  # height of the screen in millimeters
+
+# Identifiers
+id: int               # unique identifier for the data point
+event-id: int | null  # unique identifier for the event
+session-id: str | null  # session identifier
+subject-id: str | null   # subject identifier
+
+# Timestamps
+time-abs-seconds: float | null         # absolute timestamp (s)
+time-rel-seconds: float | null         # index-based or resampled time
+
+# Gaze coordinates
+x-right: float | null
+y-right: float | null
+z-right: float | null
+x-left: float | null
+y-left: float | null
+z-left: float | null
+x-avg: float | null
+y-avg: float | null
+z-avg: float | null
+
+# Fixation data
+fixation_dur: float | null
+fixation: bool | null
+fixation-count: int | null
+fixation-index: int | null
+confidence-fixation: float | null  # confidence in the fixation detection
+
+# Saccade data
+saccade_amp: float | null
+saccade-dur: float | null
+saccade-vel: float | null
+saccade-acc: float | null
+confidence-saccade: float | null  # confidence in the saccade detection
+
+# Dispersion data
+dispersion-x: float | null
+dispersion-y: float | null
+
+# Pupil data
+pupil-size-right-x: float | null
+pupil-size-right-y: float | null
+pupil-size-left-x: float | null
+pupil-size-left-y: float | null
+pupil-size-avg-x: float | null
+pupil-size-avg-y: float | null
+pupil-size-right-avg: float | null
+pupil-size-left-avg: float | null
+pupil-velocity: float | null
+pupil-velocity-right: float | null
+pupil-velocity-left: float | null
+pupil-acceleration: float | null
+pupil-acceleration-right: float | null
+pupil-acceleration-left: float | null
+confidence-pupil-left: float | null  # confidence in the left pupil size
+confidence-pupil-right: float | null # confidence in the right pupil size
+
+# Blink data
+blink: bool | null
+blink-dur: float | null
+blink-dur-total: float | null
+blink-rate: float | null
+blink-count: int | null
+blink-start: float | null
+blink-end: float | null
+confidence-blink: float | null  # confidence in the blink detection
+
+# Distance data
+distance-avg: float | null
+distance-right: float | null
+distance-left: float | null
+
+# Confidence flags
+confidence-gaze-left: float | null      # confidence in the gaze coordinates
+confidence-gaze-right: float | null     # confidence in the gaze coordinates
+confidence-fixation: float | null  # confidence in the fixation detection
+confidence-saccade: float | null  # confidence in the saccade detection
+confidence-pupil-left: float | null  # confidence in the left pupil size
+confidence-pupil-right: float | null # confidence in the right pupil size
+confidence-blink: float | null   # confidence in the blink detection
+
+# Stimulus data
+stimuli: bool | null          # whether a stimulus was present
+stimulus-id: str | null       # identifier for the stimulus
+stimulus-type: str | null     # type of the stimulus (e.g., image, video)

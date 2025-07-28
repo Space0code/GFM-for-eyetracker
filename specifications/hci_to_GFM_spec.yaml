@@ -1,0 +1,63 @@
+# Mapping from Tobii TSV columns to GFM schema fields.
+mappings:
+  "Timestamp": ""                          
+  "MicroSecondTimestamp": "time-rel-seconds"              # relative timestamp (µs)
+  "AbsoluteMicroSecondTimestamp": "time-abs-seconds"      # absolute timestamp in µs
+  "DateTimeStamp": ""                          # drop or parse separately
+  "DateTimeStampStartOffset": ""               # drop
+  "Number": ""                                 # drop (row number)
+
+  # Gaze coordinates
+  "GazePointXLeft": "x-left"
+  "GazePointYLeft": "y-left"
+  "GazePointXRight": "x-right"
+  "GazePointYRight": "y-right"
+  "GazePointX": "x-avg"
+  "GazePointY": "y-avg"
+  "MappedGazeDataPointX": ""                   # drop or custom mapping
+  "MappedGazeDataPointY": ""
+  "CamXLeft": ""                               # drop camera coords
+  "CamYLeft": ""
+  "CamXRight": ""
+  "CamYRight": ""
+
+  # Distance
+  "DistanceLeft": "distance-left"
+  "DistanceRight": "distance-right"
+
+  # Pupil data
+  "PupilLeft": "pupil-diameter-left"
+  "PupilRight": "pupil-diameter-right"
+
+  # Validity / confidence
+  "ValidityLeft": "confidence-gaze-left"
+  "ValidityRight": "confidence-gaze-right"
+
+  # Fixation data
+  "FixationIndex": "fixation-index"
+  "MappedFixationPointX": ""
+  "MappedFixationPointY": ""
+  "FixationDuration": "fixation_dur"
+
+  # AOI / Event / Stimulus
+  "Event": ""                                   # drop
+  "EventKey": ""
+  "Data1": ""
+  "Data2": ""
+  "Descriptor": ""
+  "StimuliName": "stimulus-type"
+  "StimuliID": "stimulus-id"
+
+  # Media properties (drop)
+  "MediaWidth": ""
+  "MediaHeight": ""
+  "MediaPosX": ""
+  "MediaPosY": ""
+
+  # AOI metadata (drop)
+  "AoiIds": ""
+  "AoiNames": ""
+  "WebGroupImage": ""
+
+  # Additional identifiers
+  "AudioSampleNumber": ""                      # drop if unused
