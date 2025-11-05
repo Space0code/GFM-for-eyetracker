@@ -9,3 +9,5 @@
 **/.DS_Store
 data/
 notebooks/temp.ipynb
+checkpoints/
+
