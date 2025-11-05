@@ -1,0 +1,1 @@
+This model predicts the next (x,y) point based on the previous points. It uses GraphSAGE architecture.
