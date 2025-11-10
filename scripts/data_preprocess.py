@@ -3,7 +3,7 @@ import pandas as pd
 
 SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
 DEST_DATA_DIR_ROOT = "data/processed/"
-source_data_dirs = {
+SOURCE_DATA_DIRS = {
     "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
     "hci-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/"),
 }
@@ -26,6 +26,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     df = pd.read_csv(file_path)
     dfOG = df.copy()
+    print("COLUMNS of original df:", df.columns)
 
     MANDATORY_COLUMNS = [
         "time-rel-seconds",
@@ -34,14 +35,19 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
         "confidence-gaze-left",
         "confidence-gaze-right",
     ]
+    OPTIONAL_COLUMNS = [
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+    ]
     # check if all mandatory columns are present
     for col in MANDATORY_COLUMNS:
         if col not in df.columns:
             raise ValueError(f"Mandatory column '{col}' is missing in the file: {file_path}")
 
-    # filter the columns, preserve only time-rel-seconds, x-avg, y-avg and confidence-left, confidence-right
-    df = dfOG[["time-rel-seconds", "x-avg", "y-avg", "confidence-gaze-left", "confidence-gaze-right"]].copy()
+    present_cols = MANDATORY_COLUMNS + [col for col in OPTIONAL_COLUMNS if col in df.columns]
 
+    df = dfOG[present_cols].copy()
+    print("COLUMNS of processed df:", df.columns)
 
     if "cog-load" in dir_name:
         # rows that have both confidence = 0, put x-avg and y-avg to float('nan')
@@ -50,15 +56,16 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
         # rows that have at least one confidence > 0, put x-avg and y-avg to float('nan')
         condition_good = (df["confidence-gaze-left"] == 0) & (df["confidence-gaze-right"] == 0)
 
-    df.loc[~condition_good, ["x-avg", "y-avg"]] = float('nan')
+    cols_to_nan = [col for col in present_cols if col != "time-rel-seconds"]
+    df.loc[~condition_good, cols_to_nan] = float('nan')
 
-    # drop all rows until the first row with confidence > 0
+    # drop all rows until the first row with good confidence
     first_valid_index = df[condition_good].index[0]
     last_valid_index = df[condition_good].index[-1]
-    df = df.iloc[first_valid_index:last_valid_index + 1].reset_index(drop=True)
+    df = df.iloc[first_valid_index:last_valid_index + 1]
 
     # drop where time is nan
-    df = df.dropna(subset=["time-rel-seconds"])
+    df = df.dropna(subset=["time-rel-seconds"]).reset_index(drop=True)
 
     df["time-rel-seconds"] = df["time-rel-seconds"] - df["time-rel-seconds"].min()
 
@@ -114,7 +121,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
 
 if __name__ == "__main__":
-    for dir_name, dir_path in source_data_dirs.items():
+    for dir_name, dir_path in SOURCE_DATA_DIRS.items():
         print("\n" + "=" * 50)
         print(f"Processing directory: {dir_name} at {dir_path}")
         preprocess_dir(dir_name, dir_path, os.path.join(DEST_DATA_DIR_ROOT, dir_name))

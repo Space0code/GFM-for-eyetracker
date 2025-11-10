@@ -26,8 +26,8 @@ mappings:
   "DistanceRight": "distance-right"
 
   # Pupil data
-  "PupilLeft": "pupil-diameter-left"
-  "PupilRight": "pupil-diameter-right"
+  "PupilLeft": "pupil-size-left-avg"
+  "PupilRight": "pupil-size-right-avg"
 
   # Validity / confidence
   "ValidityLeft": "confidence-gaze-left"
