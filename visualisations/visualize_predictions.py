@@ -264,4 +264,6 @@ def main():
     visualize_predictions(args.csv_path, args.model, args.num_points, args.save)
 
 if __name__ == "__main__":
-    main()
+    # run until manually stopped (plots one plot and waits for it to be closed)
+    while True:
+        main()
