@@ -73,7 +73,7 @@ def load_model(model_path):
     lookback = checkpoint.get('lookback', 1)
     
     model = NextPointGNN(
-        in_channels=2, 
+        in_channels=checkpoint['in_channels'], 
         hidden_dim=checkpoint['hidden'], 
         num_layers=checkpoint['layers'],
         layer=layer_class
@@ -117,9 +117,9 @@ def get_predictions(model, graph, device, num_points=100):
         predictions = model(graph.x, graph.edge_index)
     
     # Convert to numpy for plotting
-    actual_coords = graph.x.cpu().numpy()
-    pred_coords = predictions.cpu().numpy()
-    targets = graph.y.cpu().numpy()
+    actual_coords = graph.x.cpu().numpy()[:, :2]  # Only use x, y coordinates
+    pred_coords = predictions.cpu().numpy()[:, :2]  # Only use x, y coordinates
+    targets = graph.y.cpu().numpy()[:, :2]  # Only use x, y coordinates
     mask = graph.mask.cpu().numpy()
     
     return actual_coords, pred_coords, targets, mask
@@ -148,8 +148,6 @@ def plot_predictions(actual_coords, pred_coords, targets, mask, csv_path):
     for i in range(num_nodes - 1):
         ax.plot(actual_coords[i:i+2, 0], actual_coords[i:i+2, 1], 
                 'b-', alpha=alphas[i], linewidth=2)
-    ax.scatter(actual_coords[:, 0], actual_coords[:, 1], 
-               c='blue', s=30, alpha=alphas, label='Actual coordinates')
     
     # Mark start and end of gaze path
     ax.scatter(actual_coords[0, 0], actual_coords[0, 1], 

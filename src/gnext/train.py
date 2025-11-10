@@ -88,7 +88,7 @@ def main():
     ap.add_argument("--val_split", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--save", type=str, default="checkpoints")
-    ap.add_argument("--lookback", type=int, default=1)
+    ap.add_argument("--lookback", type=int, default=2)
     ap.add_argument("--layer_module_name", type=str, default="SAGEConv", choices=layer_modules.keys())
     args = ap.parse_args()
 
@@ -107,7 +107,7 @@ def main():
 
     # initialize model and optimizer
     layer_module = layer_modules[args.layer_module_name]
-    model = NextPointGNN(in_channels=2, hidden_dim=args.hidden, num_layers=args.layers, layer=layer_module).to(device)
+    model = NextPointGNN(in_channels=4, hidden_dim=args.hidden, num_layers=args.layers, layer=layer_module).to(device)
     optim = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     best_val = float("inf")
@@ -139,6 +139,7 @@ def main():
         if val_mae < best_val:
             best_val = val_mae
             torch.save({"state_dict": model.state_dict(),
+                        "in_channels": 4,
                         "hidden": args.hidden,
                         "layers": args.layers,
                         "layer_name": layer_module.__name__,
@@ -154,6 +155,7 @@ def main():
 
     elapsed_time = time.time() - start_time
     print(f"Training completed in {elapsed_time/60:.2f} minutes.")
+    print(f"Best model saved at: {save_path}")
 
 if __name__ == "__main__":
     main()

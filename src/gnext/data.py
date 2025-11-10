@@ -44,7 +44,7 @@ class EyePathDataset(Dataset):
             raise ValueError(f"{path} must have >=2 rows")
 
         # node features: [x, y] coordinates
-        x = torch.tensor(df[["x-avg", "y-avg"]].values, dtype=torch.float32)
+        x = torch.tensor(df[["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]].values, dtype=torch.float32)
 
         # temporal edges: connect each node to previous 1-10 steps
         src_list, dst_list = [], []
@@ -59,7 +59,7 @@ class EyePathDataset(Dataset):
 
         # targets: predict next coordinates (last node has no target)
         y = torch.full((n, 2), float("nan"), dtype=torch.float32)
-        y[:-1] = x[1:]  # target for node i is coordinates of node i+1
+        y[:-1] = x[1:, :2]  # target for node i is next node's (x, y) coordinates
         mask = torch.zeros(n, dtype=torch.bool)
         mask[:-1] = True  # mask out last node from loss calculation
 
