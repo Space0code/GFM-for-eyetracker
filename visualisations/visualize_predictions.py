@@ -2,6 +2,9 @@
 """
 Visualize model predictions vs actual gaze coordinates for a single CSV file.
 Shows the actual gaze path and predicted next-point coordinates on a 2D plot.
+
+Example usage:
+python visualisations/visualize_predictions.py /Users/tomibozak/Projects/IJS/GFM-for-eyetracker/data/processed/cog-load-mini/s_008.csv --model checkpoints/best200.pt --num_points 100 
 """
 import argparse
 import os
@@ -32,7 +35,7 @@ def load_graph_from_csv(csv_path, lookback=1):
     temp_name = os.path.basename(csv_path)
     
     # Create temporary dataset with just this file
-    dataset = EyePathDataset(temp_dir, lookback=lookback)
+    dataset = EyePathDataset(temp_dir, lookback=lookback, file_list=[temp_name])
     
     # Find the graph corresponding to our CSV
     graph = None

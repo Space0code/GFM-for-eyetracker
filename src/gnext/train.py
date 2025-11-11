@@ -29,9 +29,12 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    # if torch.backends.mps.is_available():
+    #     torch.mps.manual_seed(seed)
 
 def split_by_sequence(dataset, val_split=0.2, seed=42):
     """Split dataset by sequences (not time steps) into train/validation sets."""
@@ -90,20 +93,38 @@ def main():
     ap.add_argument("--save", type=str, default="checkpoints")
     ap.add_argument("--lookback", type=int, default=2)
     ap.add_argument("--layer_module_name", type=str, default="SAGEConv", choices=layer_modules.keys())
+    ap.add_argument("--test_set", type=str, default=None,
+                    help="optional name of a dataset to hold out for testing only")
     args = ap.parse_args()
 
     save_path = os.path.join(args.save, f"best{args.epochs}.pt")
 
     set_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # don't use mps for now
+    # device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("cuda") if torch.cuda.is_available() else "cpu" 
+    print(f"Using device: {device}")
+
+    IGNORE_DIRS = ["cog-load"] # for prototyping use cog-load-mini
 
     # load eye tracking sequences as graphs
-    ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback)
-    train_ds, val_ds = split_by_sequence(ds, val_split=args.val_split, seed=args.seed)
-    print("Train graphs length:", len(train_ds), "Val graphs length:", len(val_ds))
-    print(f"Train graphs shapes: {[train_ds[i].x.shape for i in range(len(train_ds))]}, Val graphs shape: {val_ds[0].x.shape}")
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size)
+    if args.test_set:
+        print(f"Holding out dataset '{args.test_set}' for testing only.")
+        all_ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
+        train_val_indices = [i for i in range(len(all_ds)) if args.test_set not in all_ds[i].seq_name]
+        test_indices = [i for i in range(len(all_ds)) if args.test_set in all_ds[i].seq_name]
+        train_val_ds = Subset(all_ds, train_val_indices)
+        test_ds = Subset(all_ds, test_indices)
+        print(f"Total sequences: {len(all_ds)}, Train/Val: {len(train_val_ds)}, Test: {len(test_ds)}")
+        ds = train_val_ds
+    else:    
+        ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
+        train_ds, val_ds = split_by_sequence(ds, val_split=args.val_split, seed=args.seed)
+        print("Train graphs length:", len(train_ds), "| Val graphs length:", len(val_ds))
+        print(f"Train graphs shapes: {[train_ds[i].x.shape for i in range(len(train_ds))]} | Val graphs shape: {val_ds[0].x.shape}")
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=os.cpu_count()//2, persistent_workers=True)
+        val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, num_workers=os.cpu_count()//2, persistent_workers=True)
+    print()
 
     # initialize model and optimizer
     layer_module = layer_modules[args.layer_module_name]
@@ -112,8 +133,9 @@ def main():
 
     best_val = float("inf")
     start_time = time.time()
+    print("Starting training...")
     for epoch in range(1, args.epochs + 1):
-        # print(f"Epoch {epoch:03d}")
+        epoch_start = time.time()
         # training phase
         model.train()
         total_loss = 0.0
@@ -133,7 +155,7 @@ def main():
         val_mae, val_rmse = evaluate(model, val_loader, device)
         if epoch % (args.epochs // 10) == 0 or epoch == 1 or epoch == args.epochs:
             print(f"Epoch {epoch:03d} | train_mse={total_loss/len(train_loader):.6f} "
-                f"| val_mae={val_mae:.4f} | val_rmse={val_rmse:.4f}")
+                f"| val_mae={val_mae:.4f} | val_rmse={val_rmse:.4f} | epoch_time={time.time() - epoch_start:.2f}s")
 
         # save best model based on validation MAE
         if val_mae < best_val:

@@ -17,18 +17,30 @@ class EyePathDataset(Dataset):
     Edge rule: i -> i+1 (previous datapoint to current).
     Targets: for node i, predict coords of node i+1 (last node masked).
     """
-    def __init__(self, root_dir: str, recursive: bool = False, lookback: int = 1):
-        """Load all CSV files from directory and convert to graphs."""
-        if recursive:
+    def __init__(self, root_dir: str, recursive: bool = False, lookback: int = 1, ignore_dirs: list = [], file_list: list = None):
+        """
+        Load all CSV files from directory and convert to graphs.
+        If file_list is provided, search for the files in the list in root_dir.
+        """
+        if file_list is not None:
+            self.files = [os.path.join(root_dir, f) for f in file_list]
+        elif recursive:
             # search recursively in subdirectories
             self.files = sorted(glob.glob(os.path.join(root_dir, "**", "*.csv"), recursive=True))
         else:
             # search only in the root directory
             self.files = sorted(glob.glob(os.path.join(root_dir, "*.csv")))
         
+        # filter out files in ignored directories
+        if ignore_dirs:
+            self.files = [f for f in self.files if not any(
+                ig == os.path.basename(os.path.dirname(f)) for ig in ignore_dirs
+            )]
+        
         if not self.files:
             search_type = "recursively" if recursive else "in root directory"
             raise FileNotFoundError(f"No CSVs found {search_type} in {root_dir}")
+        
         # pre-load all graphs into memory for simplicity
         self.graphs = [self._load_one(p, lookback) for p in self.files]
         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
@@ -65,6 +77,10 @@ class EyePathDataset(Dataset):
 
         data = Data(x=x, edge_index=edge_index, y=y, mask=mask)
         data.seq_name = os.path.basename(path)
+
+        # print("Processed file:", path)
+        # print(f"Loaded {data.seq_name}: {n} nodes, {edge_index.size(1)} edges, lookback={lookback}")
+
         return data
 
     def _clean_dataset(self, df: pd.DataFrame, path: str) -> pd.DataFrame:
