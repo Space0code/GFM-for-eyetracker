@@ -77,6 +77,7 @@ class EyePathDataset(Dataset):
 
         data = Data(x=x, edge_index=edge_index, y=y, mask=mask)
         data.seq_name = os.path.basename(path)
+        data.dataset_name = os.path.basename(os.path.dirname(path))
 
         # print("Processed file:", path)
         # print(f"Loaded {data.seq_name}: {n} nodes, {edge_index.size(1)} edges, lookback={lookback}")

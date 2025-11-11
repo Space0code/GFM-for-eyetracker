@@ -111,18 +111,19 @@ def main():
     all_ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
     if args.test_set:
         print(f"Holding out dataset '{args.test_set}' for testing only.")
-        train_val_indices = [i for i in range(len(all_ds)) if args.test_set not in all_ds[i].seq_name]
-        test_indices = [i for i in range(len(all_ds)) if args.test_set in all_ds[i].seq_name]
+        train_val_indices = [i for i in range(len(all_ds)) if args.test_set not in all_ds[i].dataset_name]
+        test_indices = [i for i in range(len(all_ds)) if args.test_set in all_ds[i].dataset_name]
         train_val_ds = Subset(all_ds, train_val_indices)
         test_ds = Subset(all_ds, test_indices) # not used for now
-        train_ds, val_ds = split_by_sequence(train_val_ds, val_split=args.val_split, seed=args.seed)
 
     else:    
         train_val_ds = all_ds
     
     train_ds, val_ds = split_by_sequence(train_val_ds, val_split=args.val_split, seed=args.seed)
-    print("Train graphs length:", len(train_ds), "| Val graphs length:", len(val_ds))
-    print(f"Train graphs shapes: {[train_ds[i].x.shape for i in range(len(train_ds))]} | Val graphs shape: {val_ds[0].x.shape}")
+    print("Train graphs:", len(train_ds), "| Val graphs:", len(val_ds))
+    avg_train_length = np.mean([train_ds[i].num_nodes for i in range(len(train_ds))])
+    avg_val_length = np.mean([val_ds[i].num_nodes for i in range(len(val_ds))])
+    print(f"Average train graph: ({avg_train_length:.2f}, {train_ds[0].x.shape[1]}) | Average val graph: ({avg_val_length:.2f}, {val_ds[0].x.shape[1]})")
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=os.cpu_count()//2, persistent_workers=True)
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, num_workers=os.cpu_count()//2, persistent_workers=True)
     print()

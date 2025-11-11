@@ -99,8 +99,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     # plt.tight_layout()
     # plt.show()
 
-    # DON'T NORMALIZE the whole dataset - data leakage!
-    # normalize x-avg and y-avg 
+    # DON'T normalize x-avg and y-avg (DATA LEAK) -- normalize later in data loader
     # screen_min_x = df["x-avg"].min()
     # screen_max_x = df["x-avg"].max()
     # screen_min_y = df["y-avg"].min()
