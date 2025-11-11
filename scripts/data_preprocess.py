@@ -1,3 +1,4 @@
+import argparse
 import os
 import pandas as pd
 
@@ -26,7 +27,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     df = pd.read_csv(file_path)
     dfOG = df.copy()
-    print("COLUMNS of original df:", df.columns)
+    # print("COLUMNS of original df:", df.columns)
 
     MANDATORY_COLUMNS = [
         "time-rel-seconds",
@@ -47,7 +48,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     present_cols = MANDATORY_COLUMNS + [col for col in OPTIONAL_COLUMNS if col in df.columns]
 
     df = dfOG[present_cols].copy()
-    print("COLUMNS of processed df:", df.columns)
+    # print("COLUMNS of processed df:", df.columns)
 
     if "cog-load" in dir_name:
         # rows that have both confidence = 0, put x-avg and y-avg to float('nan')
@@ -71,22 +72,20 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     df_to_compare = df.copy()
 
-    # interpolate missing values in x-avg and y-avg but only a few points in each direction (limit=30 => max 1s window interpolation)
-    df["x-avg"] = df["x-avg"].interpolate(method="linear", limit_direction="both", limit=10, limit_area="inside")
-    df["y-avg"] = df["y-avg"].interpolate(method="linear", limit_direction="both", limit=10, limit_area="inside")
+    # interpolate missing values but only a few points in each direction (limit=30 => max 1s window interpolation)
+    for col in present_cols:
+        if col != "time-rel-seconds":
+            df[col] = df[col].interpolate(method="linear", limit_direction="both", limit=10, limit_area="inside")
+            if "pupil" in col:
+                # don't smooth (x,y) coordinates because we could lose subtle gaze path details
+                df[col] = df[col].rolling(window=3, min_periods=2, center=True).mean() 
 
-    # smooth out the x-avg and y-avg using a rolling window 
-    df["x-avg"] = df["x-avg"].rolling(window=3, min_periods=2, center=True).mean()
-    df["y-avg"] = df["y-avg"].rolling(window=3, min_periods=2, center=True).mean()
-
-
-    stime = 1081.11
-    etime = 1081.42
-
-    print("Sample df_to_compare:")
-    print(df_to_compare.loc[df_to_compare["time-rel-seconds"].between(stime, etime), :])
-    print("Sample df:")
-    print(df.loc[df["time-rel-seconds"].between(stime, etime), :])
+    # stime = 1081.11
+    # etime = 1081.42
+    # print("Sample df_to_compare:")
+    # print(df_to_compare.loc[df_to_compare["time-rel-seconds"].between(stime, etime), :])
+    # print("Sample df:")
+    # print(df.loc[df["time-rel-seconds"].between(stime, etime), :])
 
     # plot comparision of original and processed data
     # import matplotlib.pyplot as plt
@@ -100,17 +99,18 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     # plt.tight_layout()
     # plt.show()
 
+    # DON'T NORMALIZE the whole dataset - data leakage!
     # normalize x-avg and y-avg 
-    screen_min_x = df["x-avg"].min()
-    screen_max_x = df["x-avg"].max()
-    screen_min_y = df["y-avg"].min()
-    screen_max_y = df["y-avg"].max()
-    df["x-avg"] = (df["x-avg"] - screen_min_x) / (screen_max_x - screen_min_x)
-    df["y-avg"] = (df["y-avg"] - screen_min_y) / (screen_max_y - screen_min_y)
+    # screen_min_x = df["x-avg"].min()
+    # screen_max_x = df["x-avg"].max()
+    # screen_min_y = df["y-avg"].min()
+    # screen_max_y = df["y-avg"].max()
+    # df["x-avg"] = (df["x-avg"] - screen_min_x) / (screen_max_x - screen_min_x)
+    # df["y-avg"] = (df["y-avg"] - screen_min_y) / (screen_max_y - screen_min_y)
 
 
-    print("Processed DataFrame:")
-    print(df.head(3))
+    # print("Processed DataFrame:")
+    # print(df.head(3))
     # print(df.describe())
 
     # save the processed dataframe to a new CSV file
@@ -121,7 +121,14 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dataset", type=str, default=None,
+                    help="cog-load or hci-tagging to process only one dataset. Otherwise, process all datasets.")
+    args = ap.parse_args()
+
     for dir_name, dir_path in SOURCE_DATA_DIRS.items():
+        if args.dataset is not None and dir_name != args.dataset:
+            continue
         print("\n" + "=" * 50)
         print(f"Processing directory: {dir_name} at {dir_path}")
         preprocess_dir(dir_name, dir_path, os.path.join(DEST_DATA_DIR_ROOT, dir_name))

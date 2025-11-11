@@ -65,7 +65,7 @@ def convert_cog_load(input_dir, spec, output_dir):
             # 5) Write out CSV
             subj_id = subj
             base, _ = os.path.splitext(filename)
-            out_name = f"{subj_id}_{base}.csv"
+            out_name = f"{subj_id}.csv"
             out_path = os.path.join(output_dir, out_name)
             df.to_csv(out_path, index=False)
             print(f"Converted {input_path} -> {out_path}")
