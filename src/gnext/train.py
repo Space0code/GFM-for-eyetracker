@@ -108,22 +108,23 @@ def main():
     IGNORE_DIRS = ["cog-load"] # for prototyping use cog-load-mini
 
     # load eye tracking sequences as graphs
+    all_ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
     if args.test_set:
         print(f"Holding out dataset '{args.test_set}' for testing only.")
-        all_ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
         train_val_indices = [i for i in range(len(all_ds)) if args.test_set not in all_ds[i].seq_name]
         test_indices = [i for i in range(len(all_ds)) if args.test_set in all_ds[i].seq_name]
         train_val_ds = Subset(all_ds, train_val_indices)
-        test_ds = Subset(all_ds, test_indices)
-        print(f"Total sequences: {len(all_ds)}, Train/Val: {len(train_val_ds)}, Test: {len(test_ds)}")
-        ds = train_val_ds
+        test_ds = Subset(all_ds, test_indices) # not used for now
+        train_ds, val_ds = split_by_sequence(train_val_ds, val_split=args.val_split, seed=args.seed)
+
     else:    
-        ds = EyePathDataset(args.data_dir, recursive=True, lookback=args.lookback, ignore_dirs=IGNORE_DIRS)
-        train_ds, val_ds = split_by_sequence(ds, val_split=args.val_split, seed=args.seed)
-        print("Train graphs length:", len(train_ds), "| Val graphs length:", len(val_ds))
-        print(f"Train graphs shapes: {[train_ds[i].x.shape for i in range(len(train_ds))]} | Val graphs shape: {val_ds[0].x.shape}")
-        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=os.cpu_count()//2, persistent_workers=True)
-        val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, num_workers=os.cpu_count()//2, persistent_workers=True)
+        train_val_ds = all_ds
+    
+    train_ds, val_ds = split_by_sequence(train_val_ds, val_split=args.val_split, seed=args.seed)
+    print("Train graphs length:", len(train_ds), "| Val graphs length:", len(val_ds))
+    print(f"Train graphs shapes: {[train_ds[i].x.shape for i in range(len(train_ds))]} | Val graphs shape: {val_ds[0].x.shape}")
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=os.cpu_count()//2, persistent_workers=True)
+    val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, num_workers=os.cpu_count()//2, persistent_workers=True)
     print()
 
     # initialize model and optimizer
