@@ -1,0 +1,25 @@
+data_dir: "data/processed"
+seed: 111
+experiment_name: "MLPBaseline"
+
+model:
+  name: "MLPBaseline"
+  hidden_dim: 64
+  layers: 2
+  use_edge_attr: false
+
+data:  
+  lookback: 2
+
+train:
+  test_set: None # optional name of a dataset to hold out for testing only
+  save: true
+  save_dir: "checkpoints/baseline" # only used if save is true
+  
+  val_split: 0.2
+  batch_size: 8 
+  
+  lr: 0.001
+  epochs: 300
+  early_stopping: true
+  patience: 20

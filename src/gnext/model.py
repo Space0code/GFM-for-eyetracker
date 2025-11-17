@@ -13,7 +13,7 @@ class NextPointGNN(nn.Module):
     Minimal GraphSAGE: aggregates only from in-neighbors.
     With edges i->i+1, node i embeds using info up to i (no future leakage).
     """
-    def __init__(self, in_channels: int = 2, hidden_dim: int = 64, num_layers: int = 2, layer: nn.Module = SAGEConv):
+    def __init__(self, in_channels: int = 2, hidden_dim: int = 64, output_dim: int = 2, num_layers: int = 2, layer: nn.Module = SAGEConv):
         """
         Args:
             in_channels: Input feature dimension (x, y coordinates = 2)
@@ -31,7 +31,7 @@ class NextPointGNN(nn.Module):
         self.head = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, 2),
+            nn.Linear(hidden_dim, output_dim),
         )
 
     def forward(self, x, edge_index):
