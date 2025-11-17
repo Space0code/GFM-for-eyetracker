@@ -63,24 +63,6 @@ def split_by_sequence(dataset, val_split=0.2, seed=42):
     return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
 @torch.no_grad()
-def evaluate(model, loader, device, use_edge_attr=True):
-    """Evaluate model on validation set, computing MAE and RMSE metrics."""
-    model.eval()
-    mae_vals, rmse_vals = [], []
-    for batch in loader:
-        batch = batch.to(device)
-        pred = model(batch.x, batch.edge_index) if use_edge_attr else model(batch.x)
-        mask = batch.mask
-        if mask.sum() == 0:
-            continue
-        diff = pred[mask] - batch.y[mask]
-        mae_vals.append(diff.abs().mean().item())
-        rmse_vals.append(torch.sqrt((diff ** 2).mean()).item())
-    mae = float(np.mean(mae_vals)) if mae_vals else math.nan
-    rmse = float(np.mean(rmse_vals)) if rmse_vals else math.nan
-    return mae, rmse
-
-@torch.no_grad()
 def evaluate_with_metrics(model, loader, device, use_edge_attr=True):
     """Evaluate model with detailed metrics including Pearson r and R²."""
     model.eval()
