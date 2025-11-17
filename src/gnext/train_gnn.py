@@ -20,7 +20,7 @@ if parent_dir not in sys.path:
 from data import EyePathDataset
 from model import NextPointGNN
 from train_utils import (
-    set_seed, prepare_data, save_checkpoint, setup_experiment,
+    save_config, set_seed, prepare_data, save_checkpoint, setup_experiment,
     save_final_results, save_epoch_results, run_training_loop, finalize_training
 )
 
@@ -99,6 +99,7 @@ def main():
     if final_metrics:
         save_final_results(final_metrics, exp_dir)
         save_epoch_results(all_results, exp_dir)
+        save_config(config, exp_dir)
 
 
 if __name__ == "__main__":
