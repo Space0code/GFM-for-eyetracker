@@ -120,30 +120,32 @@ def get_predictions(model, graph, device, is_gnn=True, num_points=100):
         tuple: (actual_coords, pred_coords, targets, mask) as numpy arrays
     """
     # Move graph to device and subsample if needed
-    graph = graph.to(device)
+    g = graph.clone()
+    g = g.to(device)
 
-    if graph.x.size(0) > num_points:
-        start_i = randint(0, max(0, graph.x.size(0) - num_points))
+    if g.x.size(0) > num_points:
+        start_i = randint(0, max(0, g.x.size(0) - num_points))
         end_i = start_i + num_points
+        print(f"Subsampling from {start_i} to {end_i} (total nodes: {g.x.size(0)})")
         
         # Subsample nodes
-        graph.x = graph.x[start_i:end_i]
-        graph.y = graph.y[start_i:end_i]
-        graph.mask = graph.mask[start_i:end_i]
+        g.x = graph.x[start_i:end_i]
+        g.y = graph.y[start_i:end_i]
+        g.mask = graph.mask[start_i:end_i]
         
         # Adjust edges to new indexing
         edge_mask = (graph.edge_index[0] >= start_i) & (graph.edge_index[0] < end_i) & \
                    (graph.edge_index[1] >= start_i) & (graph.edge_index[1] < end_i)
-        graph.edge_index = graph.edge_index[:, edge_mask] - start_i
+        g.edge_index = graph.edge_index[:, edge_mask] - start_i
 
     with torch.no_grad():
-        predictions = model(graph.x, graph.edge_index) if is_gnn else model(graph.x)
+        predictions = model(g.x, g.edge_index) if is_gnn else model(g.x)
     
     # Convert to numpy for plotting
-    actual_coords = graph.x.cpu().numpy()[:, :2]  # Only use x, y coordinates
+    actual_coords = g.x.cpu().numpy()[:, :2]  # Only use x, y coordinates
     pred_coords = predictions.cpu().numpy()[:, :2]  # Only use x, y coordinates
-    targets = graph.y.cpu().numpy()[:, :2]  # Only use x, y coordinates
-    mask = graph.mask.cpu().numpy()
+    targets = g.y.cpu().numpy()[:, :2]  # Only use x, y coordinates
+    mask = g.mask.cpu().numpy()
     
     return actual_coords, pred_coords, targets, mask
 
@@ -200,10 +202,10 @@ def plot_predictions(actual_coords, pred_coords, targets, mask, csv_path):
 
     # Calculate metrics
     errors = np.linalg.norm(valid_predictions - valid_targets, axis=1)
-    mae = np.mean(np.abs(valid_predictions - valid_targets))
-    mean_euclidean = np.mean(errors)
-    pearson_x = np.corrcoef(valid_targets[:, 0], valid_predictions[:, 0])[0, 1]
-    pearson_y = np.corrcoef(valid_targets[:, 1], valid_predictions[:, 1])[0, 1]
+    mae = np.round(np.mean(np.abs(valid_predictions - valid_targets)), 2)
+    mean_euclidean = np.round(np.mean(errors), 2)
+    pearson_x = np.round(100*np.corrcoef(valid_targets[:, 0], valid_predictions[:, 0])[0, 1], 1)
+    pearson_y = np.round(100*np.corrcoef(valid_targets[:, 1], valid_predictions[:, 1])[0, 1], 1)
     
     ax.set_xlabel('X coordinate')
     ax.set_ylabel('Y coordinate') 
@@ -213,7 +215,7 @@ def plot_predictions(actual_coords, pred_coords, targets, mask, csv_path):
     ax.set_aspect('equal', adjustable='box')
     
     # Add metrics text box outside plot area
-    metrics_text = f'MAE: {mae:.4f}\nMean Euclidean: {mean_euclidean:.4f}\nPearson r (x): {pearson_x:.4f}\nPearson r (y): {pearson_y:.4f}'
+    metrics_text = f'MAE: {mae:.2f}\nMean Euclidean: {mean_euclidean:.2f}\nPearson r (x): {pearson_x:.1f}\nPearson r (y): {pearson_y:.1f}'
     ax.text(1.05, 0.5, metrics_text, transform=ax.transAxes, 
             verticalalignment='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
             fontsize=10, family='monospace')
@@ -261,7 +263,7 @@ def visualize_predictions(csv_path, model_path, num_points=100, save_path=None):
     
     # Create plot
     fig, ax = plot_predictions(actual_coords, pred_coords, targets, mask, csv_path)
-    
+
     # Add model name and lookback to title
     title = ax.get_title()
     ax.set_title(f"{title} | Model: {model_name} | Lookback: {lookback}")
