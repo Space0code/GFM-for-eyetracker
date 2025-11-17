@@ -18,6 +18,7 @@ import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from gnext.data import EyePathDataset
 from gnext.model import NextPointGNN
+from baseline_models import MLPBaseline, CNNBaseline
 from torch_geometric.nn import SAGEConv, GCNConv, GATConv, GINConv, TransformerConv
 
 def load_graph_from_csv(csv_path, lookback=1):
@@ -57,43 +58,62 @@ def load_model(model_path):
         model_path: Path to saved model checkpoint
         
     Returns:
-        tuple: (model, device, layer_name, lookback)
+        tuple: (model, device, model_name, lookback, is_gnn)
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint = torch.load(model_path, map_location=device)
     
-    # Map layer names to classes
-    layer_map = {
-        'SAGEConv': SAGEConv,
-        'GCNConv': GCNConv,
-        'GATConv': GATConv,
-        'GINConv': GINConv,
-        'TransformerConv': TransformerConv
-    }
-    
-    layer_name = checkpoint.get('layer_name', 'SAGEConv')
-    layer_class = layer_map.get(layer_name, SAGEConv)
+    model_name = checkpoint.get('model_name', 'NextPointGNN')
     lookback = checkpoint.get('lookback', 1)
+    is_gnn = model_name == 'NextPointGNN'
     
-    model = NextPointGNN(
-        in_channels=checkpoint['in_channels'], 
-        hidden_dim=checkpoint['hidden'], 
-        num_layers=checkpoint['layers'],
-        layer=layer_class
-    ).to(device)
+    if is_gnn:
+        # Map layer names to classes
+        layer_map = {
+            'SAGEConv': SAGEConv,
+            'GCNConv': GCNConv,
+            'GATConv': GATConv,
+            'GINConv': GINConv,
+            'TransformerConv': TransformerConv
+        }
+        layer_name = checkpoint.get('layer_name', 'SAGEConv')
+        layer_class = layer_map.get(layer_name, SAGEConv)
+        
+        model = NextPointGNN(
+            in_channels=checkpoint['in_channels'], 
+            hidden_dim=checkpoint['hidden'], 
+            num_layers=checkpoint['layers'],
+            layer=layer_class
+        ).to(device)
+    elif model_name == 'MLPBaseline':
+        model = MLPBaseline(
+            input_dim=checkpoint['in_channels'],
+            output_dim=2,
+            hidden_dims=[checkpoint['hidden']] * checkpoint['layers']
+        ).to(device)
+    elif model_name == 'CNNBaseline':
+        model = CNNBaseline(
+            input_channels=checkpoint['in_channels'],
+            output_dim=2,
+            hidden_dims=[checkpoint['hidden']] * checkpoint['layers']
+        ).to(device)
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
+    
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     
-    return model, device, layer_name, lookback
+    return model, device, model_name, lookback, is_gnn
 
-def get_predictions(model, graph, device, num_points=100):
+def get_predictions(model, graph, device, is_gnn=True, num_points=100):
     """
     Get model predictions for a graph.
     
     Args:
-        model: Trained NextPointGNN model
+        model: Trained model (GNN or baseline)
         graph: Graph data object
         device: torch device
+        is_gnn: Whether model is GNN-based
         num_points: Number of points to use from sequence
         
     Returns:
@@ -117,7 +137,7 @@ def get_predictions(model, graph, device, num_points=100):
         graph.edge_index = graph.edge_index[:, edge_mask] - start_i
 
     with torch.no_grad():
-        predictions = model(graph.x, graph.edge_index)
+        predictions = model(graph.x, graph.edge_index) if is_gnn else model(graph.x)
     
     # Convert to numpy for plotting
     actual_coords = graph.x.cpu().numpy()[:, :2]  # Only use x, y coordinates
@@ -178,14 +198,25 @@ def plot_predictions(actual_coords, pred_coords, targets, mask, csv_path):
         ax.annotate('', xy=valid_targets[i], xytext=current_points[i],
                    arrowprops=dict(arrowstyle='->', color='blue', alpha=valid_alphas[i], lw=1))
 
+    # Calculate metrics
+    errors = np.linalg.norm(valid_predictions - valid_targets, axis=1)
+    mae = np.mean(np.abs(valid_predictions - valid_targets))
+    mean_euclidean = np.mean(errors)
+    pearson_x = np.corrcoef(valid_targets[:, 0], valid_predictions[:, 0])[0, 1]
+    pearson_y = np.corrcoef(valid_targets[:, 1], valid_predictions[:, 1])[0, 1]
+    
     ax.set_xlabel('X coordinate')
     ax.set_ylabel('Y coordinate') 
     ax.set_title(f'Gaze Path Prediction: {os.path.basename(csv_path)}')
-    ax.legend()
+    ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal', adjustable='box')
     
-    plt.legend(loc='upper left')
+    # Add metrics text box outside plot area
+    metrics_text = f'MAE: {mae:.4f}\nMean Euclidean: {mean_euclidean:.4f}\nPearson r (x): {pearson_x:.4f}\nPearson r (y): {pearson_y:.4f}'
+    ax.text(1.05, 0.5, metrics_text, transform=ax.transAxes, 
+            verticalalignment='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
+            fontsize=10, family='monospace')
     
     return fig, ax
 
@@ -221,19 +252,22 @@ def visualize_predictions(csv_path, model_path, num_points=100, save_path=None):
         save_path: Optional path to save the plot
     """
     # Load components
-    model, device, layer_name, lookback = load_model(model_path)
+    model, device, model_name, lookback, is_gnn = load_model(model_path)
     graph = load_graph_from_csv(csv_path, lookback)
     
     # Get predictions
     actual_coords, pred_coords, targets, mask = get_predictions(
-        model, graph, device, num_points)
+        model, graph, device, is_gnn, num_points)
     
     # Create plot
     fig, ax = plot_predictions(actual_coords, pred_coords, targets, mask, csv_path)
     
-    # Add layer name and lookback to title
+    # Add model name and lookback to title
     title = ax.get_title()
-    ax.set_title(f"{title} | Layer: {layer_name} | Lookback: {lookback}")
+    ax.set_title(f"{title} | Model: {model_name} | Lookback: {lookback}")
+    
+    # Adjust layout to prevent clipping
+    plt.tight_layout()
     
     # Save or show plot
     if save_path:
