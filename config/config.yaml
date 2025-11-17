@@ -1,10 +1,10 @@
 data_dir: "data/processed"
 seed: 111
-experiment_name: "NextPointGNN"
+experiment_name: "NextPointGNN" 
 
 model:
-  name: "NextPointGNN"
-  layer: "SAGEConv"
+  name: "NextPointGNN" 
+  layer: "GCNConv" # SAGEConv, GATConv, GCNConv, GINConv, TransformerConv
   hidden_dim: 64
   layers: 2
   use_edge_attr: true
@@ -21,7 +21,7 @@ train:
   batch_size: 8 
   
   lr: 0.001
-  epochs: 300
+  epochs: 100
   early_stopping: true
   patience: 30
 
