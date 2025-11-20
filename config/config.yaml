@@ -4,13 +4,13 @@ experiment_name: "NextPointGNN"
 
 model:
   name: "NextPointGNN" 
-  layer: "GCNConv" # SAGEConv, GATConv, GCNConv, GINConv, TransformerConv
+  layer: "SAGEConv" # SAGEConv, GATConv, GCNConv, GINConv, TransformerConv
   hidden_dim: 64
   layers: 2
   use_edge_attr: true
 
 data:  
-  lookback: 2
+  lookback: 3
 
 train:
   test_set: None # optional name of a dataset to hold out for testing only

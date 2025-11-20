@@ -3,7 +3,7 @@ seed: 111
 experiment_name: "MLPBaseline"
 
 model:
-  name: "MLPBaseline"
+  name: "MLPBaseline" # MLPBaseline, CNNBaseline
   hidden_dim: 64
   layers: 2
   use_edge_attr: false
