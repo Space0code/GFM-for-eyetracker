@@ -18,12 +18,11 @@ class MLPBaseline(nn.Module):
     A simple Multi-Layer Perceptron baseline model.
     """
     def __init__(self, input_dim: int, output_dim: int, hidden_dims: List[int] = [256, 128], dropout: float = 0.2):
+        super().__init__()
         self.input_dim = input_dim
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
         self.dropout = dropout
-
-        super().__init__()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Linear(input_dim, hidden_dims[0]))
         for i in range(len(hidden_dims)-1):

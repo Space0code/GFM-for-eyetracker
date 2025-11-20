@@ -9,17 +9,16 @@ import yaml
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Subset
-from torch_geometric.loader import DataLoader
+from torch.utils.data import Subset, DataLoader
 import sys
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from data import EyePathDataset
+from data_tabular import TabularEyePathDataset
 from baseline_models import MLPBaseline, CNNBaseline
 from train_utils import (
-    save_config, set_seed, prepare_data, save_checkpoint, setup_experiment,
+    save_config, set_seed, prepare_data_tabular, save_checkpoint, setup_experiment,
     save_final_results, save_epoch_results, run_training_loop, finalize_training
 )
 
@@ -54,12 +53,12 @@ def main():
     
     IGNORE_DIRS = ["cog-load"]  # for prototyping use cog-load-mini
     
-    # LOAD EYE TRACKING SEQUENCES AS GRAPHS
-    all_ds = EyePathDataset(data_dir, recursive=True, lookback=data_cfg['lookback'], ignore_dirs=IGNORE_DIRS)
-    train_loader, val_loader = prepare_data(all_ds, train_cfg, seed, train_cfg['batch_size'])
+    # LOAD EYE TRACKING SEQUENCES AS TABULAR DATA
+    all_ds = TabularEyePathDataset(data_dir, recursive=True, lookback=data_cfg['lookback'], ignore_dirs=IGNORE_DIRS)
+    train_loader, val_loader = prepare_data_tabular(all_ds, train_cfg, seed, train_cfg['batch_size'])
     
     # INITIALIZE MODEL & OPTIMIZER
-    input_dim = 4  # (x, y, pupil-left, pupil-right)
+    input_dim = 4 * data_cfg['lookback']  # (x, y, pupil-left, pupil-right) * lookback
     output_dim = 2  # (x_next, y_next)
     model_name = model_cfg['name']
     

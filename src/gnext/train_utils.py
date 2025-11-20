@@ -7,7 +7,7 @@ import csv
 from datetime import datetime
 import numpy as np
 import torch
-from torch.utils.data import Subset
+from torch.utils.data import Subset, DataLoader as PyTorchDataLoader
 from torch_geometric.loader import DataLoader
 
 class Logger:
@@ -31,7 +31,7 @@ def setup_experiment(experiment_name):
     exp_dir = os.path.join("results", experiment_name, timestamp)
     os.makedirs(exp_dir, exist_ok=True)
     
-    log_file = os.path.join(exp_dir, "complete_log.txt")
+    log_file = os.path.join(exp_dir, "complete_log.log")
     sys.stdout = Logger(log_file)
     
     return exp_dir
@@ -62,6 +62,56 @@ def split_by_sequence(dataset, val_split=0.2, seed=42):
         train_idx, val_idx = perm[1:], perm[:1]
     return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
+def prepare_data(dataset, train_cfg, seed, batch_size):
+    """Prepare graph data with PyG DataLoader."""
+    if train_cfg.get('test_set'):
+        train_val_ds = Subset(dataset, list(range(len(dataset) - 1)))
+        train_ds, val_ds = split_by_sequence(train_val_ds, val_split=train_cfg['val_split'], seed=seed)
+        print(f"Using test mode: train={len(train_ds)} val={len(val_ds)} test={1}")
+    else:
+        train_ds, val_ds = split_by_sequence(dataset, val_split=train_cfg['val_split'], seed=seed)
+        print(f"Training: {len(train_ds)} samples | Validation: {len(val_ds)} samples")
+    
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    return train_loader, val_loader
+
+def prepare_data_tabular(dataset, train_cfg, seed, batch_size):
+    """Prepare tabular data by splitting sequences using seq_ids."""
+    # Get unique seq_ids and split
+    seq_ids = dataset.seq_ids
+    unique_seqs = sorted(set(seq_ids))
+    n_seqs = len(unique_seqs)
+    
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(n_seqs, generator=g).tolist()
+    n_val = max(1, int(n_seqs * train_cfg['val_split']))
+    val_seq_ids = set([unique_seqs[i] for i in perm[:n_val]])
+    train_seq_ids = set([unique_seqs[i] for i in perm[n_val:]])
+    
+    # Handle test set if needed
+    if train_cfg.get('test_set'):
+        test_seq_ids = {max(unique_seqs)}
+        train_seq_ids.discard(max(unique_seqs))
+        val_seq_ids.discard(max(unique_seqs))
+    
+    # Create indices based on seq_ids
+    train_idx = [i for i, sid in enumerate(seq_ids) if sid in train_seq_ids]
+    val_idx = [i for i, sid in enumerate(seq_ids) if sid in val_seq_ids]
+    
+    if train_cfg.get('test_set'):
+        test_idx = [i for i, sid in enumerate(seq_ids) if sid in test_seq_ids]
+        print(f"Using test mode: train={len(train_idx)} val={len(val_idx)} test={len(test_idx)}")
+    else:
+        print(f"Training: {len(train_idx)} samples | Validation: {len(val_idx)} samples")
+    
+    train_ds = Subset(dataset, train_idx)
+    val_ds = Subset(dataset, val_idx)
+    
+    train_loader = PyTorchDataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = PyTorchDataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    return train_loader, val_loader
+
 @torch.no_grad()
 def evaluate_with_metrics(model, loader, device, use_edge_attr=True):
     """Evaluate model with detailed metrics including Pearson r and R²."""
@@ -70,14 +120,24 @@ def evaluate_with_metrics(model, loader, device, use_edge_attr=True):
     mae_vals, rmse_vals, euclidean_errors = [], [], []
     
     for batch in loader:
-        batch = batch.to(device)
-        pred = model(batch.x, batch.edge_index) if use_edge_attr else model(batch.x)
-        mask = batch.mask
-        if mask.sum() == 0:
-            continue
-        
-        pred_masked = pred[mask]
-        target_masked = batch.y[mask]
+        # Check if graph batch or tabular batch
+        if hasattr(batch, 'x'):
+            # Graph data
+            batch = batch.to(device)
+            pred = model(batch.x, batch.edge_index) if use_edge_attr else model(batch.x)
+            mask = batch.mask
+            if mask.sum() == 0:
+                continue
+            pred_masked = pred[mask]
+            target_masked = batch.y[mask]
+        else:
+            # Tabular data: batch is (windows, targets)
+            windows, targets = batch
+            windows = windows.to(device)
+            targets = targets.to(device)
+            pred = model(windows)
+            pred_masked = pred
+            target_masked = targets
         
         all_preds.append(pred_masked.cpu().numpy())
         all_targets.append(target_masked.cpu().numpy())
@@ -175,15 +235,47 @@ def save_config(config, exp_dir):
     with open(yaml_path, 'w') as f:
         yaml.dump(config, f)
 
-def train_epoch(model, train_loader, optimizer, device, use_edge_attr=True):
+def train_epoch(model, train_loader, optimizer, device, use_edge_attr=True, debug=False):
     """Train for one epoch."""
+    import torch
     import torch.nn.functional as F
     model.train()
     total_loss = 0.0
-    for batch in train_loader:
-        batch = batch.to(device)
-        pred = model(batch.x, batch.edge_index) if use_edge_attr else model(batch.x)
-        loss = F.mse_loss(pred[batch.mask], batch.y[batch.mask])
+    for batch_idx, batch in enumerate(train_loader):
+        # Check if graph batch or tabular batch
+        if hasattr(batch, 'x'):
+            # Graph data
+            batch = batch.to(device)
+            pred = model(batch.x, batch.edge_index) if use_edge_attr else model(batch.x)
+            loss = F.mse_loss(pred[batch.mask], batch.y[batch.mask])
+        else:
+            # Tabular data: batch is (windows, targets)
+            windows, targets = batch
+            windows = windows.to(device)
+            targets = targets.to(device)
+            
+            if debug and batch_idx == 0:
+                print(f"\n=== DEBUG FIRST BATCH ===")
+                print(f"Windows shape: {windows.shape}")
+                print(f"Targets shape: {targets.shape}")
+                print(f"Windows range: [{windows.min():.4f}, {windows.max():.4f}]")
+                print(f"Targets range: [{targets.min():.4f}, {targets.max():.4f}]")
+                print(f"Windows has NaN: {torch.isnan(windows).any()}")
+                print(f"Windows has Inf: {torch.isinf(windows).any()}")
+                print(f"Targets has NaN: {torch.isnan(targets).any()}")
+                print(f"Targets has Inf: {torch.isinf(targets).any()}")
+            
+            pred = model(windows)
+            
+            if debug and batch_idx == 0:
+                print(f"Predictions shape: {pred.shape}")
+                print(f"Predictions range: [{pred.min():.4f}, {pred.max():.4f}]")
+                print(f"Predictions has NaN: {torch.isnan(pred).any()}")
+                print(f"Predictions has Inf: {torch.isinf(pred).any()}")
+                print(f"========================\n")
+            
+            loss = F.mse_loss(pred, targets)
+        
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
@@ -203,8 +295,8 @@ def run_training_loop(model, train_loader, val_loader, optimizer, device, model_
     for epoch in range(1, train_cfg['epochs'] + 1):
         epoch_start = time.time()
         
-        # Training
-        train_loss = train_epoch(model, train_loader, optimizer, device, use_edge_attr)
+        # Training (enable debug on first epoch)
+        train_loss = train_epoch(model, train_loader, optimizer, device, use_edge_attr, debug=(epoch==1))
         
         # Evaluation
         val_metrics = evaluate_with_metrics(model, val_loader, device, use_edge_attr)
