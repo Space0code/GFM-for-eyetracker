@@ -55,4 +55,9 @@ class NextPointGNN(nn.Module):
         # print("     pred_shape:", pred.shape)
         return pred
 
-
+class NextPointSpatioTemporalAttention(nn.Module):
+    """
+    Spatio-temporal GNN model for next-point prediction.
+    Combines spatial and temporal edges in the graph.
+    """
+    
