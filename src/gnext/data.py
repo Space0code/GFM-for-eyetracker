@@ -179,7 +179,7 @@ class SpacioTemporalDataset(Dataset):
             neighbors = ind[0][1:] + max(0, i)  # adjust indices
             edges_spatial[i] = torch.tensor(neighbors, dtype=torch.long)
 
-            d_gaze = 
+            # d_gaze = 
         
     def __len__(self):
         pass
