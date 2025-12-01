@@ -1,13 +1,13 @@
 # Mapping from SEED XLS columns to GFM schema fields.
 mappings:
   "Blink Duration [ms]": "blink-dur"
-  "Fixation Duration [ms]": "fixation_dur"
+  "Fixation Duration [ms]": "fixation-dur"
   "Average Pupil Size X": "pupil-size-avg-x"
   "Average Pupil Size Y": "pupil-size-avg-y"
   "Dispersion X": "dispersion-x"
   "Dispersion Y": "dispersion-y"
   "Saccade Duration [ms]": "saccade-dur"
-  "Amplitude [°]": "saccade_amp"
+  "Amplitude [°]": "saccade-amp"
   "Blink Count": "blink-count"
   "Blink Frequency [count/s]": "blink-rate"
   "Blink Duration Total [ms]": "blink-dur-total"  

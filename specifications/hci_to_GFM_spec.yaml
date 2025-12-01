@@ -37,7 +37,7 @@ mappings:
   "FixationIndex": "fixation-index"
   "MappedFixationPointX": ""
   "MappedFixationPointY": ""
-  "FixationDuration": "fixation_dur"
+  "FixationDuration": "fixation-dur"
 
   # AOI / Event / Stimulus
   "Event": ""                                   # drop
