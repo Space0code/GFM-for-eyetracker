@@ -1,0 +1,55 @@
+# %@METADATA width_px 1280.0
+# %@METADATA height_px 720.0
+# %@METADATA width_mm 400.0
+# %@METADATA height_mm 225.0
+# %@METADATA distance_mm 450.0
+
+# handlabeller codes:
+# % - 0 is UNKNOWN
+# % - 1 is FIX (fixation)
+# % - 2 is SACCADE
+# % - 3 is SP (smooth pursuit)
+# % - 4 is NOISE
+
+# @ATTRIBUTE time INTEGER
+# @ATTRIBUTE x NUMERIC
+# @ATTRIBUTE y NUMERIC
+# @ATTRIBUTE confidence NUMERIC
+# @ATTRIBUTE handlabeller1 INTEGER
+# @ATTRIBUTE handlabeller2 INTEGER
+# @ATTRIBUTE handlabeller_final INTEGER
+# @ATTRIBUTE speed_1 NUMERIC
+# @ATTRIBUTE direction_1 NUMERIC
+# @ATTRIBUTE acceleration_1 NUMERIC
+# @ATTRIBUTE speed_2 NUMERIC
+# @ATTRIBUTE direction_2 NUMERIC
+# @ATTRIBUTE acceleration_2 NUMERIC
+# @ATTRIBUTE speed_4 NUMERIC
+# @ATTRIBUTE direction_4 NUMERIC
+# @ATTRIBUTE acceleration_4 NUMERIC
+# @ATTRIBUTE speed_8 NUMERIC
+# @ATTRIBUTE direction_8 NUMERIC
+# @ATTRIBUTE acceleration_8 NUMERIC
+# @ATTRIBUTE speed_16 NUMERIC
+# @ATTRIBUTE direction_16 NUMERIC
+# @ATTRIBUTE acceleration_16 NUMERIC
+
+screen-width: width_px
+screen-height: height_px
+screen-width-mm: width_mm
+screen-height-mm: height_mm
+
+time-abs-seconds: time # time in original data is in microseconds; convert to seconds
+x-avg: x
+y-avg: y
+
+# set all confidence flags to confidence
+confidence-gaze-left: confidence
+confidence-gaze-right: confidence
+confidence-pupil-left: confidence
+confidence-pupil-right: confidence
+confidence-fixation: confidence
+confidence-saccade: confidence
+confidence-smooth-pursuit: confidence
+
+# saccades, fixations, smooth pursuits should be derived from handlabeller_final

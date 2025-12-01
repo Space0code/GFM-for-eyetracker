@@ -14,6 +14,7 @@ DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
     "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
     "hci-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/"),
+    "deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
 }
 
 def preprocess_dir(dir_name, source_dir_path, dest_data_dir):
