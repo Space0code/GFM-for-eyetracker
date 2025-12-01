@@ -4,7 +4,10 @@ Visualize model predictions vs actual gaze coordinates for a single CSV file.
 Shows the actual gaze path and predicted next-point coordinates on a 2D plot.
 
 Example usage:
-python visualisations/visualize_predictions.py /Users/tomibozak/Projects/IJS/GFM-for-eyetracker/data/processed/cog-load-mini/s_008.csv --model checkpoints/best200.pt --num_points 100 
+python visualisations/visualize_predictions.py \
+    data/processed/cog-load-mini/s_008.csv --model \
+    checkpoints/best200.pt \
+    --num_points 100 
 """
 import argparse
 import os
@@ -128,15 +131,16 @@ def get_predictions(model, graph, device, is_gnn=True, num_points=100):
         end_i = start_i + num_points
         print(f"Subsampling from {start_i} to {end_i} (total nodes: {g.x.size(0)})")
         
-        # Subsample nodes
-        g.x = graph.x[start_i:end_i]
-        g.y = graph.y[start_i:end_i]
-        g.mask = graph.mask[start_i:end_i]
-        
-        # Adjust edges to new indexing
-        edge_mask = (graph.edge_index[0] >= start_i) & (graph.edge_index[0] < end_i) & \
-                   (graph.edge_index[1] >= start_i) & (graph.edge_index[1] < end_i)
-        g.edge_index = graph.edge_index[:, edge_mask] - start_i
+        # Subsample nodes on the same device
+        g.x = g.x[start_i:end_i]
+        g.y = g.y[start_i:end_i]
+        g.mask = g.mask[start_i:end_i]
+
+        # Adjust edges to new indexing, keeping device consistent
+        edge_index = g.edge_index
+        edge_mask = (edge_index[0] >= start_i) & (edge_index[0] < end_i) & \
+                    (edge_index[1] >= start_i) & (edge_index[1] < end_i)
+        g.edge_index = (edge_index[:, edge_mask] - start_i)
 
     with torch.no_grad():
         predictions = model(g.x, g.edge_index) if is_gnn else model(g.x)
