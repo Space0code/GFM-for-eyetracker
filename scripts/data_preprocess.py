@@ -2,6 +2,13 @@ import argparse
 import os
 import pandas as pd
 
+"""
+Usage:
+python scripts/data_preprocess.py 
+or
+python scripts/data_preprocess.py --dataset cog-load
+"""
+
 SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
 DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
