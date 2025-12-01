@@ -1,6 +1,6 @@
 
 # Metadata
-mask_vec: [bool,...]         # which fields are present
+mask-vec: [bool,...]         # which fields are present
 screen-width: int | null       # width of the screen in pixels
 screen-height: int | null      # height of the screen in pixels
 screen-dpi: float | null        # screen DPI (dots per inch)
@@ -29,18 +29,26 @@ y-avg: float | null
 z-avg: float | null
 
 # Fixation data
-fixation_dur: float | null
 fixation: bool | null
+fixation-dur: float | null
 fixation-count: int | null
 fixation-index: int | null
-confidence-fixation: float | null  # confidence in the fixation detection
+confidence-fixation: float | null  # confidence in the fixation detection (0 to 1, the higher the better)
 
 # Saccade data
-saccade_amp: float | null
+saccade: bool | null
+saccade-amp: float | null
 saccade-dur: float | null
 saccade-vel: float | null
 saccade-acc: float | null
-confidence-saccade: float | null  # confidence in the saccade detection
+confidence-saccade: float | null  # confidence in the saccade detection (0 to 1, the higher the better)
+
+# Smooth pursuit data
+smooth-pursuit: bool | null
+smooth-pursuit-dur: float | null
+smooth-pursuit-vel: float | null
+smooth-pursuit-acc: float | null
+confidence-smooth-pursuit: float | null  # confidence in the smooth pursuit detection (0 to 1, the higher the better)
 
 # Dispersion data
 dispersion-x: float | null
@@ -61,8 +69,8 @@ pupil-velocity-left: float | null
 pupil-acceleration: float | null
 pupil-acceleration-right: float | null
 pupil-acceleration-left: float | null
-confidence-pupil-left: float | null  # confidence in the left pupil size
-confidence-pupil-right: float | null # confidence in the right pupil size
+confidence-pupil-left: float | null  # confidence in the left pupil size  (0 to 1, the higher the better)
+confidence-pupil-right: float | null # confidence in the right pupil size (0 to 1, the higher the better)
 
 # Blink data
 blink: bool | null
@@ -72,7 +80,7 @@ blink-rate: float | null
 blink-count: int | null
 blink-start: float | null
 blink-end: float | null
-confidence-blink: float | null  # confidence in the blink detection
+confidence-blink: float | null  # confidence in the blink detection (0 to 1, the higher the better)
 
 # Distance data
 distance-avg: float | null
@@ -80,13 +88,13 @@ distance-right: float | null
 distance-left: float | null
 
 # Confidence flags
-confidence-gaze-left: float | null      # confidence in the gaze coordinates
-confidence-gaze-right: float | null     # confidence in the gaze coordinates
-confidence-fixation: float | null  # confidence in the fixation detection
-confidence-saccade: float | null  # confidence in the saccade detection
-confidence-pupil-left: float | null  # confidence in the left pupil size
-confidence-pupil-right: float | null # confidence in the right pupil size
-confidence-blink: float | null   # confidence in the blink detection
+confidence-gaze-left: float | null      # confidence in the gaze coordinates (0 to 1, the higher the better)
+confidence-gaze-right: float | null     # confidence in the gaze coordinates (0 to 1, the higher the better)
+confidence-fixation: float | null  # confidence in the fixation detection (0 to 1, the higher the better)
+confidence-saccade: float | null  # confidence in the saccade detection (0 to 1, the higher the better)
+confidence-pupil-left: float | null  # confidence in the left pupil size  (0 to 1, the higher the better)
+confidence-pupil-right: float | null # confidence in the right pupil size (0 to 1, the higher the better)
+confidence-blink: float | null   # confidence in the blink detection (0 to 1, the higher the better)
 
 # Stimulus data
 stimuli: bool | null          # whether a stimulus was present
