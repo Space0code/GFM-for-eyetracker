@@ -17,7 +17,7 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from data import EyePathDataset
+from data.data import EyePathDataset
 from model import NextPointGNN
 from train_utils import (
     save_config, set_seed, prepare_data, save_checkpoint, setup_experiment,

@@ -15,7 +15,7 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from data_tabular import TabularEyePathDataset
+from data.data_tabular import TabularEyePathDataset
 from baseline_models import MLPBaseline, CNNBaseline
 from train_utils import (
     save_config, set_seed, prepare_data_tabular, save_checkpoint, setup_experiment,
