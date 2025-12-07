@@ -3,10 +3,9 @@
 Graph neural network model for predicting next gaze coordinates.
 Uses GraphSAGE layers to avoid temporal leakage in sequential data.
 """
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import GCNConv, SAGEConv
 
 class NextPointGNN(nn.Module):
     """
@@ -55,9 +54,13 @@ class NextPointGNN(nn.Module):
         # print("     pred_shape:", pred.shape)
         return pred
 
-class NextPointSpatioTemporalAttention(nn.Module):
+class SpatioTemporalGNN(nn.Module):
     """
-    Spatio-temporal GNN model for next-point prediction.
-    Combines spatial and temporal edges in the graph.
+    Spatio-temporal GNN model.
+    Combines undirected spatial and undirected temporal edges in the graph.
+
+
     """
     
+    def __init__(self, in_channels: int = 5, hidden_dim: int = 64, output_dim: int = 2, num_layers: int = 2, layer: nn.Module = GCNConv):
+        pass
