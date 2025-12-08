@@ -1,0 +1,5 @@
+- tried next point prediction => caught trends
+- moved on to classification/regression
+- emotion classification
+- created class for HeteroGraph: SpatioTemporalDataset
+- trying simple GCN on spatiotemporaldataset (no MLP preprocessing)
