@@ -30,7 +30,7 @@ def load_csv_files(self, root_dir, recursive, ignore_dirs, file_list):
         search_type = "recursively" if recursive else "in root directory"
         raise FileNotFoundError(f"No CSVs found {search_type} in {root_dir}")
 
-def clean_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
+def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the dataset by removing rows with NaN values in "time-rel-seconds", 'x-avg' or 'y-avg' columns.
     """
@@ -142,7 +142,7 @@ class SpacioTemporalDataset(Dataset):
         ks = self.ks
         kt = self.kt
 
-        df = df.iloc[window_slice, ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]]
+        df = df.loc[window_slice, ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]]
         n = len(df)
 
         #### node features matrix X
