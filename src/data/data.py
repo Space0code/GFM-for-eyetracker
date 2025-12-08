@@ -179,7 +179,7 @@ class SpacioTemporalDataset(Dataset):
             dtype=torch.long,
         )
 
-        # remove duplicate edges
+        # remove duplicate spatial edges
         edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
 
         data = HeteroData()
