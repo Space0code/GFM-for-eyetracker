@@ -179,6 +179,9 @@ class SpacioTemporalDataset(Dataset):
             dtype=torch.long,
         )
 
+        # remove duplicate edges
+        edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
+
         data = HeteroData()
         data["node"].x = X
         data["node"].num_nodes = n
@@ -186,68 +189,3 @@ class SpacioTemporalDataset(Dataset):
         data["node", "spatial", "node"].edge_index = edge_index_spatial
 
         return data
-
-# class EyePathDataset(Dataset):
-#     """
-#     Loads each CSV (time-rel-seconds,x-avg,y-avg) as a directed path graph.
-#     Nodes store only (x, y).
-#     Edge rule: i -> i+1 (previous datapoint to current).
-#     Targets: for node i, predict coords of node i+1 (last node masked).
-#     """
-#     def __init__(self, root_dir: str, recursive: bool = False, lookback: int = 1, ignore_dirs: list = [], file_list: list = None):
-#         """
-#         Load all CSV files from directory and convert to graphs.
-#         If file_list is provided, search for the files in the list in root_dir.
-#         """
-#         load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
-        
-#         # pre-load all graphs into memory for simplicity
-#         self.graphs = [self._load_one(p, lookback) for p in self.files]
-#         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
-
-
-#     def _load_one(self, path: str, lookback: int = 1) -> Data:
-#         """Convert a single CSV file to a PyTorch Geometric Data object."""
-#         df = pd.read_csv(path)
-#         df = clean_dataset(self, df, path)        
-
-#         # node features: [x, y] coordinates
-#         x = torch.tensor(df[["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]].values, dtype=torch.float32)
-
-#         # temporal edges: connect each node to previous 1-10 steps
-#         src_list, dst_list = [], []
-#         n = len(df)
-#         for i in range(n):
-#             # Look back up to 10 steps (or fewer if near start)
-#             lb = min(lookback, i)
-#             for j in range(1, lb + 1):
-#                 src_list.append(i - j)  # previous node
-#                 dst_list.append(i)      # current node
-        
-#         edge_index = torch.tensor([src_list, dst_list], dtype=torch.long)
-
-#         # targets: predict next coordinates (last node has no target)
-#         y = torch.full((n, 2), float("nan"), dtype=torch.float32)
-#         y[:-1] = x[1:, :2]  # target for node i is next node's (x, y) coordinates
-#         mask = torch.zeros(n, dtype=torch.bool)
-#         mask[:-1] = True  # mask out last node from loss calculation
-
-#         data = Data(x=x, edge_index=edge_index, y=y, mask=mask)
-#         data.seq_name = os.path.basename(path)
-#         data.dataset_name = os.path.basename(os.path.dirname(path))
-
-#         # print("Processed file:", path)
-#         # print(f"Loaded {data.seq_name}: {n} nodes, {edge_index.size(1)} edges, lookback={lookback}")
-
-#         return data
-
-
-
-#     def __len__(self):
-#         """Return number of sequences (graphs) in dataset."""
-#         return len(self.graphs)
-
-#     def __getitem__(self, idx):
-#         """Get a specific graph by index."""
-#         return self.graphs[idx]
-  
