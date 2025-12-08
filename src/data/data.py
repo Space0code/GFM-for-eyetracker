@@ -68,11 +68,12 @@ class SpacioTemporalDataset(Dataset):
         self.ks = ks  # k for spatial kNN
         self.window_length = window_length
         self.window_overlap = window_overlap
+        self.files = []
+        self.graphs = []
 
         load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
         
         # pre-load all graphs into memory for simplicity
-        self.graphs = []
         for path in self.files:
             df = self._load_df(path)
             # generate window slices based on time
