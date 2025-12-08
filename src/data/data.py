@@ -78,8 +78,8 @@ class SpacioTemporalDataset(Dataset):
             df = self._load_df(path)
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
-                if (window_slice.stop - window_slice.start) < max(self.kt, self.ks):
-                    print(f"Window {window_slice} too small for kt={kt} and ks={ks}. Skipping... ")
+                if (window_slice.stop - window_slice.start) < max(self.kt, self.ks) + 1:
+                    print(f"Window {window_slice} too small for kt={kt} and ks={ks}. [path={path}]. Skipping... ")
                     continue
                 graph = self._load_one(df, window_slice)
                 self.graphs.append(graph)
