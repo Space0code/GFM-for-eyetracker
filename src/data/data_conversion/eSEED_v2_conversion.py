@@ -1,9 +1,9 @@
 # eSEED_v2_conversion.py
 """
 Data structure in mat file (see readme.txt in eSEED_v2 dataset):
-- Data (10, 4)
-    - data{#}.video{i}
-        - gaze (N, 21)
+- Data (1, 48) struct with 3 fields:
+    - data{#}.video{i} (1, 10) struct with 4 fields:
+        - gaze (N, 21) table:
             (
             gaze_timestamp, world_index, confidence, 
             norm_pos_x, norm_pos_y, 
@@ -14,7 +14,7 @@ Data structure in mat file (see readme.txt in eSEED_v2 dataset):
             eye_center1_3d_x, eye_center1_3d_y, eye_center1_3d_z, 
             gaze_normal1_x, gaze_normal1_y, gaze_normal1_z
             )
-        - pupil (M, 34)
+        - pupil (M, 34) table:
             (
             pupil_timestamp, world_index, eye_id, confidence, 
             norm_pos_x, norm_pos_y,
@@ -30,9 +30,9 @@ Data structure in mat file (see readme.txt in eSEED_v2 dataset):
             projected_sphere_center_x, projected_sphere_center_y, projected_sphere_axis_a, projected_sphere_axis_b, 
             projected_sphere_angle
             )
-        - blinks
+        - blinks (B, 10) table:
             (id, start_timestamp, duration, end_timestamp, start_frame_index, index, end_frame_index, confidence, filter_response, base_data)
-        - annotation
+        - annotation (1, 4) table:
             (Anger, Tenderness, Disgust, Sadness)
     - data{#}.questionnaires
     - data{#}.subject_info
