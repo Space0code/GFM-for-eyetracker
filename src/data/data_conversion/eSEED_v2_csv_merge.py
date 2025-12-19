@@ -31,8 +31,12 @@ def merge_eyetracking_data(sample_dir, recording_id):
     blinks_df = pd.read_csv(os.path.join(sample_dir, f"blinks_{recording_id}.csv"))
     annotation_df = pd.read_csv(os.path.join(sample_dir, f"annotation_{recording_id}.csv"))
     
-    # Rename timestamp columns to standard 'timestamp'
+    # Add gaze_ prefix to all gaze columns (except timestamp which we'll standardize)
     gaze_df = gaze_df.rename(columns={'gaze_timestamp': 'timestamp'})
+    gaze_df = gaze_df.rename(columns={col: f"gaze_{col}" if col != 'timestamp' and not col.startswith('gaze_') else col 
+                                      for col in gaze_df.columns})
+    
+    # Rename timestamp column for pupil data
     pupil_df = pupil_df.rename(columns={'pupil_timestamp': 'timestamp'})
     
     # Reshape pupil data: separate left (0) and right (1) eye into columns
@@ -48,8 +52,8 @@ def merge_eyetracking_data(sample_dir, recording_id):
     # Merge left and right eye data on timestamp
     pupil_combined = pd.merge(pupil_left, pupil_right, on='timestamp', how='outer')
     
-    # Merge gaze and pupil on timestamp
-    merged_df = pd.merge(gaze_df, pupil_combined, on='timestamp', how='outer', suffixes=('_gaze', '_pupil'))
+    # Merge gaze and pupil on timestamp (no suffixes needed since gaze columns already have gaze_ prefix)
+    merged_df = pd.merge(gaze_df, pupil_combined, on='timestamp', how='outer')
     merged_df = merged_df.sort_values('timestamp').reset_index(drop=True)
     
     # Initialize blink columns
