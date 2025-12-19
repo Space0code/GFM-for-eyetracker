@@ -35,22 +35,47 @@ def merge_eyetracking_data(sample_dir, recording_id):
     gaze_df = gaze_df.rename(columns={'gaze_timestamp': 'timestamp'})
     pupil_df = pupil_df.rename(columns={'pupil_timestamp': 'timestamp'})
     
+    # Reshape pupil data: separate left (0) and right (1) eye into columns
+    pupil_left = pupil_df[pupil_df['eye_id'] == 0].drop(columns=['eye_id'])
+    pupil_right = pupil_df[pupil_df['eye_id'] == 1].drop(columns=['eye_id'])
+    
+    # Add suffixes to distinguish left and right eye columns
+    pupil_left = pupil_left.rename(columns={col: f"pupil_{col}_left" if col != 'timestamp' else col 
+                                            for col in pupil_left.columns})
+    pupil_right = pupil_right.rename(columns={col: f"pupil_{col}_right" if col != 'timestamp' else col 
+                                              for col in pupil_right.columns})
+    
+    # Merge left and right eye data on timestamp
+    pupil_combined = pd.merge(pupil_left, pupil_right, on='timestamp', how='outer')
+    
     # Merge gaze and pupil on timestamp
-    merged_df = pd.merge(gaze_df, pupil_df, on='timestamp', how='outer', suffixes=('_gaze', '_pupil'))
+    merged_df = pd.merge(gaze_df, pupil_combined, on='timestamp', how='outer', suffixes=('_gaze', '_pupil'))
     merged_df = merged_df.sort_values('timestamp').reset_index(drop=True)
     
     # Initialize blink columns
     merged_df['blink_bool'] = False
     merged_df['blink_confidence'] = None
     merged_df['blink_index'] = None
+    merged_df['blink_duration'] = None
+    merged_df['blink_start'] = None
+    merged_df['blink_end'] = None
+    
+    # Add blink count as constant for the whole recording
+    merged_df['blink_count'] = len(blinks_df)
     
     # Mark blink segments
     for _, blink in blinks_df.iterrows():
-        mask = (merged_df['timestamp'] >= blink['start_timestamp']) & \
-               (merged_df['timestamp'] <= blink['end_timestamp'])
+        start_time = blink['start_timestamp']
+        end_time = blink['end_timestamp']
+        duration = end_time - start_time
+        
+        mask = (merged_df['timestamp'] >= start_time) & (merged_df['timestamp'] <= end_time)
         merged_df.loc[mask, 'blink_bool'] = True
         merged_df.loc[mask, 'blink_confidence'] = blink['confidence']
         merged_df.loc[mask, 'blink_index'] = blink['id']
+        merged_df.loc[mask, 'blink_duration'] = duration
+        merged_df.loc[mask, 'blink_start'] = start_time
+        merged_df.loc[mask, 'blink_end'] = end_time
     
     # Add annotation columns (constant values for entire recording)
     for col in annotation_df.columns:
@@ -60,6 +85,11 @@ def merge_eyetracking_data(sample_dir, recording_id):
     for col in merged_df.columns:
         if merged_df[col].dtype in ['float64', 'float32', 'int64', 'int32']:
             merged_df[col] = merged_df[col].interpolate(method='linear', limit=5, limit_direction='both')
+    
+    # Round world_index columns to nearest integer
+    world_index_cols = [col for col in merged_df.columns if 'world_index' in col]
+    for col in world_index_cols:
+        merged_df[col] = merged_df[col].round().astype('Int64')
     
     return merged_df
 
