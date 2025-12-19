@@ -32,13 +32,24 @@ def load_csv_files(self, root_dir, recursive, ignore_dirs, file_list):
 
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean the dataset by removing rows with NaN values in "time-rel-seconds", 'x-avg' or 'y-avg' columns.
+    Clean the dataset by removing rows with NaN values in required feature columns.
+    Drops rows with NaN in: time-rel-seconds, x-avg, y-avg, pupil-size-left-avg, pupil-size-right-avg
     """
 
-    if not {"time-rel-seconds", "x-avg", "y-avg"}.issubset(df.columns):
-        raise ValueError(f"The DataFrame must have columns: time-rel-seconds,x-avg,y-avg")
+    required_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+    if not set(required_cols).issubset(df.columns):
+        raise ValueError(f"The DataFrame must have columns: {', '.join(required_cols)}")
 
-    df = df.dropna(subset=["time-rel-seconds", "x-avg", "y-avg"])
+    # Drop NaN in required columns
+    cols_to_check = required_cols.copy()
+    
+    # Also check pupil columns if they exist
+    if "pupil-size-left-avg" in df.columns:
+        cols_to_check.append("pupil-size-left-avg")
+    if "pupil-size-right-avg" in df.columns:
+        cols_to_check.append("pupil-size-right-avg")
+    
+    df = df.dropna(subset=cols_to_check)
     df = df.sort_values("time-rel-seconds").reset_index(drop=True)
 
     return df
@@ -82,6 +93,8 @@ class SpacioTemporalDataset(Dataset):
                     print(f"Window {window_slice} too small for kt={kt} and ks={ks}. [path={path}]. Skipping... ")
                     continue
                 graph = self._load_one(df, window_slice)
+                # Store source file information
+                graph.source_file = os.path.basename(path)
                 self.graphs.append(graph)
 
         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
@@ -143,11 +156,21 @@ class SpacioTemporalDataset(Dataset):
         ks = self.ks
         kt = self.kt
 
-        df = df.loc[window_slice, ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]]
-        n = len(df)
+        # Select feature columns
+        feature_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+        df_window = df.loc[window_slice, :]
+        n = len(df_window)
 
         #### node features matrix X
-        X = torch.tensor(df[["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]].values, dtype=torch.float32)
+        X = torch.tensor(df_window[feature_cols].values, dtype=torch.float32)
+        
+        #### Extract emotion labels (graph-level targets)
+        emotion_cols = [col for col in df_window.columns if "emotion" in col.lower()]
+        if emotion_cols:
+            # Average emotion values across the window for graph-level prediction
+            y = torch.tensor(df_window[emotion_cols].mean(axis=0).values, dtype=torch.float32)
+        else:
+            y = None
         
         #### creating TEMPORAL edge_index matrix
         idx = torch.arange(n)          # [0, 1, ..., n-1]
@@ -187,5 +210,9 @@ class SpacioTemporalDataset(Dataset):
         data["node"].num_nodes = n
         data["node", "temporal", "node"].edge_index = edge_index_temporal
         data["node", "spatial", "node"].edge_index = edge_index_spatial
+        
+        # Add emotion targets if available
+        if y is not None:
+            data.y = y
 
         return data
