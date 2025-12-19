@@ -23,8 +23,9 @@
 
 ### Spatio Temporal Hetero GCN
 
-MSE: 11.8035 | MAE: 2.9173 | SD_Err: 3.4356
-R²: 0.1128 | D²: 0.1128 | Pearson R: 0.3359
+| Model                      | MSE     | MAE    | SD_Err | R²     | D²     | Pearson R |
+|----------------------------|---------|--------|--------|--------|--------|-----------|
+| Spatio Temporal Hetero GCN | 11.8035 | 2.9173 | 3.4356 | 0.1128 | 0.1128 | 0.3359    |
 
 #### Data params
 
