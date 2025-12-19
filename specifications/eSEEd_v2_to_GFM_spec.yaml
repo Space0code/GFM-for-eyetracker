@@ -1,0 +1,27 @@
+mappings:
+  "timestamp": "time-abs-seconds" # absolute timestamp (s)
+  
+  "gaze_confidence": "confidence-gaze-left" # confidence for gaze data
+  "gaze_confidence": "confidence-gaze-right" # confidence for gaze data
+  "gaze_norm_pos_x": "x-left" # normalized gaze x-coordinate
+  "gaze_norm_pos_y": "y-left" # normalized gaze y-coordinate
+  "gaze_norm_pos_x": "x-right" # normalized gaze x-coordinate
+  "gaze_norm_pos_y": "y-right" # normalized gaze y-coordinate
+
+  "pupil_diameter_3d_left": "pupil-size-left-avg" # pupil size left eye
+  "pupil_diameter_3d_right": "pupil-size-right-avg" # pupil size right eye
+  "pupil_confidence_left": "confidence-pupil-left" # confidence for left pupil size
+  "pupil_confidence_right": "confidence-pupil-right" # confidence for right pupil size
+
+  "blink_confidence": "confidence-blink" # confidence for blink detection
+  "blink_bool": "blink" # blink detection boolean
+  "blink_duration": "blink-dur" # blink duration (s)
+  "blink_count": "blink-count" # blink count
+  "blink_start": "blink-start" # blink start time (s)
+  "blink_end": "blink-end" # blink end time (s)
+
+  "Anger": "emotion-anger" # anger emotion score
+  "Tenderness": "emotion-tenderness" # tenderness emotion score
+  "Sadness": "emotion-sadness" # sadness emotion score
+  "Disgust": "emotion-disgust" # disgust emotion score
+
