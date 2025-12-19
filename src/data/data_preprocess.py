@@ -4,9 +4,9 @@ import pandas as pd
 
 """
 Usage:
-python scripts/data_preprocess.py 
+python src/data/data_preprocess.py 
 or
-python scripts/data_preprocess.py --dataset cog-load
+python src/data/data_preprocess.py --dataset cog-load
 """
 
 SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
@@ -14,7 +14,8 @@ DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
     "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
     "hci-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/"),
-    "deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
+    #"deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
+    "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
 }
 
 def preprocess_dir(dir_name, source_dir_path, dest_data_dir):
@@ -53,7 +54,9 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
         if col not in df.columns:
             raise ValueError(f"Mandatory column '{col}' is missing in the file: {file_path}")
 
-    present_cols = MANDATORY_COLUMNS + [col for col in OPTIONAL_COLUMNS if col in df.columns]
+    # Include emotion columns if they exist
+    emotion_cols = [col for col in df.columns if "emotion" in col.lower()]
+    present_cols = MANDATORY_COLUMNS + [col for col in OPTIONAL_COLUMNS if col in df.columns] + emotion_cols
 
     df = dfOG[present_cols].copy()
     # print("COLUMNS of processed df:", df.columns)
@@ -64,6 +67,11 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     elif "hci-tagging" in dir_name:
         # rows that have at least one confidence > 0, put x-avg and y-avg to float('nan')
         condition_good = (df["confidence-gaze-left"] == 0) & (df["confidence-gaze-right"] == 0)
+    elif "eSEEd_v2" in dir_name:
+        # rows that have both confidence >= 0.5, put x-avg and y-avg to float('nan')
+        condition_good = (df["confidence-gaze-left"] >= 0.75) & (df["confidence-gaze-right"] >= 0.75)
+    else:
+        raise ValueError(f"Unknown dataset directory name: {dir_name}")
 
     cols_to_nan = [col for col in present_cols if col != "time-rel-seconds"]
     df.loc[~condition_good, cols_to_nan] = float('nan')
