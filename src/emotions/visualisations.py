@@ -138,10 +138,10 @@ def main():
     
     dataset = SpacioTemporalDataset(
         root_dir=args.data_dir,
-        file_list=["sample_01_recording_01_merged.csv",
-                   "sample_02_recording_01_merged.csv",
-                   "sample_03_recording_01_merged.csv",
-                   "sample_04_recording_01_merged.csv"],
+        # file_list=["sample_01_recording_01_merged.csv",
+        #            "sample_02_recording_01_merged.csv",
+        #            "sample_03_recording_01_merged.csv",
+        #            "sample_04_recording_01_merged.csv"],
         recursive=True,
         window_length=10,
         kt=2,
