@@ -26,11 +26,14 @@ class SpatioTemporalHeteroGNN(nn.Module):
         )
 
         # Final MLP for graph-level output
+        # Output is bounded to [0, 10] for emotion scores
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels),
             nn.ReLU(),
-            nn.Linear(hidden_channels, out_channels)
+            nn.Linear(hidden_channels, out_channels),
+            nn.Sigmoid()  # Output in [0, 1], will scale to [0, 10]
         )
+        self.output_scale = 10.0
 
     def forward(self, data):
         # data is a HeteroData from your SpacioTemporalDataset
@@ -49,5 +52,6 @@ class SpatioTemporalHeteroGNN(nn.Module):
         batch = data["node"].batch           # [num_nodes] (set by PyG DataLoader)
 
         graph_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
-        out = self.head(graph_emb)                    # [num_graphs, out_channels]
+        out = self.head(graph_emb)                    # [num_graphs, out_channels] in [0, 1]
+        out = out * self.output_scale                 # Scale to [0, 10]
         return out
