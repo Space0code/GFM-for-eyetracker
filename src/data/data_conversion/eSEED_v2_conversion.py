@@ -67,6 +67,12 @@ def convert_to_gfm(input_file, output_file, mapping):
         mapping: Dictionary with source columns as keys and lists of target columns as values
     """
     
+    # Extract subject and recording from filename (e.g., sample_01_recording_02_merged.csv)
+    filename = os.path.basename(input_file)
+    parts = filename.replace('_merged.csv', '').split('_')
+    subject_id = int(parts[1])  # sample_01 -> 1
+    recording_id = int(parts[3])  # recording_02 -> 2
+    
     # Load data
     df = pd.read_csv(input_file)
     
@@ -90,6 +96,10 @@ def convert_to_gfm(input_file, output_file, mapping):
         time_rel = gfm_df['time-abs-seconds'] - gfm_df['time-abs-seconds'].min()
         # Insert as first column
         gfm_df.insert(0, 'time-rel-seconds', time_rel)
+    
+    # Add subject and recording columns
+    gfm_df['subject'] = subject_id
+    gfm_df['recording'] = recording_id
     
     if "x-left" in gfm_df.columns and "x-right" in gfm_df.columns:
         gfm_df["x-avg"] = gfm_df[["x-left", "x-right"]].mean(axis=1)

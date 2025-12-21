@@ -48,6 +48,8 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     OPTIONAL_COLUMNS = [
         "pupil-size-left-avg",
         "pupil-size-right-avg",
+        "subject",
+        "recording",
     ]
     # check if all mandatory columns are present
     for col in MANDATORY_COLUMNS:
@@ -73,7 +75,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     else:
         raise ValueError(f"Unknown dataset directory name: {dir_name}")
 
-    cols_to_nan = [col for col in present_cols if col != "time-rel-seconds"]
+    cols_to_nan = [col for col in present_cols if col not in ["time-rel-seconds", "subject", "recording"]]
     df.loc[~condition_good, cols_to_nan] = float('nan')
 
     # drop all rows until the first row with good confidence
@@ -90,7 +92,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     # interpolate missing values but only a few points in each direction (limit=30 => max 1s window interpolation)
     for col in present_cols:
-        if col != "time-rel-seconds":
+        if col not in ["time-rel-seconds", "subject", "recording"]:
             df[col] = df[col].interpolate(method="linear", limit_direction="both", limit=10, limit_area="inside")
             if "pupil" in col:
                 # don't smooth (x,y) coordinates because we could lose subtle gaze path details

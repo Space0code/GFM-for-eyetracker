@@ -172,6 +172,10 @@ class SpacioTemporalDataset(Dataset):
         else:
             y = None
         
+        #### Extract subject and recording if available
+        subject = df_window["subject"].iloc[0] if "subject" in df_window.columns else None
+        recording = df_window["recording"].iloc[0] if "recording" in df_window.columns else None
+        
         #### creating TEMPORAL edge_index matrix
         idx = torch.arange(n)          # [0, 1, ..., n-1]
 
@@ -214,5 +218,11 @@ class SpacioTemporalDataset(Dataset):
         # Add emotion targets if available
         if y is not None:
             data.y = y
+        
+        # Add subject and recording if available
+        if subject is not None:
+            data.subject = subject
+        if recording is not None:
+            data.recording = recording
 
         return data
