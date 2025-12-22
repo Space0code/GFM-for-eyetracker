@@ -58,8 +58,15 @@ class BaseSplitter(ABC):
 class SubjectLOOSplitter(BaseSplitter):
     """Leave-one-subject-out cross-validation."""
     
+    def __init__(self, graphs: List, val_size: int = 1, random_state: Optional[int] = None):
+        self.random_state = random_state
+        super().__init__(graphs, val_size)
+    
     def _build_index(self):
         self.subjects = sorted(set(g.subject for g in self.graphs))
+        self.rng = np.random.RandomState(self.random_state)
+        print("Total subjects:", len(self.subjects))
+        print("subjects:", self.subjects)
     
     def split(self):
         """Yield splits leaving out one subject at a time."""
@@ -68,11 +75,13 @@ class SubjectLOOSplitter(BaseSplitter):
             test_idx = self._get_indices_by_subject(test_subject)
             
             # Get remaining subjects for train/val
-            train_subjects = [s for s in self.subjects if s != test_subject]
+            available_subjects = [s for s in self.subjects if s != test_subject]
             
-            # Select val_size subjects for validation
-            val_subjects = train_subjects[:self.val_size]
-            train_subjects = train_subjects[self.val_size:]
+            # Randomly select val_size subjects for validation
+            available_subjects = available_subjects.copy()
+            self.rng.shuffle(available_subjects)
+            val_subjects = available_subjects[:self.val_size]
+            train_subjects = available_subjects[self.val_size:]
             
             # Build train and val indices
             train_idx = self._build_indices_from_subjects(train_subjects)
@@ -84,8 +93,13 @@ class SubjectLOOSplitter(BaseSplitter):
 class RecordingLOOSplitter(BaseSplitter):
     """Leave-one-recording-out cross-validation."""
     
+    def __init__(self, graphs: List, val_size: int = 1, random_state: Optional[int] = None):
+        self.random_state = random_state
+        super().__init__(graphs, val_size)
+    
     def _build_index(self):
         self.recordings = sorted(set(g.recording for g in self.graphs))
+        self.rng = np.random.RandomState(self.random_state)
     
     def split(self):
         """Yield splits leaving out one recording at a time."""
@@ -94,11 +108,13 @@ class RecordingLOOSplitter(BaseSplitter):
             test_idx = self._get_indices_by_recording(test_recording)
             
             # Get remaining recordings for train/val
-            train_recordings = [r for r in self.recordings if r != test_recording]
+            available_recordings = [r for r in self.recordings if r != test_recording]
             
-            # Select val_size recordings for validation
-            val_recordings = train_recordings[:self.val_size]
-            train_recordings = train_recordings[self.val_size:]
+            # Randomly select val_size recordings for validation
+            available_recordings = available_recordings.copy()
+            self.rng.shuffle(available_recordings)
+            val_recordings = available_recordings[:self.val_size]
+            train_recordings = available_recordings[self.val_size:]
             
             # Build train and val indices
             train_idx = self._build_indices_from_recordings(train_recordings)
@@ -115,9 +131,14 @@ class CombinedLOOSplitter(BaseSplitter):
     Train set: remaining graphs, with val_size subjects held out for validation
     """
     
+    def __init__(self, graphs: List, val_size: int = 1, random_state: Optional[int] = None):
+        self.random_state = random_state
+        super().__init__(graphs, val_size)
+    
     def _build_index(self):
         self.subjects = sorted(set(g.subject for g in self.graphs))
         self.recordings = sorted(set(g.recording for g in self.graphs))
+        self.rng = np.random.RandomState(self.random_state)
     
     def split(self):
         """Yield splits for each subject-recording combination."""
@@ -139,7 +160,9 @@ class CombinedLOOSplitter(BaseSplitter):
                 # Available subjects for train/val (excluding test_subject)
                 available_subjects = [s for s in self.subjects if s != test_subject]
                 
-                # Select val_size subjects for validation
+                # Randomly select val_size subjects for validation
+                available_subjects = available_subjects.copy()
+                self.rng.shuffle(available_subjects)
                 val_subjects = available_subjects[:self.val_size]
                 train_subjects = available_subjects[self.val_size:]
                 
@@ -195,6 +218,8 @@ class SubjectKFoldSplitter(BaseSplitter):
     
     def split(self):
         """Yield k-fold splits on subjects."""
+        rng = np.random.RandomState(self.random_state)
+        
         if self.y is not None:
             splits = self.kfold.split(self.subject_array, self.y)
         else:
@@ -202,9 +227,10 @@ class SubjectKFoldSplitter(BaseSplitter):
         
         for train_val_subj_idx, test_subj_idx in splits:
             test_subjects = self.subject_array[test_subj_idx]
-            train_val_subjects = self.subject_array[train_val_subj_idx]
+            train_val_subjects = self.subject_array[train_val_subj_idx].copy()
             
-            # Split train_val into train and val
+            # Randomly shuffle and split train_val into train and val
+            rng.shuffle(train_val_subjects)
             val_subjects = train_val_subjects[:self.val_size]
             train_subjects = train_val_subjects[self.val_size:]
             
@@ -234,11 +260,14 @@ class RecordingKFoldSplitter(BaseSplitter):
     
     def split(self):
         """Yield k-fold splits on recordings."""
+        rng = np.random.RandomState(self.random_state)
+        
         for train_val_rec_idx, test_rec_idx in self.kfold.split(self.recording_array):
-            test_recordings = self.recording_array[test_rec_idx]
-            train_val_recordings = self.recording_array[train_val_rec_idx]
+            test_recordings = self.recording_array[test_rec_idx].copy()
+            train_val_recordings = self.recording_array[train_val_rec_idx].copy()
             
-            # Split train_val into train and val
+            # Randomly shuffle and split train_val into train and val
+            rng.shuffle(train_val_recordings)
             val_recordings = train_val_recordings[:self.val_size]
             train_recordings = train_val_recordings[self.val_size:]
             
