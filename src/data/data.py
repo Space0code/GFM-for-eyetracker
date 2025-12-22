@@ -2,6 +2,8 @@
 import os
 import glob
 import math
+import hashlib
+import pickle
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import KDTree
@@ -60,7 +62,7 @@ class SpacioTemporalDataset(Dataset):
     Dataset for spatio-temporal graphs combining spatial and temporal edges.
     Each CSV becomes a graph (or multiple graphs) with both spatial and temporal connections.
     """
-    def __init__(self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0):
+    def __init__(self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, cache_dir: str = None, use_cache: bool = True):
         """
         Load all CSV files from directory and convert to graphs.
         If file_list is provided, search for the files in the list in root_dir.
@@ -74,6 +76,8 @@ class SpacioTemporalDataset(Dataset):
         - ks: k spatial neigbors
         - window_length: in seconds
         - window_overlap: fraction in range [0, 1)
+        - cache_dir: directory to store cached processed graphs (default: root_dir/.cache)
+        - use_cache: whether to use caching (default: True)
         """
         self.kt = kt  # temporal horizon
         self.ks = ks  # k for spatial kNN
@@ -81,7 +85,26 @@ class SpacioTemporalDataset(Dataset):
         self.window_overlap = window_overlap
         self.files = []
         self.graphs = []
+        
+        # Setup cache directory
+        if cache_dir is None:
+            cache_dir = os.path.join(root_dir, ".cache")
+        self.cache_dir = cache_dir
+        self.use_cache = use_cache
+        
+        # Try to load from cache first
+        if use_cache:
+            cache_path = self._get_cache_path(root_dir, recursive, ignore_dirs, file_list)
+            if os.path.exists(cache_path):
+                print(f"Loading dataset from cache: {cache_path}")
+                with open(cache_path, 'rb') as f:
+                    cached_data = pickle.load(f)
+                    self.graphs = cached_data['graphs']
+                    self.files = cached_data['files']
+                print(f"Loaded {len(self.graphs)} graphs from cache")
+                return
 
+        # Process dataset from scratch
         load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
         
         # pre-load all graphs into memory for simplicity
@@ -98,12 +121,53 @@ class SpacioTemporalDataset(Dataset):
                 self.graphs.append(graph)
 
         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
+        
+        # Save to cache
+        if use_cache:
+            self._save_to_cache(cache_path)
 
     def __len__(self):
         return len(self.graphs)
 
     def __getitem__(self, idx):
         return self.graphs[idx]
+    
+    def _get_cache_path(self, root_dir: str, recursive: bool, ignore_dirs: list, file_list: list) -> str:
+        """
+        Generate a unique cache filename based on dataset parameters.
+        Uses hash of configuration to ensure different parameters create different caches.
+        """
+        # Create a unique identifier based on parameters
+        config_str = f"kt={self.kt}_ks={self.ks}_wl={self.window_length}_wo={self.window_overlap}"
+        config_str += f"_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+        
+        # Hash the configuration
+        config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+        
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Cache filename includes parameters for readability
+        cache_filename = f"dataset_kt{self.kt}_ks{self.ks}_wl{self.window_length}_wo{self.window_overlap}_{config_hash}.pkl"
+        return os.path.join(self.cache_dir, cache_filename)
+    
+    def _save_to_cache(self, cache_path: str):
+        """Save processed graphs to cache file."""
+        try:
+            print(f"Saving dataset to cache: {cache_path}")
+            with open(cache_path, 'wb') as f:
+                pickle.dump({
+                    'graphs': self.graphs,
+                    'files': self.files,
+                    'kt': self.kt,
+                    'ks': self.ks,
+                    'window_length': self.window_length,
+                    'window_overlap': self.window_overlap
+                }, f)
+            print(f"Successfully cached {len(self.graphs)} graphs")
+        except Exception as e:
+            print(f"Warning: Failed to save cache: {e}")
+            # Continue without caching - don't fail the entire dataset loading
 
     def _load_df(self, path: str) -> pd.DataFrame:
         df = pd.read_csv(path)

@@ -156,6 +156,8 @@ def main():
         window_length=10,
         kt=2,
         ks=2,
+        cache_dir="./data/cache/",
+        use_cache=True
     )
 
     splitter = SubjectLOOSplitter(dataset, val_size=3, random_state=42)
