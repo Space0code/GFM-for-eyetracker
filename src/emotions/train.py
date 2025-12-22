@@ -16,6 +16,8 @@ import sys
 import os
 import numpy as np
 
+from emotions.splits import SubjectLOOSplitter
+
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -152,6 +154,9 @@ def main():
         kt=2,
         ks=2,
     )
+
+    splitter = SubjectLOOSplitter(dataset, val_size=1, random_state=42)
+    exit(0)
     
     # Split dataset
     indices = list(range(len(dataset)))
