@@ -16,13 +16,13 @@ import sys
 import os
 import numpy as np
 
-from emotions.splits import SubjectLOOSplitter
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from data.data import SpacioTemporalDataset
 from emotions.model import SpatioTemporalHeteroGNN
+from emotions.splits import SubjectLOOSplitter
 
 
 def compute_metrics(outputs, targets):
@@ -145,17 +145,26 @@ def main():
     print("Loading dataset...")
     dataset = SpacioTemporalDataset(
         root_dir=data_dir,
-        # file_list=["sample_01_recording_01_merged.csv",
-        #            "sample_01_recording_02_merged.csv",
-        #            "sample_01_recording_03_merged.csv",
-        #            "sample_01_recording_04_merged.csv"],
+        file_list=["sample_01_recording_01_merged.csv",
+                   "sample_02_recording_05_merged.csv",
+                   "sample_03_recording_06_merged.csv",
+                   "sample_02_recording_06_merged.csv",
+                   "sample_03_recording_07_merged.csv",
+                   "sample_02_recording_02_merged.csv",
+                   "sample_03_recording_03_merged.csv",
+                   "sample_02_recording_03_merged.csv",
+                   "sample_03_recording_04_merged.csv",
+                   "sample_04_recording_02_merged.csv",
+                   "sample_05_recording_02_merged.csv",
+                   "sample_06_recording_03_merged.csv",
+                   "sample_07_recording_04_merged.csv"],
         recursive=True,
         window_length=10,
         kt=2,
         ks=2,
     )
 
-    splitter = SubjectLOOSplitter(dataset, val_size=1, random_state=42)
+    splitter = SubjectLOOSplitter(dataset, val_size=3, random_state=42)
     exit(0)
     
     # Split dataset
