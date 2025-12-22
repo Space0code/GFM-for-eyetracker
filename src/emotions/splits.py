@@ -65,8 +65,6 @@ class SubjectLOOSplitter(BaseSplitter):
     def _build_index(self):
         self.subjects = sorted(set(g.subject for g in self.graphs))
         self.rng = np.random.RandomState(self.random_state)
-        print("Total subjects:", len(self.subjects))
-        print("subjects:", self.subjects)
     
     def split(self):
         """Yield splits leaving out one subject at a time."""
@@ -82,7 +80,7 @@ class SubjectLOOSplitter(BaseSplitter):
             self.rng.shuffle(available_subjects)
             val_subjects = available_subjects[:self.val_size]
             train_subjects = available_subjects[self.val_size:]
-            
+
             # Build train and val indices
             train_idx = self._build_indices_from_subjects(train_subjects)
             val_idx = self._build_indices_from_subjects(val_subjects)
