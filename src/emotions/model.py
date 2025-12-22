@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, HeteroConv, global_mean_pool
 
 class SpatioTemporalHeteroGNN(nn.Module):
-    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, hidden_channels: int, out_channels: int, output_scale: float = 10.0):
         super().__init__()
 
         # 1st hetero GCN layer (temporal + spatial)
@@ -31,9 +31,9 @@ class SpatioTemporalHeteroGNN(nn.Module):
             nn.Linear(hidden_channels, hidden_channels),
             nn.ReLU(),
             nn.Linear(hidden_channels, out_channels),
-            nn.Sigmoid()  # Output in [0, 1], will scale to [0, 10]
+            nn.Sigmoid()  # Output in [0, 1], will scale to [0, output_scale]
         )
-        self.output_scale = 10.0
+        self.output_scale = output_scale
 
     def forward(self, data):
         # data is a HeteroData from your SpacioTemporalDataset
