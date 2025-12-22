@@ -144,19 +144,19 @@ def main():
     print("Loading dataset...")
     dataset = SpacioTemporalDataset(
         root_dir=data_dir,
-        file_list=["sample_01_recording_01_merged.csv",
-                   "sample_02_recording_05_merged.csv",
-                   "sample_03_recording_06_merged.csv",
-                   "sample_02_recording_06_merged.csv",
-                   "sample_03_recording_07_merged.csv",
-                   "sample_02_recording_02_merged.csv",
-                   "sample_03_recording_03_merged.csv",
-                   "sample_02_recording_03_merged.csv",
-                   "sample_03_recording_04_merged.csv",
-                   "sample_04_recording_02_merged.csv",
-                   "sample_05_recording_02_merged.csv",
-                   "sample_06_recording_03_merged.csv",
-                   "sample_07_recording_04_merged.csv"],
+        # file_list=["sample_01_recording_01_merged.csv",
+        #            "sample_02_recording_05_merged.csv",
+        #            "sample_03_recording_06_merged.csv",
+        #            "sample_02_recording_06_merged.csv",
+        #            "sample_03_recording_07_merged.csv",
+        #            "sample_02_recording_02_merged.csv",
+        #            "sample_03_recording_03_merged.csv",
+        #            "sample_02_recording_03_merged.csv",
+        #            "sample_03_recording_04_merged.csv",
+        #            "sample_04_recording_02_merged.csv",
+        #            "sample_05_recording_02_merged.csv",
+        #            "sample_06_recording_03_merged.csv",
+        #            "sample_07_recording_04_merged.csv"],
         recursive=True,
         window_length=10,
         kt=2,
@@ -193,7 +193,7 @@ def main():
         optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
         
         # Training loop
-        num_epochs = 100
+        num_epochs = 10
         best_val_loss = float('inf')
         
         # Determine epochs to save outputs (10% of total, equidistant)
