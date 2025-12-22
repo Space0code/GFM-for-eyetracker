@@ -60,8 +60,12 @@ training:
 
 # Cross-validation configuration
 cross_validation:
-  # Strategy: "subject_loo", "recording_loo", or "simple_split"
-  strategy: "subject_loo"
+  # Strategies: List of strategies to run. Options: "subject_loo", "recording_loo", "combined_loo"
+  # Can be a single string or a list of strings
+  strategies:
+    - "subject_loo"
+    # - "recording_loo"
+    # - "combined_loo"
   
   # Number of subjects/recordings for validation set
   val_size: 3

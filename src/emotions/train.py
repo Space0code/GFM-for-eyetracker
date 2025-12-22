@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from data.data import SpacioTemporalDataset
 from emotions.model import SpatioTemporalHeteroGNN
-from emotions.splits import SubjectLOOSplitter
+from emotions.splits import SubjectLOOSplitter, RecordingLOOSplitter, CombinedLOOSplitter
 
 
 def load_config(config_path: str = None) -> dict:
@@ -41,6 +41,29 @@ def load_config(config_path: str = None) -> dict:
         config = yaml.safe_load(f)
     
     return config
+
+
+def create_splitter(strategy: str, dataset, val_size: int, random_state: int = None):
+    """Create a splitter based on strategy name.
+    
+    Args:
+        strategy: Name of splitting strategy ('subject_loo', 'recording_loo', 'combined_loo')
+        dataset: Dataset to split
+        val_size: Number of subjects/recordings for validation
+        random_state: Random seed for reproducibility
+        
+    Returns:
+        Splitter instance
+    """
+    if strategy == 'subject_loo':
+        return SubjectLOOSplitter(dataset, val_size=val_size, random_state=random_state)
+    elif strategy == 'recording_loo':
+        return RecordingLOOSplitter(dataset, val_size=val_size, random_state=random_state)
+    elif strategy == 'combined_loo':
+        return CombinedLOOSplitter(dataset, val_size=val_size, random_state=random_state)
+    else:
+        raise ValueError(f"Unknown cross-validation strategy: {strategy}. "
+                        f"Valid options: 'subject_loo', 'recording_loo', 'combined_loo'")
 
 
 def compute_metrics(outputs, targets):
@@ -194,33 +217,48 @@ def main():
         use_cache=dataset_cfg.get('use_cache', True)
     )
 
-    # Initialize splitter based on strategy
-    if cv_cfg['strategy'] == 'subject_loo':
-        splitter = SubjectLOOSplitter(
-            dataset, 
-            val_size=cv_cfg['val_size'], 
-            random_state=cv_cfg.get('random_state')
-        )
-    else:
-        raise ValueError(f"Unknown cross-validation strategy: {cv_cfg['strategy']}")
+    # Get strategies (can be single string or list)
+    strategies = cv_cfg['strategies']
+    if isinstance(strategies, str):
+        strategies = [strategies]
+    
+    print(f"\nWill run experiments with {len(strategies)} splitting strateg{'y' if len(strategies) == 1 else 'ies'}: {', '.join(strategies)}")
 
     
-    # Split dataset
-    # indices = list(range(len(dataset)))
-    # train_idx, test_idx = train_test_split(indices, test_size=0.2, random_state=42)
-    test_metrics = {}
-    for train_idx, val_idx, test_idx in splitter.split():
+    # Dictionary to store results for all strategies
+    all_strategies_results = {}
+    
+    # Iterate over all splitting strategies
+    for strategy in strategies:
+        print(f"\n{'='*100}")
+        print(f"Starting cross-validation with strategy: {strategy.upper()}")
+        print(f"{'='*100}")
         
-        # Validate subject consistency in test set
-        test_subjects = [dataset[i].subject for i in test_idx]
-        if len(set(test_subjects)) != 1:
-            raise ValueError(f"Test split contains multiple subjects: {set(test_subjects)}. "
-                           f"Expected all test samples to be from the same subject.")
+        # Initialize splitter for this strategy
+        splitter = create_splitter(
+            strategy=strategy,
+            dataset=dataset,
+            val_size=cv_cfg['val_size'],
+            random_state=cv_cfg.get('random_state')
+        )
         
-        test_subject = test_subjects[0]
+        # Create strategy-specific directory
+        strategy_dir = os.path.join(run_dir, strategy)
+        os.makedirs(strategy_dir, exist_ok=True)
         
-        # Create subject-specific directory
-        subject_dir = os.path.join(run_dir, f"subject_{test_subject}")
+        test_metrics = {}
+        for train_idx, val_idx, test_idx in splitter.split():
+            
+            # Validate subject consistency in test set
+            test_subjects = [dataset[i].subject for i in test_idx]
+            if len(set(test_subjects)) != 1:
+                raise ValueError(f"Test split contains multiple subjects: {set(test_subjects)}. "
+                               f"Expected all test samples to be from the same subject.")
+            
+            test_subject = test_subjects[0]
+            
+            # Create subject-specific directory within strategy directory
+        subject_dir = os.path.join(strategy_dir, f"subject_{test_subject}")
         subject_data_dir = os.path.join(subject_dir, "data")
         os.makedirs(subject_data_dir, exist_ok=True)
 
@@ -290,18 +328,35 @@ def main():
               f"R²: {test_metrics[test_subject]['r2']:.4f} | "
               f"Pearson R: {test_metrics[test_subject]['pearson_r']:.4f}")
         print(f"Time taken for subject {test_subject}: {datetime.now() - subject_start_time}\n")
-
-    # Final evaluation with all metrics (average across subjects)
-    print("\n" + "="*100)
-    print("Final Test Metrics (Averaged Across Subjects)")
-    print("="*100)
+        
+        # Store results for this strategy
+        all_strategies_results[strategy] = test_metrics
+        
+        # Print summary for this strategy
+        print("\n" + "="*100)
+        print(f"Summary for {strategy.upper()} (Averaged Across Subjects)")
+        print("="*100)
+        
+        metric_names = config['metrics']
+        final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
+        
+        metric_str = " | ".join([f"{metric.upper()}: {final_metrics[metric]:.4f}" for metric in metric_names])
+        print(metric_str)
     
-    metric_names = config['metrics']
-    final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
-    
-    # Print metrics dynamically based on config
-    metric_str = " | ".join([f"{metric.upper()}: {final_metrics[metric]:.4f}" for metric in metric_names])
-    print(metric_str)
+    # Final comparison across all strategies
+    if len(strategies) > 1:
+        print("\n" + "="*100)
+        print("FINAL COMPARISON ACROSS ALL STRATEGIES")
+        print("="*100)
+        
+        metric_names = config['metrics']
+        print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
+        print("-"*100)
+        
+        for strategy, test_metrics in all_strategies_results.items():
+            final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
+            metric_str = " | ".join([f"{final_metrics[m]:<10.4f}" for m in metric_names])
+            print(f"{strategy:<20} | {metric_str}")
     
     print(f"\nTraining complete!")
     print(f"Results saved to: {run_dir}")
