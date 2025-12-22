@@ -103,6 +103,8 @@ class SpacioTemporalDataset(Dataset):
                     self.files = cached_data['files']
                 print(f"Loaded {len(self.graphs)} graphs from cache")
                 return
+        else:
+            print("Caching disabled, processing dataset from scratch.")
 
         # Process dataset from scratch
         load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
