@@ -33,7 +33,7 @@ def compute_metrics(outputs, targets):
         targets: torch.Tensor of ground truth
         
     Returns:
-        dict: Dictionary containing MSE, MAE, SD, R², D², and Pearson R
+        dict: Dictionary containing MSE, MAE, SD, R², and Pearson R
     """
     # Convert to numpy and flatten
     y_pred = outputs.cpu().numpy().flatten()
@@ -52,11 +52,7 @@ def compute_metrics(outputs, targets):
     # R² (coefficient of determination)
     r2 = r2_score(y_true, y_pred)
     
-    # D² (fraction of deviance explained)
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    d2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
-    
+
     # Pearson correlation coefficient
     pearson_r, _ = pearsonr(y_true, y_pred)
     
@@ -65,7 +61,6 @@ def compute_metrics(outputs, targets):
         'mae': mae,
         'sd_error': sd_error,
         'r2': r2,
-        'd2': d2,
         'pearson_r': pearson_r
     }
 
@@ -171,6 +166,19 @@ def main():
     # train_idx, test_idx = train_test_split(indices, test_size=0.2, random_state=42)
     test_metrics = {}
     for train_idx, val_idx, test_idx in splitter.split():
+        
+        # Validate subject consistency in test set
+        test_subjects = [dataset[i].subject for i in test_idx]
+        if len(set(test_subjects)) != 1:
+            raise ValueError(f"Test split contains multiple subjects: {set(test_subjects)}. "
+                           f"Expected all test samples to be from the same subject.")
+        
+        test_subject = test_subjects[0]
+        
+        # Create subject-specific directory
+        subject_dir = os.path.join(run_dir, f"subject_{test_subject}")
+        subject_data_dir = os.path.join(subject_dir, "data")
+        os.makedirs(subject_data_dir, exist_ok=True)
 
         train_dataset = [dataset[i] for i in train_idx]
         val_dataset = [dataset[i] for i in val_idx]
@@ -200,43 +208,46 @@ def main():
         save_interval = max(1, num_epochs // 10)
         save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
         
-        print(f"\nStarting training for test subject {dataset[test_idx[0]].subject}...")
+        print(f"\nStarting training for test subject {test_subject}...")
         print(f"Will save outputs at epochs: {sorted(save_epochs)}")
-        
+        subject_start_time = datetime.now()
         for epoch in range(1, num_epochs + 1):
+            epoch_start_time = datetime.now()
             train_loss = train_epoch(model, train_loader, optimizer, device)
             
             # Save outputs for selected epochs
             save_outputs = epoch in save_epochs
-            save_path = os.path.join(data_save_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
+            save_path = os.path.join(subject_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
             val_metrics = evaluate(model, val_loader, device, save_outputs=save_outputs, save_dir=save_path)
             val_loss = val_metrics['loss']
             
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                torch.save(model.state_dict(), os.path.join(run_dir, 'best_model.pt'))
+                torch.save(model.state_dict(), os.path.join(subject_dir, 'best_model.pt'))
             
             if epoch % 10 == 0 or epoch == 1:
                 print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {val_metrics['mse']:.4f} | "
-                    f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}")
+                    f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}"
+                    f" | Time: {datetime.now() - epoch_start_time}")
         
-        test_metrics[dataset[test_idx[0]].subject] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
-        print(f"Test Metrics for subject {dataset[test_idx[0]].subject}: "
-              f"MSE: {test_metrics[dataset[test_idx[0]].subject]['mse']:.4f} | "
-              f"MAE: {test_metrics[dataset[test_idx[0]].subject]['mae']:.4f} | "
-              f"R²: {test_metrics[dataset[test_idx[0]].subject]['r2']:.4f} | "
-              f"Pearson R: {test_metrics[dataset[test_idx[0]].subject]['pearson_r']:.4f}")
+        test_metrics[test_subject] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
+        print(f"Test Metrics for subject {test_subject}: "
+              f"MSE: {test_metrics[test_subject]['mse']:.4f} | "
+              f"MAE: {test_metrics[test_subject]['mae']:.4f} | "
+              f"R²: {test_metrics[test_subject]['r2']:.4f} | "
+              f"Pearson R: {test_metrics[test_subject]['pearson_r']:.4f}")
+        print(f"Time taken for subject {test_subject}: {datetime.now() - subject_start_time}\n")
 
     # Final evaluation with all metrics (average across subjects)
     print("\n" + "="*100)
     print("Final Test Metrics (Averaged Across Subjects)")
     print("="*100)
     
-    metric_names = ['mse', 'mae', 'sd_error', 'r2', 'd2', 'pearson_r']
+    metric_names = ['mse', 'mae', 'sd_error', 'r2', 'pearson_r']
     final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
     
     print(f"MSE: {final_metrics['mse']:.4f} | MAE: {final_metrics['mae']:.4f} | SD_Err: {final_metrics['sd_error']:.4f}")
-    print(f"R²: {final_metrics['r2']:.4f} | D²: {final_metrics['d2']:.4f} | Pearson R: {final_metrics['pearson_r']:.4f}")
+    print(f"R²: {final_metrics['r2']:.4f} | Pearson R: {final_metrics['pearson_r']:.4f}")
     
     print(f"\nTraining complete!")
     print(f"Results saved to: {run_dir}")
