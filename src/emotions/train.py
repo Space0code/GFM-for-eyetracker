@@ -182,7 +182,8 @@ def main():
     # Create timestamped directory for this run
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = os.path.join(logging_cfg['results_dir'], timestamp)
-    
+    os.makedirs(run_dir, exist_ok=True)
+
     # Save config to run directory for reproducibility
     config_save_path = os.path.join(run_dir, "config.yaml")
     with open(config_save_path, 'w') as f:

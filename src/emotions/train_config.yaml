@@ -64,8 +64,8 @@ cross_validation:
   # Can be a single string or a list of strings
   strategies:
     - "subject_loo"
-    # - "recording_loo"
-    # - "combined_loo"
+    - "recording_loo"
+    - "combined_loo"
   
   # Number of subjects/recordings for validation set
   val_size: 3
