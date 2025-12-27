@@ -250,18 +250,35 @@ def main():
         test_metrics = {}
         for train_idx, val_idx, test_idx in splitter.split():
             
-            # Validate subject consistency in test set
-            test_subjects = [dataset[i].subject for i in test_idx]
-            if len(set(test_subjects)) != 1:
-                raise ValueError(f"Test split contains multiple subjects: {set(test_subjects)}. "
-                               f"Expected all test samples to be from the same subject.")
+            # Identify test set by strategy
+            if strategy == 'subject_loo':
+                test_subjects = list(set(dataset[i].subject for i in test_idx))
+                if len(test_subjects) != 1:
+                    raise ValueError(f"Test split contains multiple subjects: {test_subjects}. "
+                                   f"Expected all test samples to be from the same subject.")
+                test_id = test_subjects[0]
+                test_name = f"subject_{test_id}"
+            elif strategy == 'recording_loo':
+                test_recordings = list(set(dataset[i].recording for i in test_idx))
+                if len(test_recordings) != 1:
+                    raise ValueError(f"Test split contains multiple recordings: {test_recordings}. "
+                                   f"Expected all test samples to be from the same recording.")
+                test_id = test_recordings[0]
+                test_name = f"recording_{test_id}"
+            elif strategy == 'combined_loo':
+                test_pairs = list(set((dataset[i].subject, dataset[i].recording) for i in test_idx))
+                if len(test_pairs) != 1:
+                    raise ValueError(f"Test split contains multiple subject-recording pairs: {test_pairs}. "
+                                   f"Expected all test samples to be from the same pair.")
+                test_id = test_pairs[0]
+                test_name = f"subject_{test_id[0]}_recording_{test_id[1]}"
+            else:
+                raise ValueError(f"Unknown strategy: {strategy}")
             
-            test_subject = test_subjects[0]
-            
-            # Create subject-specific directory within strategy directory
-            subject_dir = os.path.join(strategy_dir, f"subject_{test_subject}")
-            subject_data_dir = os.path.join(subject_dir, "data")
-            os.makedirs(subject_data_dir, exist_ok=True)
+            # Create test-specific directory within strategy directory
+            fold_dir = os.path.join(strategy_dir, test_name)
+            fold_data_dir = os.path.join(fold_dir, "data")
+            os.makedirs(fold_data_dir, exist_ok=True)
 
             train_dataset = [dataset[i] for i in train_idx]
             val_dataset = [dataset[i] for i in val_idx]
@@ -297,9 +314,9 @@ def main():
                 save_interval = max(1, num_epochs // 10)
             save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
             
-            print(f"\nStarting training for test subject {test_subject}...")
+            print(f"\nStarting training for {test_name}...")
             print(f"Will save outputs at epochs: {sorted(save_epochs)}")
-            subject_start_time = datetime.now()
+            fold_start_time = datetime.now()
             for epoch in range(1, num_epochs + 1):
                 epoch_start_time = datetime.now()
                 train_loss = train_epoch(
@@ -309,14 +326,14 @@ def main():
                 
                 # Save outputs for selected epochs
                 save_outputs = logging_cfg.get('save_validation_outputs', False) and epoch in save_epochs
-                save_path = os.path.join(subject_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
+                save_path = os.path.join(fold_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
                 val_metrics = evaluate(model, val_loader, device, save_outputs=save_outputs, save_dir=save_path)
                 val_loss = val_metrics['loss']
                 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     if logging_cfg.get('save_best_model', True):
-                        torch.save(model.state_dict(), os.path.join(subject_dir, 'best_model.pt'))
+                        torch.save(model.state_dict(), os.path.join(fold_dir, 'best_model.pt'))
                 
                 print_every = logging_cfg.get('print_every', 10)
                 if epoch % print_every == 0 or epoch == 1:
@@ -324,24 +341,25 @@ def main():
                         f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}"
                         f" | Time: {datetime.now() - epoch_start_time}")
             
-            test_metrics[test_subject] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
-            print(f"Test Metrics for subject {test_subject}: "
-                  f"MSE: {test_metrics[test_subject]['mse']:.4f} | "
-                  f"MAE: {test_metrics[test_subject]['mae']:.4f} | "
-                  f"R²: {test_metrics[test_subject]['r2']:.4f} | "
-                  f"Pearson R: {test_metrics[test_subject]['pearson_r']:.4f}")
-            print(f"Time taken for subject {test_subject}: {datetime.now() - subject_start_time}\n")
+            test_metrics[test_id] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
+            print(f"Test Metrics for {test_name}: "
+                  f"MSE: {test_metrics[test_id]['mse']:.4f} | "
+                  f"MAE: {test_metrics[test_id]['mae']:.4f} | "
+                  f"R²: {test_metrics[test_id]['r2']:.4f} | "
+                  f"Pearson R: {test_metrics[test_id]['pearson_r']:.4f}")
+            print(f"Time taken for {test_name}: {datetime.now() - fold_start_time}\n")
         
         # Store results for this strategy
         all_strategies_results[strategy] = test_metrics
         
         # Print summary for this strategy
         print("\n" + "="*100)
-        print(f"Summary for {strategy.upper()} (Averaged Across Subjects)")
+        fold_type = "Subjects" if strategy == 'subject_loo' else "Recordings" if strategy == 'recording_loo' else "Subject-Recording Pairs"
+        print(f"Summary for {strategy.upper()} (Averaged Across {fold_type})")
         print("="*100)
         
         metric_names = config['metrics']
-        final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
+        final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in metric_names}
         
         metric_str = " | ".join([f"{metric.upper()}: {final_metrics[metric]:.4f}" for metric in metric_names])
         print(metric_str)
@@ -357,7 +375,7 @@ def main():
         print("-"*100)
         
         for strategy, test_metrics in all_strategies_results.items():
-            final_metrics = {metric: np.nanmean([test_metrics[subj][metric] for subj in test_metrics]) for metric in metric_names}
+            final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in metric_names}
             metric_str = " | ".join([f"{final_metrics[m]:<10.4f}" for m in metric_names])
             print(f"{strategy:<20} | {metric_str}")
     
