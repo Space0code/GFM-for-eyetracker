@@ -279,7 +279,9 @@ def main():
             in_channels=model_cfg['in_channels'],
             hidden_channels=model_cfg['hidden_channels'],
             out_channels=model_cfg['out_channels'],
-            output_scale=model_cfg.get('output_scale', 10.0)
+            output_scale=model_cfg.get('output_scale', 10.0), 
+            use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
+            dropout_mlp=model_cfg.get('dropout_mlp', 0.1)
         ).to(device)
         
         optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])

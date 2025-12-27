@@ -13,6 +13,7 @@ class SpatioTemporalHeteroGNN(nn.Module):
         # Preprocessing MLP 
         self.use_preprocess_mlp = use_preprocess_mlp
         if self.use_preprocess_mlp:
+            print("Using preprocessing MLP for input features.")
             self.preprocess_mlp = nn.Sequential(
                 nn.Linear(in_channels, hidden_channels),
                 nn.GELU(),
@@ -22,6 +23,7 @@ class SpatioTemporalHeteroGNN(nn.Module):
 
             conv1_in_channels = hidden_channels
         else:
+            print("Not using preprocessing MLP for input features.")
             conv1_in_channels = in_channels
 
 
