@@ -6,8 +6,10 @@ from torch_geometric.nn import GCNConv, HeteroConv, global_mean_pool
 class SpatioTemporalHeteroGNN(nn.Module):
     def __init__(
             self, in_channels: int, hidden_channels: int, out_channels: int, 
-            output_scale: float = 10.0, use_preprocess_mlp: bool = True,
-            dropout_mlp: float = 0.1):
+            output_scale: float = 10.0, use_preprocess_mlp: bool = True, add_self_loops: bool = False,
+            dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
+            aggr: str = "mean",
+            ):
         super().__init__()
 
         # Preprocessing MLP 
@@ -30,26 +32,31 @@ class SpatioTemporalHeteroGNN(nn.Module):
         # 1st hetero GCN layer (temporal + spatial)
         self.conv1 = HeteroConv(
             {
-                ("node", "temporal", "node"): GCNConv(conv1_in_channels, hidden_channels),
-                ("node", "spatial", "node"): GCNConv(conv1_in_channels, hidden_channels),
+                ("node", "temporal", "node"): GCNConv(conv1_in_channels, hidden_channels, add_self_loops=add_self_loops),
+                ("node", "spatial", "node"): GCNConv(conv1_in_channels, hidden_channels, add_self_loops=add_self_loops),
             },
-            aggr="sum",  # how to combine temporal + spatial messages
+            aggr=aggr,  # how to combine temporal + spatial messages
         )
 
         # 2nd hetero GCN layer
         self.conv2 = HeteroConv(
             {
-                ("node", "temporal", "node"): GCNConv(hidden_channels, hidden_channels),
-                ("node", "spatial", "node"): GCNConv(hidden_channels, hidden_channels),
+                ("node", "temporal", "node"): GCNConv(hidden_channels, hidden_channels, add_self_loops=add_self_loops),
+                ("node", "spatial", "node"): GCNConv(hidden_channels, hidden_channels, add_self_loops=add_self_loops),
             },
-            aggr="sum",
+            aggr=aggr,
         )
+        
+        # Activation and dropout for GNN layers
+        self.gnn_activation = nn.GELU()
+        self.gnn_dropout = nn.Dropout(p=dropout_gnn)
 
         # Final MLP for graph-level output
         # Output is bounded to [0, 10] for emotion scores
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.Dropout(p=dropout_head),
             nn.Linear(hidden_channels, out_channels),
             nn.Sigmoid()  # Output in [0, 1], will scale to [0, output_scale]
         )
@@ -66,11 +73,11 @@ class SpatioTemporalHeteroGNN(nn.Module):
 
         # 1st layer
         x_dict = self.conv1(x_dict, edge_index_dict)
-        x_dict = {k: F.relu(v) for k, v in x_dict.items()}
+        x_dict = {k: self.gnn_dropout(self.gnn_activation(v)) for k, v in x_dict.items()}
 
         # 2nd layer
         x_dict = self.conv2(x_dict, edge_index_dict)
-        x_dict = {k: F.relu(v) for k, v in x_dict.items()}
+        x_dict = {k: self.gnn_dropout(self.gnn_activation(v)) for k, v in x_dict.items()}
         
         # we have only one node type "node"
         x_node = x_dict["node"]              # [num_nodes, hidden]
