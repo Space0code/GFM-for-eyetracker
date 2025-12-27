@@ -3,23 +3,23 @@
 # Dataset configuration
 dataset:
   data_dir: "./data/processed/eSEEd_v2/" # Path to processed data directory
-  file_list:   # File selection (null means load all files recursively) 
-    - "sample_01_recording_01_merged.csv"
-    - "sample_02_recording_01_merged.csv"
-    - "sample_03_recording_01_merged.csv"
-    - "sample_04_recording_01_merged.csv"
-    - "sample_01_recording_02_merged.csv"
-    - "sample_02_recording_02_merged.csv"
-    - "sample_03_recording_02_merged.csv"
-    - "sample_04_recording_02_merged.csv"
-    - "sample_01_recording_03_merged.csv"
-    - "sample_02_recording_03_merged.csv"
-    - "sample_03_recording_03_merged.csv"
-    - "sample_04_recording_03_merged.csv"
-    - "sample_01_recording_04_merged.csv"
-    - "sample_02_recording_04_merged.csv"
-    - "sample_03_recording_04_merged.csv"
-    - "sample_04_recording_04_merged.csv"
+  file_list:  null # File selection (null means load all files recursively) 
+    # - "sample_01_recording_01_merged.csv"
+    # - "sample_02_recording_01_merged.csv"
+    # - "sample_03_recording_01_merged.csv"
+    # - "sample_04_recording_01_merged.csv"
+    # - "sample_01_recording_02_merged.csv"
+    # - "sample_02_recording_02_merged.csv"
+    # - "sample_03_recording_02_merged.csv"
+    # - "sample_04_recording_02_merged.csv"
+    # - "sample_01_recording_03_merged.csv"
+    # - "sample_02_recording_03_merged.csv"
+    # - "sample_03_recording_03_merged.csv"
+    # - "sample_04_recording_03_merged.csv"
+    # - "sample_01_recording_04_merged.csv"
+    # - "sample_02_recording_04_merged.csv"
+    # - "sample_03_recording_04_merged.csv"
+    # - "sample_04_recording_04_merged.csv"
   recursive: true # Whether to search recursively in subdirectories
   ignore_dirs: null # Directories to ignore during recursive search
   
