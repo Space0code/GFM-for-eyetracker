@@ -3,7 +3,15 @@
 # Dataset configuration
 dataset:
   data_dir: "./data/processed/eSEEd_v2/" # Path to processed data directory
-  file_list: null  # File selection (null means load all files recursively) 
+  file_list:   # File selection (null means load all files recursively) 
+    - "sample_01_recording_01_merged.csv"
+    - "sample_02_recording_01_merged.csv"
+    - "sample_03_recording_01_merged.csv"
+    - "sample_04_recording_01_merged.csv"
+    - "sample_01_recording_02_merged.csv"
+    - "sample_02_recording_02_merged.csv"
+    - "sample_03_recording_02_merged.csv"
+    - "sample_04_recording_02_merged.csv"
   recursive: true # Whether to search recursively in subdirectories
   ignore_dirs: null # Directories to ignore during recursive search
   
@@ -44,7 +52,7 @@ cross_validation:
     - "recording_loo"
     - "combined_loo"
   
-  val_size: 3 # Number of subjects/recordings for validation set
+  val_size: 1 # Number of subjects/recordings for validation set
   random_state: 42 # Random state for reproducible splits
   test_size: 0.2 # Test split ratio (only used for simple_split strategy)
 

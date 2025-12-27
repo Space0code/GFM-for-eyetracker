@@ -259,78 +259,78 @@ def main():
             test_subject = test_subjects[0]
             
             # Create subject-specific directory within strategy directory
-        subject_dir = os.path.join(strategy_dir, f"subject_{test_subject}")
-        subject_data_dir = os.path.join(subject_dir, "data")
-        os.makedirs(subject_data_dir, exist_ok=True)
+            subject_dir = os.path.join(strategy_dir, f"subject_{test_subject}")
+            subject_data_dir = os.path.join(subject_dir, "data")
+            os.makedirs(subject_data_dir, exist_ok=True)
 
-        train_dataset = [dataset[i] for i in train_idx]
-        val_dataset = [dataset[i] for i in val_idx]
-        test_dataset = [dataset[i] for i in test_idx]
-        
-        print(f"Train: {len(train_dataset)} graphs | Val: {len(val_dataset)} graphs | Test: {len(test_dataset)} graphs")
-        
-        # Create data loaders
-        train_loader = DataLoader(train_dataset, batch_size=training_cfg['batch_size'], shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
-        test_loader = DataLoader(test_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
-        
-        # Initialize model
-        model = SpatioTemporalHeteroGNN(
-            in_channels=model_cfg['in_channels'],
-            hidden_channels=model_cfg['hidden_channels'],
-            out_channels=model_cfg['out_channels'],
-            output_scale=model_cfg.get('output_scale', 10.0), 
-            use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
-            dropout_mlp=model_cfg.get('dropout_mlp', 0.1)
-        ).to(device)
-        
-        optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
-        
-        # Training loop
-        num_epochs = training_cfg['num_epochs']
-        best_val_loss = float('inf')
-        
-        # Determine epochs to save outputs (10% of total, equidistant)
-        if logging_cfg.get('save_outputs_interval') is not None:
-            save_interval = logging_cfg['save_outputs_interval']
-        else:
-            save_interval = max(1, num_epochs // 10)
-        save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
-        
-        print(f"\nStarting training for test subject {test_subject}...")
-        print(f"Will save outputs at epochs: {sorted(save_epochs)}")
-        subject_start_time = datetime.now()
-        for epoch in range(1, num_epochs + 1):
-            epoch_start_time = datetime.now()
-            train_loss = train_epoch(
-                model, train_loader, optimizer, device, 
-                grad_clip_max_norm=training_cfg['grad_clip_max_norm']
-            )
+            train_dataset = [dataset[i] for i in train_idx]
+            val_dataset = [dataset[i] for i in val_idx]
+            test_dataset = [dataset[i] for i in test_idx]
             
-            # Save outputs for selected epochs
-            save_outputs = logging_cfg.get('save_validation_outputs', False) and epoch in save_epochs
-            save_path = os.path.join(subject_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
-            val_metrics = evaluate(model, val_loader, device, save_outputs=save_outputs, save_dir=save_path)
-            val_loss = val_metrics['loss']
+            print(f"Train: {len(train_dataset)} graphs | Val: {len(val_dataset)} graphs | Test: {len(test_dataset)} graphs")
             
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                if logging_cfg.get('save_best_model', True):
-                    torch.save(model.state_dict(), os.path.join(subject_dir, 'best_model.pt'))
+            # Create data loaders
+            train_loader = DataLoader(train_dataset, batch_size=training_cfg['batch_size'], shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
+            test_loader = DataLoader(test_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
             
-            print_every = logging_cfg.get('print_every', 10)
-            if epoch % print_every == 0 or epoch == 1:
-                print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {val_metrics['mse']:.4f} | "
-                    f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}"
-                    f" | Time: {datetime.now() - epoch_start_time}")
-        
-        test_metrics[test_subject] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
-        print(f"Test Metrics for subject {test_subject}: "
-              f"MSE: {test_metrics[test_subject]['mse']:.4f} | "
-              f"MAE: {test_metrics[test_subject]['mae']:.4f} | "
-              f"R²: {test_metrics[test_subject]['r2']:.4f} | "
-              f"Pearson R: {test_metrics[test_subject]['pearson_r']:.4f}")
-        print(f"Time taken for subject {test_subject}: {datetime.now() - subject_start_time}\n")
+            # Initialize model
+            model = SpatioTemporalHeteroGNN(
+                in_channels=model_cfg['in_channels'],
+                hidden_channels=model_cfg['hidden_channels'],
+                out_channels=model_cfg['out_channels'],
+                output_scale=model_cfg.get('output_scale', 10.0), 
+                use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
+                dropout_mlp=model_cfg.get('dropout_mlp', 0.1)
+            ).to(device)
+            
+            optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
+            
+            # Training loop
+            num_epochs = training_cfg['num_epochs']
+            best_val_loss = float('inf')
+            
+            # Determine epochs to save outputs (10% of total, equidistant)
+            if logging_cfg.get('save_outputs_interval') is not None:
+                save_interval = logging_cfg['save_outputs_interval']
+            else:
+                save_interval = max(1, num_epochs // 10)
+            save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
+            
+            print(f"\nStarting training for test subject {test_subject}...")
+            print(f"Will save outputs at epochs: {sorted(save_epochs)}")
+            subject_start_time = datetime.now()
+            for epoch in range(1, num_epochs + 1):
+                epoch_start_time = datetime.now()
+                train_loss = train_epoch(
+                    model, train_loader, optimizer, device, 
+                    grad_clip_max_norm=training_cfg['grad_clip_max_norm']
+                )
+                
+                # Save outputs for selected epochs
+                save_outputs = logging_cfg.get('save_validation_outputs', False) and epoch in save_epochs
+                save_path = os.path.join(subject_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
+                val_metrics = evaluate(model, val_loader, device, save_outputs=save_outputs, save_dir=save_path)
+                val_loss = val_metrics['loss']
+                
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    if logging_cfg.get('save_best_model', True):
+                        torch.save(model.state_dict(), os.path.join(subject_dir, 'best_model.pt'))
+                
+                print_every = logging_cfg.get('print_every', 10)
+                if epoch % print_every == 0 or epoch == 1:
+                    print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {val_metrics['mse']:.4f} | "
+                        f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}"
+                        f" | Time: {datetime.now() - epoch_start_time}")
+            
+            test_metrics[test_subject] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
+            print(f"Test Metrics for subject {test_subject}: "
+                  f"MSE: {test_metrics[test_subject]['mse']:.4f} | "
+                  f"MAE: {test_metrics[test_subject]['mae']:.4f} | "
+                  f"R²: {test_metrics[test_subject]['r2']:.4f} | "
+                  f"Pearson R: {test_metrics[test_subject]['pearson_r']:.4f}")
+            print(f"Time taken for subject {test_subject}: {datetime.now() - subject_start_time}\n")
         
         # Store results for this strategy
         all_strategies_results[strategy] = test_metrics
