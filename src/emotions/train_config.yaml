@@ -2,17 +2,10 @@
 
 # Dataset configuration
 dataset:
-  # Path to processed data directory
-  data_dir: "./data/processed/eSEEd_v2/"
-  
-  # File selection (null means load all files recursively)
-  file_list: null
-  
-  # Whether to search recursively in subdirectories
-  recursive: true
-  
-  # Directories to ignore during recursive search
-  ignore_dirs: null
+  data_dir: "./data/processed/eSEEd_v2/" # Path to processed data directory
+  file_list: null  # File selection (null means load all files recursively) 
+  recursive: true # Whether to search recursively in subdirectories
+  ignore_dirs: null # Directories to ignore during recursive search
   
   # Graph construction parameters
   window_length: 10  # Window length in seconds
@@ -26,36 +19,18 @@ dataset:
 
 # Model architecture configuration
 model:
-  # Input features: time, x, y, pupil-left, pupil-right
-  in_channels: 5
-  
-  # Hidden layer dimensions
+  in_channels: 5 # Input features: time, x, y, pupil-left, pupil-right
   hidden_channels: 64
-  
-  # Output dimensions (number of emotion labels)
   out_channels: 4
-  
-  # Output scaling factor for emotion scores
-  output_scale: 10.0
+  output_scale: 10.0 # Output scaling factor for emotion scores
 
 # Training configuration
 training:
-  # Number of training epochs
   num_epochs: 10
-  
-  # Batch size for data loaders
   batch_size: 32
-  
-  # Learning rate
   learning_rate: 0.0001
-  
-  # Gradient clipping max norm
   grad_clip_max_norm: 1.0
-  
-  # Device selection (cuda, cpu, or auto)
   device: "auto"  # auto = cuda if available, else cpu
-  
-  # Random seed for reproducibility
   random_seed: 42
 
 # Cross-validation configuration
@@ -67,30 +42,16 @@ cross_validation:
     - "recording_loo"
     - "combined_loo"
   
-  # Number of subjects/recordings for validation set
-  val_size: 3
-  
-  # Random state for reproducible splits
-  random_state: 42
-  
-  # Test split ratio (only used for simple_split strategy)
-  test_size: 0.2
+  val_size: 3 # Number of subjects/recordings for validation set
+  random_state: 42 # Random state for reproducible splits
+  test_size: 0.2 # Test split ratio (only used for simple_split strategy)
 
 # Logging and checkpointing configuration
 logging:
-  # Base directory for results
-  results_dir: "./results/SpatioTemporalHeteroGNN/eSEEd_v2/"
-  
-  # Print training progress every N epochs
-  print_every: 10
-  
-  # Save validation outputs every N epochs (null = no saving)
-  save_outputs_interval: null  # Will be computed as 10% of epochs
-  
-  # Whether to save model checkpoints
+  results_dir: "./results/SpatioTemporalHeteroGNN/eSEEd_v2/" # Base directory for results
+  print_every: 10 # Print training progress every N epochs
+  save_outputs_interval: null  # Save validation outputs every N epochs (null = no saving)
   save_best_model: true
-  
-  # Whether to save validation outputs during training
   save_validation_outputs: true
 
 # Evaluation metrics to compute
