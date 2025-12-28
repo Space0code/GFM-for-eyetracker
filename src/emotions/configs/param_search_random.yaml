@@ -1,0 +1,6 @@
+window_length: [1, 180]  # Window length in seconds
+kt: [1, 50]  # Number of temporal neighbors
+ks: [1, 10]  # Number of spatial neighbors (kNN)
+hidden_channels: [32, 64, 128]
+use_preprocess_mlp: [true, false]
+add_self_loops: [true, false]

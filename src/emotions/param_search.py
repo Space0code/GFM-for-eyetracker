@@ -1,10 +1,14 @@
 """
-Parameter grid search for emotion prediction model.
+Parameter search (grid or random) for emotion prediction model.
 
 Usage:
-    python src/emotions/param_search.py
-    python src/emotions/param_search.py --base_config src/emotions/configs/train_config.yaml
-    python src/emotions/param_search.py --param_grid src/emotions/configs/param_search.yaml
+    # Grid search
+    python src/emotions/param_search.py --search_type grid
+    python src/emotions/param_search.py --search_type grid --param_grid src/emotions/configs/param_search.yaml
+    
+    # Random search
+    python src/emotions/param_search.py --search_type random
+    python src/emotions/param_search.py --search_type random --param_grid src/emotions/configs/param_search_random.yaml --n_samples 50
 """
 
 import os
@@ -13,6 +17,7 @@ import yaml
 import argparse
 import tempfile
 import shutil
+import random
 from itertools import product
 from datetime import datetime
 import subprocess
@@ -37,6 +42,28 @@ def generate_grid_combinations(param_grid):
     values = [param_grid[k] if isinstance(param_grid[k], list) else [param_grid[k]] for k in keys]
     
     for combination in product(*values):
+        yield dict(zip(keys, combination))
+
+
+def generate_random_combinations(param_grid, n_samples, random_seed=None):
+    """Generate random combinations from parameter grid.
+    
+    Args:
+        param_grid: Dictionary of parameter names to lists of values
+        n_samples: Number of random samples to generate
+        random_seed: Random seed for reproducibility
+    
+    Yields:
+        Dictionary of parameter combinations
+    """
+    if random_seed is not None:
+        random.seed(random_seed)
+    
+    keys = list(param_grid.keys())
+    values = [param_grid[k] if isinstance(param_grid[k], list) else [param_grid[k]] for k in keys]
+    
+    for _ in range(n_samples):
+        combination = [random.choice(v) for v in values]
         yield dict(zip(keys, combination))
 
 
@@ -78,23 +105,41 @@ def parse_train_results(results_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Grid search for emotion prediction hyperparameters")
+    parser = argparse.ArgumentParser(description="Parameter search for emotion prediction hyperparameters")
+    parser.add_argument("--search_type", type=str, choices=['grid', 'random'], default='grid',
+                       help="Search type: 'grid' for exhaustive grid search or 'random' for random sampling")
     parser.add_argument("--base_config", type=str, default="src/emotions/configs/train_config.yaml",
                        help="Path to base training config")
-    parser.add_argument("--param_grid", type=str, default="src/emotions/configs/param_search.yaml",
-                       help="Path to parameter grid config")
+    parser.add_argument("--param_grid", type=str, default=None,
+                       help="Path to parameter grid config (defaults based on search_type)")
+    parser.add_argument("--n_samples", type=int, default=50,
+                       help="Number of random samples (only used for random search)")
+    parser.add_argument("--random_seed", type=int, default=42,
+                       help="Random seed for random search reproducibility")
     args = parser.parse_args()
+    
+    # Set default param_grid based on search_type if not provided
+    if args.param_grid is None:
+        if args.search_type == 'grid':
+            args.param_grid = "src/emotions/configs/param_search.yaml"
+        else:
+            args.param_grid = "src/emotions/configs/param_search_random.yaml"
     
     # Load base config and parameter grid
     base_config = load_yaml(args.base_config)
     param_grid = load_yaml(args.param_grid)
     
+    print(f"Search type: {args.search_type.upper()}")
     print(f"Base config: {args.base_config}")
     print(f"Parameter grid: {args.param_grid}")
     
-    # Generate all parameter combinations
-    combinations = list(generate_grid_combinations(param_grid))
-    print(f"\nTotal combinations to evaluate: {len(combinations)}")
+    # Generate parameter combinations based on search type
+    if args.search_type == 'grid':
+        combinations = list(generate_grid_combinations(param_grid))
+        print(f"\nTotal combinations to evaluate: {len(combinations)}")
+    else:
+        combinations = list(generate_random_combinations(param_grid, args.n_samples, args.random_seed))
+        print(f"\nRandom samples to evaluate: {len(combinations)} (seed: {args.random_seed})")
     
     # Create temporary directory for config files
     temp_dir = tempfile.mkdtemp(prefix="param_search_configs_")
@@ -112,7 +157,7 @@ def main():
         print(f"Generated {len(config_files)} config files")
         
         # Run training with all configs
-        print(f"\nStarting grid search training...")
+        print(f"\nStarting {args.search_type} search training...")
         start_time = datetime.now()
         
         cmd = [
@@ -132,7 +177,7 @@ def main():
             return
         
         end_time = datetime.now()
-        print(f"\nGrid search completed in {end_time - start_time}")
+        print(f"\n{args.search_type.capitalize()} search completed in {end_time - start_time}")
         
         # Parse results
         results_dir = base_config['logging']['results_dir']
@@ -151,7 +196,8 @@ def main():
                 df.loc[mask, param] = value
         
         # Save summary CSV (in run order)
-        summary_path = os.path.join(results_dir, f"param_search_summary_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
+        search_type_prefix = f"{args.search_type}_search"
+        summary_path = os.path.join(results_dir, f"{search_type_prefix}_summary_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
         df.to_csv(summary_path, index=False)
         print(f"\nSaved parameter search summary to: {summary_path}")
         
@@ -182,7 +228,7 @@ def main():
             
             df_sorted = df.sort_values(by=sort_cols, ascending=sort_ascending)
             
-            summary_ordered_path = os.path.join(results_dir, f"param_search_summary_ordered_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
+            summary_ordered_path = os.path.join(results_dir, f"{search_type_prefix}_summary_ordered_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
             df_sorted.to_csv(summary_ordered_path, index=False)
             print(f"Saved ordered parameter search summary to: {summary_ordered_path}")
             
