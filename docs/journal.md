@@ -42,3 +42,23 @@
     nn.Linear(hidden_channels, out_channels),
     nn.Sigmoid()  # Output in [0, 1], will scale to [0, 10]
     )
+
+#### Added preprocessing MLP and LOO splits
+
+- preprocess MLP added
+- dropout added
+- sum aggr -> mean aggr
+- self_loops = False
+- LOO splits
+    - subject
+    - recording
+    - combined
+
+- training: 100 epochs, 3 LOO variants, win_len = 10, kt=ks=2
+- Final Comparison Across All Strategies
+
+| Strategy      | MSE     | MAE    | SD_ERROR | R²       | Pearson R |
+|---------------|---------|--------|----------|----------|-----------|
+| subject_loo   | 12.2358 | 2.9737 | 3.1599   | -0.5041  | 0.3185    |
+| recording_loo | 13.5568 | 3.1660 | 3.2017   | -1.0884  | 0.0446    |
+| combined_loo  | 13.5180 | 3.1524 | 2.5973   | -3.5471  | 0.0040    | 
