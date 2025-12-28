@@ -125,7 +125,7 @@ class CombinedLOOSplitter(BaseSplitter):
     """Leave out both a subject and a recording.
     
     Test set: graphs from (subject=S, recording=R) - the intersection
-    Excluded: all graphs from subject=S AND all graphs from recording=R
+    Excluded: all graphs from subject=S and all graphs from recording=R (subject==s OR recording==r)
     Train set: remaining graphs, with val_size subjects held out for validation
     """
     
@@ -164,20 +164,14 @@ class CombinedLOOSplitter(BaseSplitter):
                 val_subjects = available_subjects[:self.val_size]
                 train_subjects = available_subjects[self.val_size:]
                 
-                # Build train indices (exclude test_recording and val_subjects)
-                train_idx = []
-                for s in train_subjects:
-                    for i in self._get_indices_by_subject(s):
-                        if i not in excluded_idx:
-                            train_idx.append(i)
-                
-                # Build val indices (exclude test_recording)
-                val_idx = []
-                for s in val_subjects:
-                    for i in self._get_indices_by_subject(s):
-                        if i not in excluded_idx:
-                            val_idx.append(i)
-                
+                # Use helper + vectorized exclusion
+                train_idx = self._build_indices_from_subjects(train_subjects)
+                val_idx = self._build_indices_from_subjects(val_subjects)
+
+                excluded = list(excluded_idx)
+                train_idx = train_idx[~np.isin(train_idx, excluded)]
+                val_idx = val_idx[~np.isin(val_idx, excluded)]
+
                 yield (np.array(train_idx), np.array(val_idx), np.array(test_idx))
 
 
