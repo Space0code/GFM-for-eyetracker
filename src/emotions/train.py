@@ -479,7 +479,6 @@ def main():
                 save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
                 
                 print(f"\nStarting training for {test_name}...")
-                print(f"Will save outputs at epochs: {sorted(save_epochs)}")
                 fold_start_time = datetime.now()
                 for epoch in range(1, num_epochs + 1):
                     epoch_start_time = datetime.now()
@@ -506,12 +505,12 @@ def main():
                             f" | Time: {datetime.now() - epoch_start_time}")
                 
                 test_metrics[test_id] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
-                print(f"Test Metrics for {test_name}: "
-                    f"MSE: {test_metrics[test_id]['mse']:.4f} | "
-                    f"MAE: {test_metrics[test_id]['mae']:.4f} | "
-                    f"R²: {test_metrics[test_id]['r2']:.4f} | "
-                    f"Pearson R: {test_metrics[test_id]['pearson_r']:.4f}")
-                print(f"Time taken for {test_name}: {datetime.now() - fold_start_time}\n")
+                # print(f"Test Metrics for {test_name}: "
+                #     f"MSE: {test_metrics[test_id]['mse']:.4f} | "
+                #     f"MAE: {test_metrics[test_id]['mae']:.4f} | "
+                #     f"R²: {test_metrics[test_id]['r2']:.4f} | "
+                #     f"Pearson R: {test_metrics[test_id]['pearson_r']:.4f}")
+                # print(f"Time taken for {test_name}: {datetime.now() - fold_start_time}\n")
             
             # Store results for this strategy
             all_strategies_results[strategy] = test_metrics
