@@ -19,7 +19,7 @@ import tempfile
 import shutil
 import random
 from itertools import product
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
 import pandas as pd
 
@@ -109,18 +109,43 @@ def update_config_with_params(base_config, params):
     return config
 
 
-def parse_train_results(results_dir):
-    """Parse results from training run."""
+def parse_train_results(results_dir, start_time=None):
+    """Parse results from training run.
+    
+    Args:
+        results_dir: Directory containing results CSV files
+        start_time: Optional datetime of when training started, used to filter for recent files
+        
+    Returns:
+        DataFrame of results or None if not found
+    """
     # Find the all_configs_comparison CSV file
     csv_files = [f for f in os.listdir(results_dir) if f.startswith('all_configs_comparison_') and f.endswith('.csv')]
     
     if not csv_files:
         return None
     
-    csv_path = os.path.join(results_dir, csv_files[0])
-    df = pd.read_csv(csv_path)
+    # Sort by filename (which includes timestamp) to get the most recent file
+    csv_files.sort(reverse=True)
     
-    return df
+    # If start_time provided, filter for files created after that time
+    if start_time is not None:
+        for csv_file in csv_files:
+            csv_path = os.path.join(results_dir, csv_file)
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(csv_path))
+            # Allow for a small time buffer (1 minute before start_time)
+            if file_mtime >= start_time - timedelta(minutes=1):
+                df = pd.read_csv(csv_path)
+                print(f"Using results from: {csv_file} (modified: {file_mtime})")
+                return df
+        # If no file found after start_time, warn and return None
+        print(f"WARNING: No all_configs_comparison CSV file found after {start_time}")
+        return None
+    else:
+        # No start_time filter, just use the most recent
+        csv_path = os.path.join(results_dir, csv_files[0])
+        df = pd.read_csv(csv_path)
+        return df
 
 
 def main():
@@ -154,6 +179,8 @@ def main():
     
     # Extract parameters from config (handle both flat and nested structure)
     if 'random_samples' in param_grid_config:
+        if 'random_samples' in param_grid_config:
+            args.n_samples = param_grid_config['random_samples']
         param_grid = {k: v for k, v in param_grid_config.items() if k != 'random_samples'}
     else:
         param_grid = param_grid_config
@@ -214,7 +241,7 @@ def main():
         
         # Parse results
         results_dir = base_config['logging']['results_dir']
-        df = parse_train_results(results_dir)
+        df = parse_train_results(results_dir, start_time)
         
         if df is None:
             print("Could not find results CSV file")
