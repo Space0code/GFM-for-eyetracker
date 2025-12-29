@@ -1,0 +1,24 @@
+# Configuration file for baseline models cross-validation
+
+dataset:
+  data_dir: "./data/processed/eSEEd_v2/"  # Path to processed CSVs
+  file_list: null  # null = load all *.csv in data_dir
+  window_length: 10  # seconds
+
+cross_validation:
+  strategies:
+    - "subject_loo"
+    - "recording_loo"
+    - "combined_loo"
+  val_size: 1
+  random_state: 42
+
+logging:
+  results_dir: "./results/BaselineCV/eSEEd_v2/"  # Base directory for baseline CV runs
+
+metrics:
+  - "mse"
+  - "mae"
+  - "sd_error"
+  - "r2"
+  - "pearson_r"
