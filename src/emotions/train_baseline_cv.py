@@ -108,16 +108,16 @@ def build_tabular_samples(data_dir: str, file_list: List[str], window_length: in
     return samples
 
 
-def samples_to_xy(samples: List[TabularWindowSample], indices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, List[str], List[str]]:
-    """Convert selected samples to X, y matrices and column names."""
+def samples_to_xy(samples: List[TabularWindowSample], indices: np.ndarray) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], List[str]]:
+    """Convert selected samples to X, y dataframes and column names."""
     sel = [samples[int(i)] for i in indices]
     if not sel:
-        return np.empty((0, 0)), np.empty((0, 0)), [], []
-    # Determine consistent columns
+        empty = pd.DataFrame()
+        return empty, empty, [], []
     feat_cols = sorted(sel[0].features.keys())
     target_cols = sorted(sel[0].targets.keys())
-    X = np.array([[s.features.get(c, np.nan) for c in feat_cols] for s in sel], dtype=float)
-    y = np.array([[s.targets.get(c, np.nan) for c in target_cols] for s in sel], dtype=float)
+    X = pd.DataFrame([[s.features.get(c, np.nan) for c in feat_cols] for s in sel], columns=feat_cols)
+    y = pd.DataFrame([[s.targets.get(c, np.nan) for c in target_cols] for s in sel], columns=target_cols)
     return X, y, feat_cols, target_cols
 
 
@@ -232,7 +232,7 @@ def main():
                 # Save predictions
                 y_pred = baseline.predict(X_test)
                 np.save(os.path.join(model_dir, 'y_pred.npy'), y_pred)
-                np.save(os.path.join(model_dir, 'y_true.npy'), y_test)
+                np.save(os.path.join(model_dir, 'y_true.npy'), y_test.to_numpy())
 
         # Aggregate across folds for this strategy
         strategy_results: Dict[str, Dict[str, float]] = {}
