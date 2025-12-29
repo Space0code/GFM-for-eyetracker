@@ -48,6 +48,9 @@ def generate_grid_combinations(param_grid):
 def generate_random_combinations(param_grid, n_samples, random_seed=None):
     """Generate random combinations from parameter grid.
     
+    For parameters with 2-element lists, samples random integers in [min, max].
+    For parameters with >2 elements, samples random choice from list.
+    
     Args:
         param_grid: Dictionary of parameter names to lists of values
         n_samples: Number of random samples to generate
@@ -60,11 +63,27 @@ def generate_random_combinations(param_grid, n_samples, random_seed=None):
         random.seed(random_seed)
     
     keys = list(param_grid.keys())
-    values = [param_grid[k] if isinstance(param_grid[k], list) else [param_grid[k]] for k in keys]
     
     for _ in range(n_samples):
-        combination = [random.choice(v) for v in values]
-        yield dict(zip(keys, combination))
+        combination = {}
+        for key in keys:
+            value_list = param_grid[key] if isinstance(param_grid[key], list) else [param_grid[key]]
+            
+            # If list has exactly 2 elements and both are numeric (but not bool), treat as range [min, max]
+            if (len(value_list) == 2 and 
+                not isinstance(value_list[0], bool) and not isinstance(value_list[1], bool) and
+                isinstance(value_list[0], (int, float)) and isinstance(value_list[1], (int, float))):
+                min_val, max_val = value_list[0], value_list[1]
+                # Handle case where min == max
+                if min_val == max_val:
+                    combination[key] = min_val
+                else:
+                    combination[key] = random.randint(min_val, max_val)
+            else:
+                # Otherwise, random choice from list
+                combination[key] = random.choice(value_list)
+        
+        yield combination
 
 
 def update_config_with_params(base_config, params):
@@ -127,11 +146,23 @@ def main():
     
     # Load base config and parameter grid
     base_config = load_yaml(args.base_config)
-    param_grid = load_yaml(args.param_grid)
+    param_grid_config = load_yaml(args.param_grid)
     
     print(f"Search type: {args.search_type.upper()}")
     print(f"Base config: {args.base_config}")
     print(f"Parameter grid: {args.param_grid}")
+    
+    # Extract parameters from config (handle both flat and nested structure)
+    if 'random_samples' in param_grid_config:
+        # If random_samples is in the config, use it (unless overridden by command line)
+        if args.search_type == 'random':
+            args.n_samples = param_grid_config['random_samples']
+        param_grid = {k: v for k, v in param_grid_config.items() if k != 'random_samples'}
+    else:
+        param_grid = param_grid_config
+    
+    print(f"Number of samples: {args.n_samples}")
+    print(f"Parameter grid: {param_grid}")
     
     # Generate parameter combinations based on search type
     if args.search_type == 'grid':
@@ -153,6 +184,7 @@ def main():
             config_path = os.path.join(temp_dir, f"config_{i:04d}.yaml")
             save_yaml(config, config_path)
             config_files.append(config_path)
+            print("Config k,v pairs:", params)
         
         print(f"Generated {len(config_files)} config files")
         

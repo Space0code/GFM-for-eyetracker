@@ -1,6 +1,10 @@
-window_length: [1, 180]  # Window length in seconds
-kt: [1, 50]  # Number of temporal neighbors
-ks: [1, 10]  # Number of spatial neighbors (kNN)
-hidden_channels: [32, 64, 128]
-use_preprocess_mlp: [true, false]
-add_self_loops: [true, false]
+
+
+random_samples: 1  # Number of random samples to generate
+
+window_length: [59, 60]  # Random integer in range [1, 60]
+kt: [29, 30]  # Random integer in range [1, 30]
+ks: [5, 6]  # Random integer in range [1, 6]
+hidden_channels: [32, 64, 128, 256, 512]  # Random choice from list
+use_preprocess_mlp: [true, false]  # Random choice from list
+add_self_loops: [true, false]  # Random choice from list
