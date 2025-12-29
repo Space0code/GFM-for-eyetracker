@@ -140,7 +140,7 @@ def main():
     # Set default param_grid based on search_type if not provided
     if args.param_grid is None:
         if args.search_type == 'grid':
-            args.param_grid = "src/emotions/configs/param_search.yaml"
+            args.param_grid = "src/emotions/configs/param_search_grid.yaml"
         else:
             args.param_grid = "src/emotions/configs/param_search_random.yaml"
     
@@ -154,9 +154,6 @@ def main():
     
     # Extract parameters from config (handle both flat and nested structure)
     if 'random_samples' in param_grid_config:
-        # If random_samples is in the config, use it (unless overridden by command line)
-        if args.search_type == 'random':
-            args.n_samples = param_grid_config['random_samples']
         param_grid = {k: v for k, v in param_grid_config.items() if k != 'random_samples'}
     else:
         param_grid = param_grid_config
@@ -171,6 +168,11 @@ def main():
     else:
         combinations = list(generate_random_combinations(param_grid, args.n_samples, args.random_seed))
         print(f"\nRandom samples to evaluate: {len(combinations)} (seed: {args.random_seed})")
+        for i_comb, combination in enumerate(combinations):
+            print("Sampled config k,v pairs:", combination)
+            if i_comb >= 9:
+                print("...")  # Limit output for large number of samples
+                break
     
     # Create temporary directory for config files
     temp_dir = tempfile.mkdtemp(prefix="param_search_configs_")
@@ -184,7 +186,6 @@ def main():
             config_path = os.path.join(temp_dir, f"config_{i:04d}.yaml")
             save_yaml(config, config_path)
             config_files.append(config_path)
-            print("Config k,v pairs:", params)
         
         print(f"Generated {len(config_files)} config files")
         
@@ -219,13 +220,15 @@ def main():
             print("Could not find results CSV file")
             return
         
-        # Add parameter columns to results
-        param_columns = list(param_grid.keys())
+        # Add parameter columns to results via merge to guarantee alignment
+        param_records = []
         for i, params in enumerate(combinations):
-            config_name = f"config_{i:04d}"
-            mask = df['config'] == config_name
-            for param, value in params.items():
-                df.loc[mask, param] = value
+            record = {'config': f"config_{i:04d}"}
+            record.update(params)
+            param_records.append(record)
+        param_df = pd.DataFrame(param_records)
+        df = df.merge(param_df, on='config', how='left')
+        param_columns = [c for c in param_df.columns if c != 'config']
         
         # Save summary CSV (in run order)
         search_type_prefix = f"{args.search_type}_search"
