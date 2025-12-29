@@ -102,7 +102,7 @@ dataset:
     - "sample_08_recording_09_merged.csv"
     - "sample_10_recording_09_merged.csv"
     - "sample_09_recording_09_merged.csv"
-    
+
     - "sample_01_recording_10_merged.csv"
     - "sample_02_recording_10_merged.csv"
     - "sample_03_recording_10_merged.csv"
@@ -157,7 +157,7 @@ cross_validation:
   strategies:
     - "subject_loo"
     - "recording_loo"
-    - "combined_loo"
+    # - "combined_loo"
   
   val_size: 1 # Number of subjects/recordings for validation set
   random_state: 42 # Random state for reproducible splits
