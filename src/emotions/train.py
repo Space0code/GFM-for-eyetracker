@@ -511,6 +511,13 @@ def main():
                 #     f"R²: {test_metrics[test_id]['r2']:.4f} | "
                 #     f"Pearson R: {test_metrics[test_id]['pearson_r']:.4f}")
                 # print(f"Time taken for {test_name}: {datetime.now() - fold_start_time}\n")
+                
+                # Clean up GPU memory after each fold
+                del model, optimizer, train_loader, val_loader, test_loader
+                del train_dataset, val_dataset, test_dataset
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
             
             # Store results for this strategy
             all_strategies_results[strategy] = test_metrics
@@ -518,6 +525,11 @@ def main():
             # Print summary for this strategy
             metric_names = config['metrics']
             print_strategy_summary(strategy, test_metrics, metric_names)
+            
+            # Additional cleanup after strategy completes
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
         
         # Final comparison across all strategies
         if len(strategies) > 1:
