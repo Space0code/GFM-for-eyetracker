@@ -45,6 +45,8 @@
 
 #### Added preprocessing MLP and LOO splits
 
+28.12.2025
+
 - preprocess MLP added
 - dropout added
 - sum aggr -> mean aggr
@@ -62,3 +64,29 @@
 | subject_loo   | 12.2358 | 2.9737 | 3.1599   | -0.5041  | 0.3185    |
 | recording_loo | 13.5568 | 3.1660 | 3.2017   | -1.0884  | 0.0446    |
 | combined_loo  | 13.5180 | 3.1524 | 2.5973   | -3.5471  | 0.0040    | 
+
+#### Parameter search 
+
+29.12.2025 
+
+Doing parameter search over 50 random samples for the following params:
+- window_length: [5, 10, 30, 60]  # Random choice from list
+- kt: [1, 30]  # Random integer in range [1, 30]
+- ks: [1, 6]  # Random integer in range [1, 6]
+- hidden_channels: [32, 64, 128, 256, 512]  # Random choice from list
+- use_preprocess_mlp: [true, false]  # Random choice from list
+- add_self_loops: [true, false]  # Random choice from list
+
+Expected time of search: 5-10min one config & 50 configs ==> time < 500min < 9h.
+
+Number of training iterations:
+- 10 epochs
+- subset of first 10 subjects, all 10 recordings => 10x10 grid
+- LOSO => 10 epochs * 10 subjects = 100 epochs
+- LORO => 10 epochs * 10 recordings = 100 epochs
+- combined LOO => 10 epochs * 10 rec * 10 subj = 1000 epochs
+- total: 1200 epochs * (max) 5 seconds * 50 configs = (max) 84 hours
+- we should probably drop the combined LOO for param search
+- if we drop combined LOO => 83% less work => (max) 15 hours
+
+**Best params**
