@@ -90,3 +90,23 @@ Number of training iterations:
 - if we drop combined LOO => 83% less work => (max) 15 hours
 
 **Best params**
+
+
+#### Classical ML baselines to beat
+
+| Strategy | Baseline | MSE | MAE | SD_ERROR | R² | Pearson R |
+|----------|----------|-----|-----|----------|----|-----------| 
+| subject_loo | MeanEstimator | 12.7008 | 3.1039 | 3.2169 | -0.6298 | **0.2611** |
+| subject_loo | SVM | 15.9157 | 2.8190 | 3.2826 | -0.3799 | **0.2016** |
+| subject_loo | GaussianNB | 18.8645 | 3.7430 | 3.8806 | -2.0684 | 0.0011 |
+| subject_loo | LightGBM | 13.0676 | 3.0373 | 3.2700 | -0.7352 | 0.2721 |
+|----------|----------|-----|-----|----------|----|-----------| 
+| recording_loo | MeanEstimator | 13.7904 | 3.2620 | 3.2170 | -1.2703 | **0.0715** |
+| recording_loo | SVM | 17.2621 | **3.0997** | 3.3781 | -1.1764 | 0.0137 |
+| recording_loo | GaussianNB | 19.5374 | 3.7891 | 3.7776 | -2.5449 | -0.0273 |
+| recording_loo | LightGBM | 14.8453 | 3.2624 | 3.3680 | -1.5904 | 0.0556 |
+|----------|----------|-----|-----|----------|----|-----------| 
+| combined_loo | MeanEstimator | 13.6940 | 3.2437 | 2.5945 | -4.4296 | **0.0917** |
+| combined_loo | SVM | 17.1872 | **3.0371** | 2.7164 | -2.3462 | -0.0560 |
+| combined_loo | GaussianNB | 19.7463 | 3.8350 | 3.1807 | -10.1552 | -0.0210 |
+| combined_loo | LightGBM | 15.4480 | 3.3348 | 2.8231 | -5.2698 | -0.0135 |
