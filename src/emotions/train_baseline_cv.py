@@ -154,6 +154,8 @@ def main():
     logging_cfg = config['logging']
     metrics_cfg = config['metrics']
 
+    start_time = datetime.now()
+
     # Timestamped run dir
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = os.path.join(logging_cfg['results_dir'], timestamp)
@@ -286,7 +288,9 @@ def main():
         print(f"\nSaved final comparison to: {csv_path}")
 
     print(f"\nAll results saved to: {run_dir}")
-
-
+    end_time = datetime.now()
+    duration = end_time - start_time
+    print(f"Total time taken: {duration}")
+    
 if __name__ == "__main__":
     main()
