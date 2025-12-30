@@ -6,6 +6,8 @@ import numpy as np
 from sklearn.svm import SVR
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import StandardScaler
+from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import pearsonr
 import lightgbm as lgb
@@ -59,7 +61,10 @@ class BaselineModel:
         d2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
         
         # Pearson correlation coefficient
-        pearson_r, _ = pearsonr(y_flat, y_pred_flat)
+        if np.std(y_flat) > 0 and np.std(y_pred_flat) > 0:
+            pearson_r, _ = pearsonr(y_flat, y_pred_flat)
+        else:
+            pearson_r = 0.0
         
         return {
             'mse': mse,
@@ -86,11 +91,22 @@ class MeanEstimator(BaselineModel):
 
 
 class SVMBaseline(BaselineModel):
-    """SVM regressor with RBF kernel."""
+    """SVM regressor with RBF kernel and feature normalization."""
     
     def __init__(self):
         super().__init__("SVM")
+        self.scaler = StandardScaler()
         self.model = MultiOutputRegressor(SVR(kernel='rbf', C=1.0, epsilon=0.1))
+    
+    def fit(self, X_train, y_train):
+        """Train model with normalized features."""
+        X_scaled = self.scaler.fit_transform(X_train)
+        self.model.fit(X_scaled, y_train)
+    
+    def predict(self, X):
+        """Predict on normalized data."""
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict(X_scaled)
 
 
 class GaussianNBBaseline(BaselineModel):
@@ -99,6 +115,34 @@ class GaussianNBBaseline(BaselineModel):
     def __init__(self):
         super().__init__("GaussianNB")
         self.model = MultiOutputRegressor(GaussianNB())
+
+
+class MLPBaseline(BaselineModel):
+    """2-layer Multi-Layer Perceptron."""
+    
+    def __init__(self, hidden_layer_sizes=(512, 128)):
+        super().__init__("MLP")
+        self.scaler = StandardScaler()
+        self.model = MLPRegressor(
+            hidden_layer_sizes=hidden_layer_sizes,
+            activation='relu',
+            solver='adam',
+            max_iter=500,
+            random_state=42,
+            early_stopping=True,
+            validation_fraction=0.1,
+            verbose=False
+        )
+    
+    def fit(self, X_train, y_train):
+        """Train model with normalized features."""
+        X_scaled = self.scaler.fit_transform(X_train)
+        self.model.fit(X_scaled, y_train)
+    
+    def predict(self, X):
+        """Predict on normalized data."""
+        X_scaled = self.scaler.transform(X)
+        return self.model.predict(X_scaled)
 
 
 class LGBMBaseline(BaselineModel):
@@ -137,5 +181,6 @@ def get_all_baselines():
         MeanEstimator(),
         SVMBaseline(),
         GaussianNBBaseline(),
+        MLPBaseline(),
         LGBMBaseline()
     ]
