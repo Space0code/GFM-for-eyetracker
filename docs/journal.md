@@ -110,3 +110,7 @@ Number of training iterations:
 | combined_loo | SVM | 17.1872 | **3.0371** | 2.7164 | -2.3462 | -0.0560 |
 | combined_loo | GaussianNB | 19.7463 | 3.8350 | 3.1807 | -10.1552 | -0.0210 |
 | combined_loo | LightGBM | 15.4480 | 3.3348 | 2.8231 | -5.2698 | -0.0135 |
+
+We need to beat MAE of 3 for all CVs, 0.26 pearson r for LOSO and 0.10 for LORO and combined LOO.
+
+- should have normalized feats for SVM, forgot
