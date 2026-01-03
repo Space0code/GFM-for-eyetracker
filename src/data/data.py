@@ -85,6 +85,7 @@ class SpacioTemporalDataset(Dataset):
         self.window_overlap = window_overlap
         self.files = []
         self.graphs = []
+        self.emotion_names = []  # Store emotion column names
         
         # Setup cache directory
         if cache_dir is None:
@@ -101,6 +102,7 @@ class SpacioTemporalDataset(Dataset):
                     cached_data = pickle.load(f)
                     self.graphs = cached_data['graphs']
                     self.files = cached_data['files']
+                    self.emotion_names = cached_data.get('emotion_names', [])
                 print(f"Loaded {len(self.graphs)} graphs from cache")
                 return
         else:
@@ -120,6 +122,9 @@ class SpacioTemporalDataset(Dataset):
                 graph = self._load_one(df, window_slice)
                 # Store source file information
                 graph.source_file = os.path.basename(path)
+                # Store emotion names from first graph
+                if not self.emotion_names and hasattr(graph, 'emotion_names'):
+                    self.emotion_names = graph.emotion_names
                 self.graphs.append(graph)
 
         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
@@ -161,6 +166,7 @@ class SpacioTemporalDataset(Dataset):
                 pickle.dump({
                     'graphs': self.graphs,
                     'files': self.files,
+                    'emotion_names': self.emotion_names,
                     'kt': self.kt,
                     'ks': self.ks,
                     'window_length': self.window_length,
@@ -290,5 +296,9 @@ class SpacioTemporalDataset(Dataset):
             data.subject = subject
         if recording is not None:
             data.recording = recording
+        
+        # Store emotion column names in data object for later use
+        if emotion_cols:
+            data.emotion_names = emotion_cols
 
         return data

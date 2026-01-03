@@ -28,51 +28,68 @@ class BaselineModel:
         """Predict on data."""
         return self.model.predict(X)
     
-    def evaluate(self, X, y):
-        """Compute comprehensive evaluation metrics.
+    def evaluate(self, X, y, emotion_names=None):
+        """Compute comprehensive evaluation metrics (aggregated and per-emotion).
+        
+        Args:
+            X: Input features
+            y: Target values (can be DataFrame with column names or array)
+            emotion_names: Optional list of emotion names (extracted from y if DataFrame)
         
         Returns:
-            dict: Dictionary containing MSE, MAE, SD, R², D², and Pearson R
+            dict: Dictionary containing aggregated and per-emotion metrics
         """
         y_pred = self.predict(X)
         y_array = y.values if hasattr(y, 'values') else y
         y_pred_array = y_pred.values if hasattr(y_pred, 'values') else y_pred
         
-        # Flatten for overall metrics
+        # Extract emotion names from DataFrame columns if available
+        if emotion_names is None and hasattr(y, 'columns'):
+            emotion_names = list(y.columns)
+        elif emotion_names is None:
+            emotion_names = [f'emotion_{i}' for i in range(y_array.shape[1] if len(y_array.shape) > 1 else 1)]
+        
+        # Aggregated metrics (flatten all emotions)
         y_flat = y_array.flatten()
         y_pred_flat = y_pred_array.flatten()
         
-        # MSE
-        mse = mean_squared_error(y_flat, y_pred_flat)
+        aggregated = {
+            'mse': float(mean_squared_error(y_flat, y_pred_flat)),
+            'mae': float(mean_absolute_error(y_flat, y_pred_flat)),
+            'sd_error': float(np.std(y_flat - y_pred_flat)),
+            'r2': float(r2_score(y_flat, y_pred_flat))
+        }
         
-        # MAE
-        mae = mean_absolute_error(y_flat, y_pred_flat)
-        
-        # Standard deviation of error
-        errors = y_flat - y_pred_flat
-        sd_error = np.std(errors)
-        
-        # R² (coefficient of determination)
-        r2 = r2_score(y_flat, y_pred_flat)
-        
-        # D² (fraction of deviance explained)
-        ss_res = np.sum((y_flat - y_pred_flat) ** 2)
-        ss_tot = np.sum((y_flat - np.mean(y_flat)) ** 2)
-        d2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
-        
-        # Pearson correlation coefficient
+        # Pearson correlation for aggregated
         if np.std(y_flat) > 0 and np.std(y_pred_flat) > 0:
-            pearson_r, _ = pearsonr(y_flat, y_pred_flat)
+            aggregated['pearson_r'] = float(pearsonr(y_flat, y_pred_flat)[0])
         else:
-            pearson_r = 0.0
+            aggregated['pearson_r'] = 0.0
+        
+        # Per-emotion metrics
+        per_emotion = {}
+        num_emotions = y_array.shape[1] if len(y_array.shape) > 1 else 1
+        
+        for i, emo_name in enumerate(emotion_names[:num_emotions]):
+            y_emo = y_array[:, i] if len(y_array.shape) > 1 else y_array
+            y_pred_emo = y_pred_array[:, i] if len(y_pred_array.shape) > 1 else y_pred_array
+            
+            per_emotion[emo_name] = {
+                'mse': float(mean_squared_error(y_emo, y_pred_emo)),
+                'mae': float(mean_absolute_error(y_emo, y_pred_emo)),
+                'sd_error': float(np.std(y_emo - y_pred_emo)),
+                'r2': float(r2_score(y_emo, y_pred_emo))
+            }
+            
+            # Pearson correlation per emotion
+            if np.std(y_emo) > 0 and np.std(y_pred_emo) > 0:
+                per_emotion[emo_name]['pearson_r'] = float(pearsonr(y_emo, y_pred_emo)[0])
+            else:
+                per_emotion[emo_name]['pearson_r'] = 0.0
         
         return {
-            'mse': mse,
-            'mae': mae,
-            'sd_error': sd_error,
-            'r2': r2,
-            'd2': d2,
-            'pearson_r': pearson_r
+            'aggregated': aggregated,
+            'per_emotion': per_emotion
         }
 
 

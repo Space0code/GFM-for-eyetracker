@@ -58,9 +58,20 @@ def save_strategy_results_csv(config_file, run_dir, all_strategies_results, metr
     """
     csv_data = []
     for strategy, test_metrics in all_strategies_results.items():
-        final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in metric_names}
         row = {'strategy': strategy}
-        row.update(final_metrics)
+        
+        # Aggregated metrics
+        final_metrics_agg = {f'agg_{metric}': np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
+        row.update(final_metrics_agg)
+        
+        # Per-emotion metrics
+        if test_metrics:
+            first_fold = next(iter(test_metrics.values()))
+            if 'per_emotion' in first_fold and first_fold['per_emotion']:
+                for emo_name in first_fold['per_emotion'].keys():
+                    emo_metrics = {f'{emo_name}_{metric}': np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+                    row.update(emo_metrics)
+        
         csv_data.append(row)
     
     config_basename = os.path.splitext(os.path.basename(config_file))[0]
@@ -121,9 +132,20 @@ def print_strategy_summary(strategy, test_metrics, metric_names):
     print(f"Summary for {strategy.upper()} (Averaged Across {fold_type})")
     print("="*100)
     
-    final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in metric_names}
-    metric_str = " | ".join([f"{metric.upper()}: {final_metrics[metric]:.4f}" for metric in metric_names])
-    print(metric_str)
+    # Aggregated metrics
+    final_metrics_agg = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
+    metric_str = " | ".join([f"{metric.upper()}: {final_metrics_agg[metric]:.4f}" for metric in metric_names])
+    print(f"\nAggregated: {metric_str}")
+    
+    # Per-emotion metrics
+    if test_metrics:
+        first_fold = next(iter(test_metrics.values()))
+        if 'per_emotion' in first_fold and first_fold['per_emotion']:
+            print("\nPer-emotion:")
+            for emo_name in first_fold['per_emotion'].keys():
+                emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+                emo_str = " | ".join([f"{metric.upper()}: {emo_metrics[metric]:.4f}" for metric in metric_names])
+                print(f"  {emo_name}: {emo_str}")
 
 
 def print_strategies_comparison(all_strategies_results, metric_names):
@@ -137,13 +159,29 @@ def print_strategies_comparison(all_strategies_results, metric_names):
     print("FINAL COMPARISON ACROSS ALL STRATEGIES")
     print("="*100)
     
+    print("\nAggregated Metrics:")
     print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
     print("-"*100)
     
     for strategy, test_metrics in all_strategies_results.items():
-        final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in metric_names}
+        final_metrics = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
         metric_str = " | ".join([f"{final_metrics[m]:<10.4f}" for m in metric_names])
         print(f"{strategy:<20} | {metric_str}")
+    
+    # Per-emotion comparison
+    if all_strategies_results:
+        first_strategy = next(iter(all_strategies_results.values()))
+        first_fold = next(iter(first_strategy.values()))
+        if 'per_emotion' in first_fold and first_fold['per_emotion']:
+            emotion_names = list(first_fold['per_emotion'].keys())
+            for emo_name in emotion_names:
+                print(f"\n{emo_name}:")
+                print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
+                print("-"*100)
+                for strategy, test_metrics in all_strategies_results.items():
+                    emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+                    emo_str = " | ".join([f"{emo_metrics[m]:<10.4f}" for m in metric_names])
+                    print(f"{strategy:<20} | {emo_str}")
 
 
 def load_config(config_path: str = None) -> dict:
@@ -184,43 +222,55 @@ def create_splitter(strategy: str, dataset, val_size: int, random_state: int = N
                         f"Valid options: 'subject_loo', 'recording_loo', 'combined_loo'")
 
 
-def compute_metrics(outputs, targets):
-    """Compute comprehensive evaluation metrics.
+def compute_metrics(outputs, targets, emotion_names=None):
+    """Compute comprehensive evaluation metrics (aggregated and per-emotion).
     
     Args:
-        outputs: torch.Tensor of predictions
-        targets: torch.Tensor of ground truth
+        outputs: torch.Tensor of predictions [num_samples, num_emotions]
+        targets: torch.Tensor of ground truth [num_samples, num_emotions]
+        emotion_names: list of emotion column names (optional)
         
     Returns:
-        dict: Dictionary containing MSE, MAE, SD, R², and Pearson R
+        dict: Dictionary containing aggregated and per-emotion metrics
     """
-    # Convert to numpy and flatten
-    y_pred = outputs.cpu().numpy().flatten()
-    y_true = targets.cpu().numpy().flatten()
+    # Convert to numpy
+    y_pred = outputs.cpu().numpy()
+    y_true = targets.cpu().numpy()
     
-    # MSE
-    mse = mean_squared_error(y_true, y_pred)
+    # Aggregated metrics (flatten all emotions)
+    y_pred_flat = y_pred.flatten()
+    y_true_flat = y_true.flatten()
     
-    # MAE
-    mae = mean_absolute_error(y_true, y_pred)
+    aggregated = {
+        'mse': float(mean_squared_error(y_true_flat, y_pred_flat)),
+        'mae': float(mean_absolute_error(y_true_flat, y_pred_flat)),
+        'sd_error': float(np.std(y_true_flat - y_pred_flat)),
+        'r2': float(r2_score(y_true_flat, y_pred_flat)),
+        'pearson_r': float(pearsonr(y_true_flat, y_pred_flat)[0])
+    }
     
-    # Standard deviation of error
-    errors = y_true - y_pred
-    sd_error = np.std(errors)
+    # Per-emotion metrics
+    per_emotion = {}
+    num_emotions = y_pred.shape[1] if len(y_pred.shape) > 1 else 1
     
-    # R² (coefficient of determination)
-    r2 = r2_score(y_true, y_pred)
+    if emotion_names is None:
+        emotion_names = [f'emotion_{i}' for i in range(num_emotions)]
     
-
-    # Pearson correlation coefficient
-    pearson_r, _ = pearsonr(y_true, y_pred)
+    for i, emo_name in enumerate(emotion_names[:num_emotions]):
+        y_pred_emo = y_pred[:, i] if len(y_pred.shape) > 1 else y_pred
+        y_true_emo = y_true[:, i] if len(y_true.shape) > 1 else y_true
+        
+        per_emotion[emo_name] = {
+            'mse': float(mean_squared_error(y_true_emo, y_pred_emo)),
+            'mae': float(mean_absolute_error(y_true_emo, y_pred_emo)),
+            'sd_error': float(np.std(y_true_emo - y_pred_emo)),
+            'r2': float(r2_score(y_true_emo, y_pred_emo)),
+            'pearson_r': float(pearsonr(y_true_emo, y_pred_emo)[0])
+        }
     
     return {
-        'mse': mse,
-        'mae': mae,
-        'sd_error': sd_error,
-        'r2': r2,
-        'pearson_r': pearson_r
+        'aggregated': aggregated,
+        'per_emotion': per_emotion
     }
 
 
@@ -247,7 +297,7 @@ def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     return total_loss / len(loader)
 
 
-def evaluate(model, loader, device, save_outputs=False, save_dir=None):
+def evaluate(model, loader, device, emotion_names=None, save_outputs=False, save_dir=None):
     """Evaluate the model and compute comprehensive metrics."""
     model.eval()
     total_loss = 0
@@ -272,8 +322,8 @@ def evaluate(model, loader, device, save_outputs=False, save_dir=None):
     targets = torch.cat(all_targets, dim=0)
     
     # Compute comprehensive metrics
-    metrics = compute_metrics(outputs, targets)
-    metrics['loss'] = total_loss / len(loader)
+    metrics = compute_metrics(outputs, targets, emotion_names=emotion_names)
+    metrics['aggregated']['loss'] = total_loss / len(loader)
     
     if save_outputs and save_dir:
         torch.save({'outputs': outputs, 'targets': targets, 'metrics': metrics}, save_dir)
@@ -444,6 +494,9 @@ def main():
                 val_dataset = [dataset[i] for i in val_idx]
                 test_dataset = [dataset[i] for i in test_idx]
                 
+                # Get emotion names from dataset
+                emotion_names = dataset.emotion_names if hasattr(dataset, 'emotion_names') else None
+                
                 print(f"Train: {len(train_dataset)} graphs | Val: {len(val_dataset)} graphs | Test: {len(test_dataset)} graphs")
                 
                 # Create data loaders
@@ -491,8 +544,8 @@ def main():
                     # Save outputs for selected epochs
                     save_outputs = logging_cfg.get('save_validation_outputs', False) and epoch in save_epochs
                     save_path = os.path.join(fold_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
-                    val_metrics = evaluate(model, val_loader, device, save_outputs=save_outputs, save_dir=save_path)
-                    val_loss = val_metrics['loss']
+                    val_metrics = evaluate(model, val_loader, device, emotion_names=emotion_names, save_outputs=save_outputs, save_dir=save_path)
+                    val_loss = val_metrics['aggregated']['loss']
                     
                     if val_loss < best_val_loss:
                         best_val_loss = val_loss
@@ -501,11 +554,12 @@ def main():
                     
                     print_every = logging_cfg.get('print_every', 10)
                     if epoch % print_every == 0 or epoch == 1:
-                        print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {val_metrics['mse']:.4f} | "
-                            f"MAE: {val_metrics['mae']:.4f} | R²: {val_metrics['r2']:.4f} | Pearson R: {val_metrics['pearson_r']:.4f}"
+                        agg = val_metrics['aggregated']
+                        print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {agg['mse']:.4f} | "
+                            f"MAE: {agg['mae']:.4f} | R²: {agg['r2']:.4f} | Pearson R: {agg['pearson_r']:.4f}"
                             f" | Time: {datetime.now() - epoch_start_time}")
                 
-                test_metrics[test_id] = evaluate(model, test_loader, device, save_outputs=False, save_dir=None) 
+                test_metrics[test_id] = evaluate(model, test_loader, device, emotion_names=emotion_names, save_outputs=False, save_dir=None) 
                 # print(f"Test Metrics for {test_name}: "
                 #     f"MSE: {test_metrics[test_id]['mse']:.4f} | "
                 #     f"MAE: {test_metrics[test_id]['mae']:.4f} | "
@@ -543,7 +597,7 @@ def main():
         # Store results for this config file
         config_results = {}
         for strategy, test_metrics in all_strategies_results.items():
-            final_metrics = {metric: np.nanmean([test_metrics[fold_id][metric] for fold_id in test_metrics]) for metric in config['metrics']}
+            final_metrics = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in config['metrics']}
             config_results[strategy] = final_metrics
         all_configs_results[config_file] = {
             'run_dir': run_dir,

@@ -220,11 +220,9 @@ def main():
             for baseline in baselines:
                 # Fit on train only (minimal)
                 baseline.fit(X_train, y_train)
-                # Evaluate on test
+                # Evaluate on test (returns nested dict with aggregated and per_emotion)
                 test_metrics = baseline.evaluate(X_test, y_test)
-                # Keep only requested metrics
-                filtered = {m: float(test_metrics[m]) for m in metrics_cfg if m in test_metrics}
-                per_baseline_metrics[baseline.name].append(filtered)
+                per_baseline_metrics[baseline.name].append(test_metrics)
 
                 # Optionally save model per fold
                 model_dir = os.path.join(strategy_dir, baseline.name, f"fold_{fold_num}")
@@ -237,19 +235,41 @@ def main():
                 np.save(os.path.join(model_dir, 'y_true.npy'), y_test.to_numpy())
 
         # Aggregate across folds for this strategy
-        strategy_results: Dict[str, Dict[str, float]] = {}
+        strategy_results: Dict[str, Dict[str, Any]] = {}
         for bname, metrics_list in per_baseline_metrics.items():
             if metrics_list:
-                avg = {m: float(np.nanmean([mres[m] for mres in metrics_list])) for m in metrics_cfg}
+                # Aggregated metrics
+                agg_metrics = {m: float(np.nanmean([mres['aggregated'][m] for mres in metrics_list])) for m in metrics_cfg}
+                
+                # Per-emotion metrics
+                per_emo = {}
+                first_result = metrics_list[0]
+                if 'per_emotion' in first_result and first_result['per_emotion']:
+                    for emo_name in first_result['per_emotion'].keys():
+                        per_emo[emo_name] = {m: float(np.nanmean([mres['per_emotion'][emo_name][m] for mres in metrics_list])) for m in metrics_cfg}
+                
+                strategy_results[bname] = {
+                    'aggregated': agg_metrics,
+                    'per_emotion': per_emo
+                }
             else:
-                avg = {m: float('nan') for m in metrics_cfg}
-            strategy_results[bname] = avg
+                strategy_results[bname] = {
+                    'aggregated': {m: float('nan') for m in metrics_cfg},
+                    'per_emotion': {}
+                }
 
         # Save CSV for this strategy
         df_rows = []
-        for bname, avg_metrics in strategy_results.items():
+        for bname, result_dict in strategy_results.items():
             row = {'baseline': bname}
-            row.update(avg_metrics)
+            # Aggregated metrics with 'agg_' prefix
+            for m in metrics_cfg:
+                row[f'agg_{m}'] = result_dict['aggregated'][m]
+            # Per-emotion metrics
+            if result_dict['per_emotion']:
+                for emo_name, emo_metrics in result_dict['per_emotion'].items():
+                    for m in metrics_cfg:
+                        row[f'{emo_name}_{m}'] = emo_metrics[m]
             df_rows.append(row)
         df = pd.DataFrame(df_rows)
         csv_path = os.path.join(strategy_dir, 'summary.csv')
@@ -261,27 +281,63 @@ def main():
 
         # Print concise summary
         print("\nStrategy Summary (averaged across folds):")
+        print("\nAggregated Metrics:")
         print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
         print("-"*100)
-        for bname, avg_metrics in strategy_results.items():
-            metric_str = " | ".join([f"{avg_metrics[m]:<10.4f}" for m in metrics_cfg])
+        for bname, result_dict in strategy_results.items():
+            metric_str = " | ".join([f"{result_dict['aggregated'][m]:<10.4f}" for m in metrics_cfg])
             print(f"{bname:<20} | {metric_str}")
+        
+        # Per-emotion summary
+        if strategy_results:
+            first_baseline = next(iter(strategy_results.values()))
+            if first_baseline['per_emotion']:
+                for emo_name in first_baseline['per_emotion'].keys():
+                    print(f"\n{emo_name}:")
+                    print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+                    print("-"*100)
+                    for bname, result_dict in strategy_results.items():
+                        emo_str = " | ".join([f"{result_dict['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                        print(f"{bname:<20} | {emo_str}")
 
     # Final comparison across strategies
     if len(strategies) > 1:
         print("\n" + "="*100)
         print("FINAL COMPARISON ACROSS STRATEGIES (averaged per baseline)")
         print("="*100)
+        
+        print("\nAggregated Metrics:")
         print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
         print("-"*120)
         rows = []
         for strategy, res in all_strategies_results.items():
-            for bname, metrics in res.items():
-                metric_str = " | ".join([f"{metrics[m]:<10.4f}" for m in metrics_cfg])
+            for bname, result_dict in res.items():
+                metric_str = " | ".join([f"{result_dict['aggregated'][m]:<10.4f}" for m in metrics_cfg])
                 print(f"{strategy:<20} | {bname:<20} | {metric_str}")
                 row = {'strategy': strategy, 'baseline': bname}
-                row.update(metrics)
+                for m in metrics_cfg:
+                    row[f'agg_{m}'] = result_dict['aggregated'][m]
+                # Add per-emotion to row
+                if result_dict['per_emotion']:
+                    for emo_name, emo_metrics in result_dict['per_emotion'].items():
+                        for m in metrics_cfg:
+                            row[f'{emo_name}_{m}'] = emo_metrics[m]
                 rows.append(row)
+        
+        # Per-emotion comparison
+        if all_strategies_results:
+            first_strategy = next(iter(all_strategies_results.values()))
+            first_baseline = next(iter(first_strategy.values()))
+            if first_baseline['per_emotion']:
+                for emo_name in first_baseline['per_emotion'].keys():
+                    print(f"\n{emo_name}:")
+                    print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+                    print("-"*120)
+                    for strategy, res in all_strategies_results.items():
+                        for bname, result_dict in res.items():
+                            emo_str = " | ".join([f"{result_dict['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                            print(f"{strategy:<20} | {bname:<20} | {emo_str}")
+        
         df = pd.DataFrame(rows)
         csv_path = os.path.join(run_dir, 'all_strategies_comparison.csv')
         df.to_csv(csv_path, index=False)
