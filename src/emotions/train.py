@@ -462,7 +462,8 @@ def main():
                     dropout_mlp=model_cfg.get('dropout_mlp', 0.1),
                     dropout_gnn=model_cfg.get('dropout_gnn', 0.1),
                     dropout_head=model_cfg.get('dropout_head', 0.1),
-                    aggr=model_cfg.get('aggr', 'mean')
+                    aggr=model_cfg.get('aggr', 'mean'),
+                    conv_type=model_cfg.get('conv_type', 'GCNConv')
                 ).to(device)
                 
                 optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])

@@ -11,8 +11,8 @@ dataset:
   # Graph construction parameters
   window_length: 8  # Window length in seconds
   window_overlap: 0.0  # Overlap fraction [0, 1)
-  kt: 20  # Number of temporal neighbors
-  ks: 10  # Number of spatial neighbors (kNN)
+  kt: 2  # Number of temporal neighbors
+  ks: 2  # Number of spatial neighbors (kNN)
   
   # Caching configuration
   cache_dir: "./data/cache/"
@@ -30,6 +30,7 @@ model:
   dropout_gnn: 0.1
   dropout_head: 0.1
   aggr: "mean"  # Aggregation method for GNN layers: "mean", "sum", "max"
+  conv_type: "GATConv"  # Convolutional layer type: "GCNConv" or "GATConv"
 
 # Training configuration
 training:
@@ -46,8 +47,8 @@ cross_validation:
   # Can be a single string or a list of strings
   strategies:
     # - "subject_loo"
-    # - "recording_loo"
-    - "combined_loo"
+    - "recording_loo"
+    # - "combined_loo"
   
   val_size: 2 # Number of subjects/recordings for validation set
   random_state: 42 # Random state for reproducible splits

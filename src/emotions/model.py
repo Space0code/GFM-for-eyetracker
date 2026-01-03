@@ -1,14 +1,14 @@
 # model.py 
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, HeteroConv, global_mean_pool
+from torch_geometric.nn import GCNConv, GATConv, HeteroConv, global_mean_pool
 
 class SpatioTemporalHeteroGNN(nn.Module):
     def __init__(
             self, in_channels: int, hidden_channels: int, out_channels: int, 
             output_scale: float = 10.0, use_preprocess_mlp: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
-            aggr: str = "mean",
+            aggr: str = "mean", conv_type: str = "GCNConv",
             ):
         super().__init__()
 
@@ -28,12 +28,21 @@ class SpatioTemporalHeteroGNN(nn.Module):
             # print("Not using preprocessing MLP for input features.")
             conv1_in_channels = in_channels
 
+        # Select convolutional layer type
+        if conv_type == "GCNConv":
+            ConvLayer = GCNConv
+            conv_kwargs = {"add_self_loops": add_self_loops}
+        elif conv_type == "GATConv":
+            ConvLayer = GATConv
+            conv_kwargs = {"add_self_loops": add_self_loops}
+        else:
+            raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
         # 1st hetero GCN layer (temporal + spatial)
         self.conv1 = HeteroConv(
             {
-                ("node", "temporal", "node"): GCNConv(conv1_in_channels, hidden_channels, add_self_loops=add_self_loops),
-                ("node", "spatial", "node"): GCNConv(conv1_in_channels, hidden_channels, add_self_loops=add_self_loops),
+                ("node", "temporal", "node"): ConvLayer(conv1_in_channels, hidden_channels, **conv_kwargs),
+                ("node", "spatial", "node"): ConvLayer(conv1_in_channels, hidden_channels, **conv_kwargs),
             },
             aggr=aggr,  # how to combine temporal + spatial messages
         )
@@ -41,8 +50,8 @@ class SpatioTemporalHeteroGNN(nn.Module):
         # 2nd hetero GCN layer
         self.conv2 = HeteroConv(
             {
-                ("node", "temporal", "node"): GCNConv(hidden_channels, hidden_channels, add_self_loops=add_self_loops),
-                ("node", "spatial", "node"): GCNConv(hidden_channels, hidden_channels, add_self_loops=add_self_loops),
+                ("node", "temporal", "node"): ConvLayer(hidden_channels, hidden_channels, **conv_kwargs),
+                ("node", "spatial", "node"): ConvLayer(hidden_channels, hidden_channels, **conv_kwargs),
             },
             aggr=aggr,
         )
