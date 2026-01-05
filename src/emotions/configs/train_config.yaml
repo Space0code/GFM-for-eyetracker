@@ -3,108 +3,108 @@
 # Dataset configuration
 dataset:
   data_dir: "./data/processed/eSEEd_v2/" # Path to processed data directory
-  # file_list: null  # File selection (null means load all files recursively) 
-  file_list:
-  - sample_01_recording_01_merged.csv
-  - sample_02_recording_01_merged.csv
-  - sample_03_recording_01_merged.csv
-  - sample_04_recording_01_merged.csv
-  - sample_05_recording_01_merged.csv
-  - sample_06_recording_01_merged.csv
-  - sample_07_recording_01_merged.csv
-  - sample_08_recording_01_merged.csv
-  - sample_10_recording_01_merged.csv
-  - sample_09_recording_01_merged.csv
-  - sample_01_recording_02_merged.csv
-  - sample_02_recording_02_merged.csv
-  - sample_03_recording_02_merged.csv
-  - sample_04_recording_02_merged.csv
-  - sample_05_recording_02_merged.csv
-  - sample_06_recording_02_merged.csv
-  - sample_07_recording_02_merged.csv
-  - sample_08_recording_02_merged.csv
-  - sample_10_recording_02_merged.csv
-  - sample_09_recording_02_merged.csv
-  - sample_01_recording_03_merged.csv
-  - sample_02_recording_03_merged.csv
-  - sample_03_recording_03_merged.csv
-  - sample_04_recording_03_merged.csv
-  - sample_05_recording_03_merged.csv
-  - sample_06_recording_03_merged.csv
-  - sample_07_recording_03_merged.csv
-  - sample_08_recording_03_merged.csv
-  - sample_10_recording_03_merged.csv
-  - sample_09_recording_03_merged.csv
-  - sample_01_recording_04_merged.csv
-  - sample_02_recording_04_merged.csv
-  - sample_03_recording_04_merged.csv
-  - sample_04_recording_04_merged.csv
-  - sample_05_recording_04_merged.csv
-  - sample_06_recording_04_merged.csv
-  - sample_07_recording_04_merged.csv
-  - sample_08_recording_04_merged.csv
-  - sample_10_recording_04_merged.csv
-  - sample_09_recording_04_merged.csv
-  - sample_01_recording_05_merged.csv
-  - sample_02_recording_05_merged.csv
-  - sample_03_recording_05_merged.csv
-  - sample_04_recording_05_merged.csv
-  - sample_05_recording_05_merged.csv
-  - sample_06_recording_05_merged.csv
-  - sample_07_recording_05_merged.csv
-  - sample_08_recording_05_merged.csv
-  - sample_10_recording_05_merged.csv
-  - sample_09_recording_05_merged.csv
-  - sample_01_recording_06_merged.csv
-  - sample_02_recording_06_merged.csv
-  - sample_03_recording_06_merged.csv
-  - sample_04_recording_06_merged.csv
-  - sample_05_recording_06_merged.csv
-  - sample_06_recording_06_merged.csv
-  - sample_07_recording_06_merged.csv
-  - sample_08_recording_06_merged.csv
-  - sample_10_recording_06_merged.csv
-  - sample_09_recording_06_merged.csv
-  - sample_01_recording_07_merged.csv
-  - sample_02_recording_07_merged.csv
-  - sample_03_recording_07_merged.csv
-  - sample_04_recording_07_merged.csv
-  - sample_05_recording_07_merged.csv
-  - sample_06_recording_07_merged.csv
-  - sample_07_recording_07_merged.csv
-  - sample_08_recording_07_merged.csv
-  - sample_10_recording_07_merged.csv
-  - sample_09_recording_07_merged.csv
-  - sample_01_recording_08_merged.csv
-  - sample_02_recording_08_merged.csv
-  - sample_03_recording_08_merged.csv
-  - sample_04_recording_08_merged.csv
-  - sample_05_recording_08_merged.csv
-  - sample_06_recording_08_merged.csv
-  - sample_07_recording_08_merged.csv
-  - sample_08_recording_08_merged.csv
-  - sample_10_recording_08_merged.csv
-  - sample_09_recording_08_merged.csv
-  - sample_01_recording_09_merged.csv
-  - sample_02_recording_09_merged.csv
-  - sample_03_recording_09_merged.csv
-  - sample_04_recording_09_merged.csv
-  - sample_05_recording_09_merged.csv
-  - sample_06_recording_09_merged.csv
-  - sample_07_recording_09_merged.csv
-  - sample_08_recording_09_merged.csv
-  - sample_10_recording_09_merged.csv
-  - sample_09_recording_09_merged.csv
-  - sample_01_recording_10_merged.csv
-  - sample_02_recording_10_merged.csv
-  - sample_03_recording_10_merged.csv
-  - sample_04_recording_10_merged.csv
-  - sample_05_recording_10_merged.csv
-  - sample_06_recording_10_merged.csv
-  - sample_07_recording_10_merged.csv
-  - sample_08_recording_10_merged.csv
-  - sample_10_recording_10_merged.csv
-  - sample_09_recording_10_merged.csv
+  file_list: null  # File selection (null means load all files recursively) 
+  # file_list:
+  # - sample_01_recording_01_merged.csv
+  # - sample_02_recording_01_merged.csv
+  # - sample_03_recording_01_merged.csv
+  # - sample_04_recording_01_merged.csv
+  # - sample_05_recording_01_merged.csv
+  # - sample_06_recording_01_merged.csv
+  # - sample_07_recording_01_merged.csv
+  # - sample_08_recording_01_merged.csv
+  # - sample_10_recording_01_merged.csv
+  # - sample_09_recording_01_merged.csv
+  # - sample_01_recording_02_merged.csv
+  # - sample_02_recording_02_merged.csv
+  # - sample_03_recording_02_merged.csv
+  # - sample_04_recording_02_merged.csv
+  # - sample_05_recording_02_merged.csv
+  # - sample_06_recording_02_merged.csv
+  # - sample_07_recording_02_merged.csv
+  # - sample_08_recording_02_merged.csv
+  # - sample_10_recording_02_merged.csv
+  # - sample_09_recording_02_merged.csv
+  # - sample_01_recording_03_merged.csv
+  # - sample_02_recording_03_merged.csv
+  # - sample_03_recording_03_merged.csv
+  # - sample_04_recording_03_merged.csv
+  # - sample_05_recording_03_merged.csv
+  # - sample_06_recording_03_merged.csv
+  # - sample_07_recording_03_merged.csv
+  # - sample_08_recording_03_merged.csv
+  # - sample_10_recording_03_merged.csv
+  # - sample_09_recording_03_merged.csv
+  # - sample_01_recording_04_merged.csv
+  # - sample_02_recording_04_merged.csv
+  # - sample_03_recording_04_merged.csv
+  # - sample_04_recording_04_merged.csv
+  # - sample_05_recording_04_merged.csv
+  # - sample_06_recording_04_merged.csv
+  # - sample_07_recording_04_merged.csv
+  # - sample_08_recording_04_merged.csv
+  # - sample_10_recording_04_merged.csv
+  # - sample_09_recording_04_merged.csv
+  # - sample_01_recording_05_merged.csv
+  # - sample_02_recording_05_merged.csv
+  # - sample_03_recording_05_merged.csv
+  # - sample_04_recording_05_merged.csv
+  # - sample_05_recording_05_merged.csv
+  # - sample_06_recording_05_merged.csv
+  # - sample_07_recording_05_merged.csv
+  # - sample_08_recording_05_merged.csv
+  # - sample_10_recording_05_merged.csv
+  # - sample_09_recording_05_merged.csv
+  # - sample_01_recording_06_merged.csv
+  # - sample_02_recording_06_merged.csv
+  # - sample_03_recording_06_merged.csv
+  # - sample_04_recording_06_merged.csv
+  # - sample_05_recording_06_merged.csv
+  # - sample_06_recording_06_merged.csv
+  # - sample_07_recording_06_merged.csv
+  # - sample_08_recording_06_merged.csv
+  # - sample_10_recording_06_merged.csv
+  # - sample_09_recording_06_merged.csv
+  # - sample_01_recording_07_merged.csv
+  # - sample_02_recording_07_merged.csv
+  # - sample_03_recording_07_merged.csv
+  # - sample_04_recording_07_merged.csv
+  # - sample_05_recording_07_merged.csv
+  # - sample_06_recording_07_merged.csv
+  # - sample_07_recording_07_merged.csv
+  # - sample_08_recording_07_merged.csv
+  # - sample_10_recording_07_merged.csv
+  # - sample_09_recording_07_merged.csv
+  # - sample_01_recording_08_merged.csv
+  # - sample_02_recording_08_merged.csv
+  # - sample_03_recording_08_merged.csv
+  # - sample_04_recording_08_merged.csv
+  # - sample_05_recording_08_merged.csv
+  # - sample_06_recording_08_merged.csv
+  # - sample_07_recording_08_merged.csv
+  # - sample_08_recording_08_merged.csv
+  # - sample_10_recording_08_merged.csv
+  # - sample_09_recording_08_merged.csv
+  # - sample_01_recording_09_merged.csv
+  # - sample_02_recording_09_merged.csv
+  # - sample_03_recording_09_merged.csv
+  # - sample_04_recording_09_merged.csv
+  # - sample_05_recording_09_merged.csv
+  # - sample_06_recording_09_merged.csv
+  # - sample_07_recording_09_merged.csv
+  # - sample_08_recording_09_merged.csv
+  # - sample_10_recording_09_merged.csv
+  # - sample_09_recording_09_merged.csv
+  # - sample_01_recording_10_merged.csv
+  # - sample_02_recording_10_merged.csv
+  # - sample_03_recording_10_merged.csv
+  # - sample_04_recording_10_merged.csv
+  # - sample_05_recording_10_merged.csv
+  # - sample_06_recording_10_merged.csv
+  # - sample_07_recording_10_merged.csv
+  # - sample_08_recording_10_merged.csv
+  # - sample_10_recording_10_merged.csv
+  # - sample_09_recording_10_merged.csv
   recursive: true # Whether to search recursively in subdirectories
   ignore_dirs: null # Directories to ignore during recursive search
   
@@ -121,7 +121,7 @@ dataset:
 # Model architecture configuration
 model:
   in_channels: 5 # Input features: time, x, y, pupil-left, pupil-right
-  hidden_channels: 64
+  hidden_channels: 8
   out_channels: 4
   output_scale: 10.0 # Output scaling factor for emotion scores
   use_preprocess_mlp: true
@@ -146,7 +146,7 @@ cross_validation:
   # Strategies: List of strategies to run. Options: "subject_loo", "recording_loo", "combined_loo"
   # Can be a single string or a list of strings
   strategies:
-    # - "subject_loo"
+    - "subject_loo"
     - "recording_loo"
     # - "combined_loo"
   
