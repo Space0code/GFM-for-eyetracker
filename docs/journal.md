@@ -142,6 +142,9 @@ Combined LOO	3.2	0.03
 **Comment from Gašper**: Pearson r may not be very suitable to observe since we don't care about the temporal order of emotions but rather about accuracy of predictions (MAE, maybe accuracy/f1/auc if we discretize).
 
 ## EDA of eSEEd_v2
+- 1.32 % of rows are NaN
+    - subeject 3: 19.5%
+    - subject 15: 16.9%
 - x, y, pupil sizes are distributed normally
     - x, y around 0.5 with std ~0.1
     - pupil size around 4 with std ~0.8
@@ -151,6 +154,9 @@ Combined LOO	3.2	0.03
     - anger has a lot of higher values
     - tenderness has very little higher values
     - sadness and disgust seem quite random
+- average emotion per recording
+    - recordings 4 and 5 are completely missmatched (reported vs intended emotion)
+    - recordings 8, 7, 6 are somewhat matched with intended 
 - scatter plots of x vs y colored by emotion
     - don't indicate any obvious position-related bias 
 - average emotion intensity by pupil size bins
@@ -161,5 +167,18 @@ Combined LOO	3.2	0.03
 - average pupil size by emotion intensity
     - very random (uniformly distributed)
 - unique emotion intensity looks okayish
+- 48/480 (10%) subject-recording combinations report total neutrality, i.e., all emotions are 0!
+- weird average pupil sizes for subject-recording pairs
+    - s-r = 6-10: left = 2.7, right = 7,6
+    - s-r = 6-1: left = 4.5, right = 2.5
+    - s-r = 13-8: left = 5.3, right = 10.5
+    - and many more...
+- subject outliers
+    - 41 - all emotions very high all the time except tenderness
+    - 48, 39, 26, 5 - all emotions extremely low all the time
+- recording outliers
+    - 2, 5 - tenderness high, other low - intended for 2, not for 5
+
+
 
 Idea: remove data with "bad" emotion reports. -- What is bad? 
