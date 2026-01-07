@@ -138,3 +138,28 @@ Split	MAE	Pearson r
 Subject LOO	3.0	0.33
 Recording LOO	3.2	-0.03
 Combined LOO	3.2	0.03
+
+**Comment from Gašper**: Pearson r may not be very suitable to observe since we don't care about the temporal order of emotions but rather about accuracy of predictions (MAE, maybe accuracy/f1/auc if we discretize).
+
+## EDA of eSEEd_v2
+- x, y, pupil sizes are distributed normally
+    - x, y around 0.5 with std ~0.1
+    - pupil size around 4 with std ~0.8
+- emotions (0-10) are not normally distributed
+    - 0 is very dominant
+    - otherwise looks near random, while emotion-dependent
+    - anger has a lot of higher values
+    - tenderness has very little higher values
+    - sadness and disgust seem quite random
+- scatter plots of x vs y colored by emotion
+    - don't indicate any obvious position-related bias 
+- average emotion intensity by pupil size bins
+    - sadness average emotion is the same for all bins
+    - disgust average intensity drops with large or small pupil size
+    - anger average intensity is slightly lower for average pupil size
+    - tenderness has overall lower intensity than others, dropping especially with larger pupil
+- average pupil size by emotion intensity
+    - very random (uniformly distributed)
+- unique emotion intensity looks okayish
+
+Idea: remove data with "bad" emotion reports. -- What is bad? 
