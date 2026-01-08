@@ -141,6 +141,58 @@ Combined LOO	3.2	0.03
 
 **Comment from Gašper**: Pearson r may not be very suitable to observe since we don't care about the temporal order of emotions but rather about accuracy of predictions (MAE, maybe accuracy/f1/auc if we discretize).
 
+### Analysis of model outputs (per-emotion)
+Analysis done in `src/emotions/results_analysis/analyse-mode-outputs.ipynb`.
+#### Baseline models
+For all models except Gaussian NB, the models regress the intensity (float). Gaussian NB predicts classes.
+
+- MeanEstimator
+    - always predicts mean of train set (slightly variable across folds)
+- LightGBM
+    - subject LOO
+        - is bounded to 0-10 range
+        - predictions normally distributed around the mean of the emotion
+    - recording LOO
+        - similar as above
+        - flatter gaussians
+- GaussianNB
+    - subject LOO
+        - predicts integers (classes)
+        - most common prediction: 4
+        - bad performance
+    - recording LOO
+        - similar as above
+- MLP
+    - subject LOO
+        - predictions not bounded to 0-10! (could add that to model definition); range is big (-10)-20
+        - otherwise predictions similar to LightGBM's
+    - recording LOO
+        - similar as above
+        - prediction range is bigger (-15)-30
+- SVM
+    - subject LOO
+        - predictions not bounded to 0-10, but close; (-2)-10
+        - lower intensities overall
+        - skewed normal distributions
+        - interesting for tenderness: almost always predicts ~0
+    - recording LOO
+        - similar as above
+        - flatter gaussians
+
+#### Spatio Temporal Hetero GCN
+- subject LOO
+    - predictions correctly bounded to 0-10 
+    - not normally distributed, but quite a "smooth" distribution
+    - peak aruond 3-4 for all but tenderness
+- recording LOO
+    - similar distribution as above but less "smooth"
+- difficult subjects based on MAE
+    - average MAE = 3
+    - a lot of subjects (>20) have MAE > 4 which means they are like random because max sensible MAE would be 5 if we predicted 5 all the time (scale 0-10)
+    - conclusion: can't expose any truly difficult subjects, except potentially subject 15 for emotion sadness only
+
+
+
 ## EDA of eSEEd_v2
 - 1.32 % of rows are NaN
     - subeject 3: 19.5%
