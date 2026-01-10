@@ -192,7 +192,6 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
     - conclusion: can't expose any truly difficult subjects, except potentially subject 15 for emotion sadness only
 
 
-
 ## EDA of eSEEd_v2
 - 1.32 % of rows are NaN
     - subeject 3: 19.5%
@@ -231,9 +230,16 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
 - recording outliers
     - 2, 5 - tenderness high, other low - intended for 2, not for 5
 
-
-
 Idea: remove data with "bad" emotion reports. -- What is bad? 
+
+## Which metrics to use and why?
+- MAE for absolute errors
+- correlations:
+    - Spearman ro coeff. for emotion intensity ranking across recordings
+    - CCC for absolute intensity agreement
+    - both above are permutation invariant
+    - calculate them on aggregated predictions
+
 
 ## What to infer?
 The data is labelled with intensities (0-10) for 4 distinct emotions. We contemplate different options.
