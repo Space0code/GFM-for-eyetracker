@@ -192,7 +192,6 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
     - conclusion: can't expose any truly difficult subjects, except potentially subject 15 for emotion sadness only
 
 
-
 ## EDA of eSEEd_v2
 - 1.32 % of rows are NaN
     - subeject 3: 19.5%
@@ -231,8 +230,6 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
 - recording outliers
     - 2, 5 - tenderness high, other low - intended for 2, not for 5
 
-
-
 Idea: remove data with "bad" emotion reports. -- What is bad? 
 
 ## Which metrics to use and why?
@@ -242,3 +239,70 @@ Idea: remove data with "bad" emotion reports. -- What is bad?
     - CCC for absolute intensity agreement
     - both above are permutation invariant
     - calculate them on aggregated predictions
+
+
+## What to infer?
+The data is labelled with intensities (0-10) for 4 distinct emotions. We contemplate different options.
+
+#### Option A — 4 continuous intensities (multi-target regression)
+- **Label**: y ∈ R^4 (sadness, anger, tenderness, disgust), e.g., 1–10 (or 0–10)
+- **Train**: one model outputs 4 numbers per recording (after temporal/graph pooling)
+- **Pros**: no information loss; supports mixed emotions; aligns with dataset’s native labels
+- **Cons**: subject rating-scale bias; noisier supervision; needs careful normalization/metrics
+- **Good metrics**: MAE/RMSE + Spearman ρ; CCC if you care about calibration
+
+#### Option B — Discretize each emotion into levels (4 parallel classifiers)
+- **Label**: for each emotion: {neutral, low, medium, high} (or {0,1,2,3})
+- **Train**: 4 heads (or one multi-head) classify per-emotion level
+- **Pros**: more robust to label noise; easier interpretation than exact numbers
+- **Cons**: threshold choices arbitrary; class imbalance likely; loses continuous info
+- **Tip**: use **ordinal classification** loss (better than plain softmax)
+
+#### Option C — Single dominant emotion + neutral (multi-class)
+- **Label**: argmax emotion among 4, plus **neutral** if all intensities < τ
+- **Train**: 5-class classifier (sad/ang/tend/disg/neutral)
+- **Pros**: simple; comparable to prior work; easy reporting
+- **Cons**: discards mixed states; sensitive to small top-2 differences; needs neutral threshold τ
+- **Tip**: add **mixed/uncertain** class if top-2 are close
+
+#### Option D — Two-stage: neutral detection then emotion estimation
+- **Label**: Stage 1: neutral vs emotional; Stage 2: (A) regress 4 intensities or (B) classify levels
+- **Train**: pipeline or multitask
+- **Pros**: handles neutral dominance; reduces imbalance for stage-2; clearer decision logic
+- **Cons**: error propagation; more complexity
+- **Use when**: many recordings are low-intensity / near neutral
+
+#### Option E — Multi-label presence/absence (4 binary labels)
+- **Label**: for each emotion: present (1) if intensity ≥ τ_e else absent (0)
+- **Train**: 4 sigmoid outputs; optionally add neutral = none present
+- **Pros**: supports co-occurrence; simpler than full regression
+- **Cons**: still threshold-dependent; ignores intensity magnitude
+- **Upgrade**: ordinal multi-label (presence + intensity bins)
+
+#### Option F — Relative / within-subject labels (rank or above-median)
+- **Label**: per subject, transform intensities to ranks or z-scores; or binary “above subject median”
+- **Train**: regress normalized targets or classify relative levels
+- **Pros**: reduces subject-scale bias; often improves cross-subject generalization
+- **Cons**: loses absolute meaning (“7” vs “3”); requires per-subject statistics
+- **Great for**: LOSO evaluation where rating styles differ widely
+
+#### Option G — Derived Valence/Arousal targets (auxiliary or primary)
+- **Label**: map emotions to VA (binary/3-class/continuous), predict valence and arousal
+- **Train**: VA-only or multitask (VA + 4D intensities)
+- **Pros**: coarser labels can be easier; useful regularizer; common in literature
+- **Cons**: less aligned with 4-emotion intensities; mapping can be simplistic
+- **Use as**: auxiliary task to stabilize representation learning
+
+#### Option H — Distributional / soft targets over emotions
+- **Label**: convert intensity vector to soft distribution p via softmax-like transform
+- **Train**: predict p with KL-div / cross-entropy (optionally also regress totals)
+- **Pros**: keeps mixed-emotion structure; avoids brittle argmax
+- **Cons**: p is not “true probability”; depends on temperature/scale choice
+- **Good when**: you want classification-style training but retain intensity information
+
+#### Option I — Ordinal regression (per emotion)
+- **Label**: ordered levels per emotion (e.g., 0–10, or {neutral, low, medium, high})
+- **Train**: for each emotion, predict K−1 threshold probabilities P(y ≥ k) with an ordinal loss (e.g., CORAL / cumulative BCE)
+- **Pros**: preserves ordering without assuming equal spacing; often more robust than pure regression for subjective ratings
+- **Cons**: slightly more complex; can suffer if some levels are very rare (imbalance across thresholds)
+- **Good when**: labels are ordered, subjective, and constant per recording; you want “intensity-aware” learning without arbitrary binning
