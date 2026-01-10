@@ -234,3 +234,11 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
 
 
 Idea: remove data with "bad" emotion reports. -- What is bad? 
+
+## Which metrics to use and why?
+- MAE for absolute errors
+- correlations:
+    - Spearman ro coeff. for emotion intensity ranking across recordings
+    - CCC for absolute intensity agreement
+    - both above are permutation invariant
+    - calculate them on aggregated predictions
