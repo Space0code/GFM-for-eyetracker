@@ -27,9 +27,9 @@ def train_and_evaluate(model, X_train, y_train, X_test, y_test, save_dir):
     train_metrics = model.evaluate(X_train, y_train)
     test_metrics = model.evaluate(X_test, y_test)
     
-    print(f"  Train MSE: {train_metrics['mse']:.4f} | Test MSE: {test_metrics['mse']:.4f}")
-    print(f"  Train MAE: {train_metrics['mae']:.4f} | Test MAE: {test_metrics['mae']:.4f}")
-    print(f"  Test R²: {test_metrics['r2']:.4f} | Test Pearson R: {test_metrics['pearson_r']:.4f}")
+    print(f"  Train MSE: {train_metrics['aggregated']['mse']:.4f} | Test MSE: {test_metrics['aggregated']['mse']:.4f}")
+    print(f"  Train MAE: {train_metrics['aggregated']['mae']:.4f} | Test MAE: {test_metrics['aggregated']['mae']:.4f}")
+    print(f"  Test R²: {test_metrics['aggregated']['r2']:.4f} | Test Pearson R: {test_metrics['aggregated']['pearson_r']:.4f}")
     
     # Save model
     model_dir = os.path.join(save_dir, model.name)
@@ -102,12 +102,12 @@ def main():
     print("\n" + "="*100)
     print("Results Summary")
     print("="*100)
-    print(f"{'Model':<15} | {'MSE':<8} | {'MAE':<8} | {'SD_Err':<8} | {'R²':<8} | {'D²':<8} | {'Pearson_R':<10}")
+    print(f"{'Model':<15} | {'MSE':<8} | {'MAE':<8} | {'SD_Err':<8} | {'R²':<8} | {'Pearson_R':<10}")
     print("-"*100)
     for res in results_summary:
         tm = res['test_metrics']
-        print(f"{res['model']:<15} | {tm['mse']:<8.4f} | {tm['mae']:<8.4f} | {tm['sd_error']:<8.4f} | "
-              f"{tm['r2']:<8.4f} | {tm['d2']:<8.4f} | {tm['pearson_r']:<10.4f}")
+        print(f"{res['model']:<15} | {tm['aggregated']['mse']:<8.4f} | {tm['aggregated']['mae']:<8.4f} | {tm['aggregated']['sd_error']:<8.4f} | "
+              f"{tm['aggregated']['r2']:<8.4f} | {tm['aggregated']['pearson_r']:<10.4f}")
     
     print(f"\nAll results saved to: {run_dir}")
 
