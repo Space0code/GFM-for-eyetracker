@@ -311,7 +311,7 @@ The data is labelled with intensities (0-10) for 4 distinct emotions. We contemp
 
 Simplify the problem as much as possible. Advance to the next step only when the current step works!
 
-0. Drop all NaNs, maybe interpolate the short sections. Combine GNN and baseline training to run both always (because baseline is fairly inexpensive and we are currently changing inputs a lot). Pick only the best few baselines: Mean, SVM, LightGBM.
+0. Drop all NaNs, maybe interpolate the short sections. Combine GNN and baseline training to run both always (because baseline is fairly inexpensive and we are currently changing inputs a lot). Pick only the best few baselines: Mean, SVM, LightGBM. Check big pupil size differences!
 1. Simplify to one emotion only (e.g., anger), drop other emotions. 
 2. Binary classification: 0 vs. >0 (for only one emotion).
 3. "something" on labels 1-10. Figure out that "something". Is it regression, ordinal regression, classification, ...?
