@@ -1,0 +1,49 @@
+cross_validation:
+  random_state: 42
+  strategies:
+  - subject_loo
+  - recording_loo
+  test_size: 0.2
+  val_size: 2
+dataset:
+  cache_dir: ./data/cache/
+  data_dir: ./data/processed/eSEEd_v2/
+  file_list: null
+  ignore_dirs: null
+  ks: 5
+  kt: 5
+  recursive: true
+  use_cache: true
+  window_length: 8
+  window_overlap: 0.0
+logging:
+  print_every: 10
+  results_dir: ./results/SpatioTemporalHeteroGNN/eSEEd_v2/
+  save_best_model: true
+  save_outputs_interval: null
+  save_validation_outputs: true
+metrics:
+- mse
+- mae
+- sd_error
+- r2
+- pearson_r
+model:
+  add_self_loops: false
+  aggr: mean
+  conv_type: GATConv
+  dropout_gnn: 0.1
+  dropout_head: 0.1
+  dropout_mlp: 0.1
+  hidden_channels: 8
+  in_channels: 5
+  out_channels: 4
+  output_scale: 10.0
+  use_preprocess_mlp: true
+training:
+  batch_size: 32
+  device: auto
+  grad_clip_max_norm: 1.0
+  learning_rate: 0.0001
+  num_epochs: 10
+  random_seed: 42

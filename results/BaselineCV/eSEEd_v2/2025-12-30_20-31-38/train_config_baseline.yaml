@@ -1,0 +1,19 @@
+cross_validation:
+  random_state: 42
+  strategies:
+  - subject_loo
+  - recording_loo
+  - combined_loo
+  val_size: 1
+dataset:
+  data_dir: ./data/processed/eSEEd_v2/
+  file_list: null
+  window_length: 10
+logging:
+  results_dir: ./results/BaselineCV/eSEEd_v2/
+metrics:
+- mse
+- mae
+- sd_error
+- r2
+- pearson_r
