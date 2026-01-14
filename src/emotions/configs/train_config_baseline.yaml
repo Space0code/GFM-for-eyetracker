@@ -9,7 +9,7 @@ cross_validation:
   strategies:
     - "subject_loo"
     - "recording_loo"
-    - "combined_loo"
+   # - "combined_loo"
   val_size: 1
   random_state: 42
 
