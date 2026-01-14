@@ -306,3 +306,16 @@ The data is labelled with intensities (0-10) for 4 distinct emotions. We contemp
 - **Pros**: preserves ordering without assuming equal spacing; often more robust than pure regression for subjective ratings
 - **Cons**: slightly more complex; can suffer if some levels are very rare (imbalance across thresholds)
 - **Good when**: labels are ordered, subjective, and constant per recording; you want “intensity-aware” learning without arbitrary binning
+
+### Let's go step by step
+
+Simplify the problem as much as possible. Advance to the next step only when the current step works!
+
+0. Drop all NaNs, maybe interpolate the short sections. Combine GNN and baseline training to run both always (because baseline is fairly inexpensive and we are currently changing inputs a lot). Pick only the best few baselines: Mean, SVM, LightGBM.
+1. Simplify to one emotion only (e.g., anger), drop other emotions. 
+2. Binary classification: 0 vs. >0 (for only one emotion).
+3. "something" on labels 1-10. Figure out that "something". Is it regression, ordinal regression, classification, ...?
+4. Two-stage model:
+    1. Binary 0 vs. >0.
+    2. "something" on labels 1-10.  
+5. Think about presenting preliminary work on a workshop/poster.
