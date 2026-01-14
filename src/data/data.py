@@ -63,7 +63,10 @@ class SpacioTemporalDataset(Dataset):
     Dataset for spatio-temporal graphs combining spatial and temporal edges.
     Each CSV becomes a graph (or multiple graphs) with both spatial and temporal connections.
     """
-    def __init__(self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
+    def __init__(
+            self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
+            kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, 
+            cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
         """
         Load all CSV files from directory and convert to graphs.
         If file_list is provided, search for the files in the list in root_dir.
