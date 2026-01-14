@@ -240,13 +240,19 @@ def compute_metrics(outputs, targets, emotion_names=None):
     # Aggregated metrics (flatten all emotions)
     y_pred_flat = y_pred.flatten()
     y_true_flat = y_true.flatten()
+
+    # Pearson correlation for aggregated
+    if np.std(y_true_flat) > 1e-8 and np.std(y_pred_flat) > 1e-8:
+        pearson_r= float(pearsonr(y_true_flat, y_pred_flat)[0])
+    else:
+        pearson_r = 0.0
     
     aggregated = {
         'mse': float(mean_squared_error(y_true_flat, y_pred_flat)),
         'mae': float(mean_absolute_error(y_true_flat, y_pred_flat)),
         'sd_error': float(np.std(y_true_flat - y_pred_flat)),
         'r2': float(r2_score(y_true_flat, y_pred_flat)),
-        'pearson_r': float(pearsonr(y_true_flat, y_pred_flat)[0])
+        'pearson_r': pearson_r
     }
     
     # Per-emotion metrics
@@ -265,7 +271,7 @@ def compute_metrics(outputs, targets, emotion_names=None):
             'mae': float(mean_absolute_error(y_true_emo, y_pred_emo)),
             'sd_error': float(np.std(y_true_emo - y_pred_emo)),
             'r2': float(r2_score(y_true_emo, y_pred_emo)),
-            'pearson_r': float(pearsonr(y_true_emo, y_pred_emo)[0])
+            'pearson_r': float(pearsonr(y_true_emo, y_pred_emo)[0]) if np.std(y_true_emo) > 1e-8 and np.std(y_pred_emo) > 1e-8 else 0.0
         }
     
     return {

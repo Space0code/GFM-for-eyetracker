@@ -61,7 +61,7 @@ class BaselineModel:
         }
         
         # Pearson correlation for aggregated
-        if np.std(y_flat) > 0 and np.std(y_pred_flat) > 0:
+        if np.std(y_flat) > 1e-8 and np.std(y_pred_flat) > 1e-8:
             aggregated['pearson_r'] = float(pearsonr(y_flat, y_pred_flat)[0])
         else:
             aggregated['pearson_r'] = 0.0
@@ -82,7 +82,7 @@ class BaselineModel:
             }
             
             # Pearson correlation per emotion
-            if np.std(y_emo) > 0 and np.std(y_pred_emo) > 0:
+            if np.std(y_emo) > 1e-8 and np.std(y_pred_emo) > 1e-8:
                 per_emotion[emo_name]['pearson_r'] = float(pearsonr(y_emo, y_pred_emo)[0])
             else:
                 per_emotion[emo_name]['pearson_r'] = 0.0
