@@ -57,16 +57,6 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-def drop_pairs_with_emotions_below_threshold(df: pd.DataFrame, emotion_cols: List[str] = None, threshold: float = -1) -> pd.DataFrame:
-    """Drop (subject, recording) pairs where all emotion values are below or equal to threshold."""
-    if threshold < 0:
-        return df
-    if emotion_cols is None:
-        emotion_cols = [col for col in df.columns if 'emotion' in col.lower()]
-    all_zero = (df[emotion_cols] <= threshold).all(axis=1)
-    filtered_df = df[~all_zero].reset_index(drop=True)
-    return filtered_df
-
   
 class SpacioTemporalDataset(Dataset):
     """
@@ -128,7 +118,14 @@ class SpacioTemporalDataset(Dataset):
         # pre-load all graphs into memory for simplicity
         for path in self.files:
             df = self._load_df(path)
-            df = drop_pairs_with_emotions_below_threshold(df, threshold=self.dropping_emotion_threshold)
+
+            # omit files where all emotion values are below or equal to threshold (if threshold < 0, we do not drop any)
+            emotion_cols = [col for col in df.columns if 'emotion' in col.lower()]
+            all_zero = (df[emotion_cols] <= self.dropping_emotion_threshold).all(axis=1)
+            if all_zero.all():
+                print(f"All emotion values below or equal to threshold {self.dropping_emotion_threshold} in file {path}. Skipping file.")
+                continue
+
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
                 if (window_slice.stop - window_slice.start) < max(self.kt, self.ks) + 1:
@@ -141,7 +138,6 @@ class SpacioTemporalDataset(Dataset):
                 if not self.emotion_names and hasattr(graph, 'emotion_names'):
                     self.emotion_names = graph.emotion_names
                 self.graphs.append(graph)
-
         print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
         
         # Save to cache
