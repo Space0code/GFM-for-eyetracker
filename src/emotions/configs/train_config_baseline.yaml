@@ -4,6 +4,7 @@ dataset:
   data_dir: "./data/processed/eSEEd_v2/"  # Path to processed CSVs
   file_list: null  # null = load all *.csv in data_dir
   window_length: 10  # seconds
+  dropping_emotion_threshold: 0  # Drop (subject, recording) pairs where all emotion values are <= this threshold
 
 cross_validation:
   strategies:

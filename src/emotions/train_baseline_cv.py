@@ -76,8 +76,16 @@ def aggregate_window(window_df: pd.DataFrame) -> Dict[str, float]:
             targets[col] = float(window_df[col].mean())
     return {**feats, **targets}
 
+def drop_pairs_with_emotions_below_threshold(df: pd.DataFrame, emotion_cols: List[str] = None, threshold: float = -1) -> pd.DataFrame:
+    """Drop (subject, recording) pairs where all emotion values are below or equal to threshold."""
+    if emotion_cols is None:
+        emotion_cols = [col for col in df.columns if 'emotion' in col.lower()]
+    all_zero = (df[emotion_cols] <= threshold).all(axis=1)
+    filtered_df = df[~all_zero].reset_index(drop=True)
+    return filtered_df
 
-def build_tabular_samples(data_dir: str, file_list: List[str], window_length: int) -> List[TabularWindowSample]:
+
+def build_tabular_samples(data_dir: str, file_list: List[str], window_length: int, dropping_emotion_threshold: float = -1) -> List[TabularWindowSample]:
     """Load CSVs and build windowed samples with subject/recording metadata."""
     root = Path(data_dir)
     files = [root / f for f in file_list] if file_list else list(root.glob('*.csv'))
@@ -85,6 +93,7 @@ def build_tabular_samples(data_dir: str, file_list: List[str], window_length: in
 
     for fpath in files:
         df = pd.read_csv(fpath).dropna()
+        df = drop_pairs_with_emotions_below_threshold(df, threshold=dropping_emotion_threshold) # drop rows with all emotions == 0
         if len(df) == 0:
             continue
         subject, recording = parse_subject_recording_from_name(fpath.name)
@@ -173,7 +182,8 @@ def main():
     samples = build_tabular_samples(
         data_dir=dataset_cfg['data_dir'],
         file_list=dataset_cfg.get('file_list'),
-        window_length=dataset_cfg.get('window_length', 10)
+        window_length=dataset_cfg.get('window_length', 10),
+        dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1)
     )
     print(f"Total windows: {len(samples)}")
 

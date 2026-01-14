@@ -431,7 +431,8 @@ def main():
             kt=dataset_cfg['kt'],
             ks=dataset_cfg['ks'],
             cache_dir=dataset_cfg.get('cache_dir'),
-            use_cache=dataset_cfg.get('use_cache', True)
+            use_cache=dataset_cfg.get('use_cache', True),
+            dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
         )
 
         # Get strategies (can be single string or list)

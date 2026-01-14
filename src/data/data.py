@@ -4,6 +4,7 @@ import glob
 import math
 import hashlib
 import pickle
+from typing import List
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import KDTree
@@ -56,13 +57,23 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+def drop_pairs_with_emotions_below_threshold(df: pd.DataFrame, emotion_cols: List[str] = None, threshold: float = -1) -> pd.DataFrame:
+    """Drop (subject, recording) pairs where all emotion values are below or equal to threshold."""
+    if threshold < 0:
+        return df
+    if emotion_cols is None:
+        emotion_cols = [col for col in df.columns if 'emotion' in col.lower()]
+    all_zero = (df[emotion_cols] <= threshold).all(axis=1)
+    filtered_df = df[~all_zero].reset_index(drop=True)
+    return filtered_df
+
   
 class SpacioTemporalDataset(Dataset):
     """
     Dataset for spatio-temporal graphs combining spatial and temporal edges.
     Each CSV becomes a graph (or multiple graphs) with both spatial and temporal connections.
     """
-    def __init__(self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, cache_dir: str = None, use_cache: bool = True):
+    def __init__(self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
         """
         Load all CSV files from directory and convert to graphs.
         If file_list is provided, search for the files in the list in root_dir.
@@ -78,7 +89,9 @@ class SpacioTemporalDataset(Dataset):
         - window_overlap: fraction in range [0, 1)
         - cache_dir: directory to store cached processed graphs (default: root_dir/.cache)
         - use_cache: whether to use caching (default: True)
+        - dropping_emotion_threshold: threshold to drop (subject, recording) pairs where all emotion values are <= this threshold
         """
+
         self.kt = kt  # temporal horizon
         self.ks = ks  # k for spatial kNN
         self.window_length = window_length
@@ -86,7 +99,8 @@ class SpacioTemporalDataset(Dataset):
         self.files = []
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
-        
+        self.dropping_emotion_threshold = dropping_emotion_threshold
+
         # Setup cache directory
         if cache_dir is None:
             cache_dir = os.path.join(root_dir, ".cache")
@@ -114,6 +128,7 @@ class SpacioTemporalDataset(Dataset):
         # pre-load all graphs into memory for simplicity
         for path in self.files:
             df = self._load_df(path)
+            df = drop_pairs_with_emotions_below_threshold(df, threshold=self.dropping_emotion_threshold)
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
                 if (window_slice.stop - window_slice.start) < max(self.kt, self.ks) + 1:
