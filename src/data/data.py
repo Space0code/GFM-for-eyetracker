@@ -238,6 +238,7 @@ class SpacioTemporalDataset(Dataset):
         
         #### Extract emotion labels (graph-level targets)
         emotion_cols = [col for col in df_window.columns if "emotion" in col.lower()]
+        emotion_cols = sorted(emotion_cols) # ensure consistent order
         if emotion_cols:
             # Average emotion values across the window for graph-level prediction
             y = torch.tensor(df_window[emotion_cols].mean(axis=0).values, dtype=torch.float32)
