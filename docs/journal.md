@@ -317,5 +317,5 @@ Simplify the problem as much as possible. Advance to the next step only when the
 3. "something" on labels 1-10. Figure out that "something". Is it regression, ordinal regression, classification, ...?
 4. Two-stage model:
     1. Binary 0 vs. >0.
-    2. "something" on labels 1-10.  
+    2. "something" on labels 1-10.
 5. Think about presenting preliminary work on a workshop/poster.

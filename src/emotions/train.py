@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scipy.stats import pearsonr
+from scipy.stats import spearmanr
 from datetime import datetime
 import sys
 import os
@@ -222,7 +222,7 @@ def create_splitter(strategy: str, dataset, val_size: int, random_state: int = N
                         f"Valid options: 'subject_loo', 'recording_loo', 'combined_loo'")
 
 
-def compute_metrics(outputs, targets, emotion_names=None):
+def compute_metrics(outputs, targets, emotion_names=None, eps = 1e-8):
     """Compute comprehensive evaluation metrics (aggregated and per-emotion).
     
     Args:
@@ -233,6 +233,20 @@ def compute_metrics(outputs, targets, emotion_names=None):
     Returns:
         dict: Dictionary containing aggregated and per-emotion metrics
     """
+    def _ccc(y_pred, y_true):
+        """Compute Concordance Correlation Coefficient (CCC) between outputs and targets."""
+        pred_mean = np.mean(y_pred, axis=0)
+        true_mean = np.mean(y_true, axis=0)
+        pred_var = np.var(y_pred, axis=0)
+        true_var = np.var(y_true, axis=0)
+        if pred_var < eps or true_var < eps:
+            return 0.0
+        
+        covariance = np.mean((y_pred - pred_mean) * (y_true - true_mean), axis=0)
+        
+        ccc = (2 * covariance) / (pred_var + true_var + (pred_mean - true_mean) ** 2)
+        return ccc
+
     # Convert to numpy
     y_pred = outputs.cpu().numpy()
     y_true = targets.cpu().numpy()
@@ -242,17 +256,17 @@ def compute_metrics(outputs, targets, emotion_names=None):
     y_true_flat = y_true.flatten()
 
     # Pearson correlation for aggregated
-    if np.std(y_true_flat) > 1e-8 and np.std(y_pred_flat) > 1e-8:
-        pearson_r= float(pearsonr(y_true_flat, y_pred_flat)[0])
+    if np.std(y_true_flat) > eps and np.std(y_pred_flat) > eps:
+        rho, _ = spearmanr(y_true_flat, y_pred_flat)
     else:
-        pearson_r = 0.0
+        rho = 0.0
     
     aggregated = {
         'mse': float(mean_squared_error(y_true_flat, y_pred_flat)),
         'mae': float(mean_absolute_error(y_true_flat, y_pred_flat)),
         'sd_error': float(np.std(y_true_flat - y_pred_flat)),
-        'r2': float(r2_score(y_true_flat, y_pred_flat)),
-        'pearson_r': pearson_r
+        'spearman': rho,
+        'ccc': _ccc(y_pred_flat, y_true_flat)
     }
     
     # Per-emotion metrics
@@ -266,12 +280,17 @@ def compute_metrics(outputs, targets, emotion_names=None):
         y_pred_emo = y_pred[:, i] if len(y_pred.shape) > 1 else y_pred
         y_true_emo = y_true[:, i] if len(y_true.shape) > 1 else y_true
         
+        if np.std(y_true_emo) > eps and np.std(y_pred_emo) > eps:
+            rho_emo, _ = spearmanr(y_true_emo, y_pred_emo)
+        else:
+            rho_emo = 0.0
+
         per_emotion[emo_name] = {
             'mse': float(mean_squared_error(y_true_emo, y_pred_emo)),
             'mae': float(mean_absolute_error(y_true_emo, y_pred_emo)),
             'sd_error': float(np.std(y_true_emo - y_pred_emo)),
-            'r2': float(r2_score(y_true_emo, y_pred_emo)),
-            'pearson_r': float(pearsonr(y_true_emo, y_pred_emo)[0]) if np.std(y_true_emo) > 1e-8 and np.std(y_pred_emo) > 1e-8 else 0.0
+            'spearman': rho_emo,
+            'ccc': _ccc(y_pred_emo, y_true_emo),
         }
     
     return {
@@ -563,15 +582,13 @@ def main():
                     if epoch % print_every == 0 or epoch == 1:
                         agg = val_metrics['aggregated']
                         print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {agg['mse']:.4f} | "
-                            f"MAE: {agg['mae']:.4f} | R²: {agg['r2']:.4f} | Pearson R: {agg['pearson_r']:.4f}"
+                            f"MAE: {agg['mae']:.4f} | Spearman rho: {agg['spearman']:.4f} | CCC: {agg['ccc']:.4f} "
                             f" | Time: {datetime.now() - epoch_start_time}")
                 
                 test_metrics[test_id] = evaluate(model, test_loader, device, emotion_names=emotion_names, save_outputs=False, save_dir=None) 
                 # print(f"Test Metrics for {test_name}: "
                 #     f"MSE: {test_metrics[test_id]['mse']:.4f} | "
                 #     f"MAE: {test_metrics[test_id]['mae']:.4f} | "
-                #     f"R²: {test_metrics[test_id]['r2']:.4f} | "
-                #     f"Pearson R: {test_metrics[test_id]['pearson_r']:.4f}")
                 # print(f"Time taken for {test_name}: {datetime.now() - fold_start_time}\n")
                 
                 # Clean up GPU memory after each fold

@@ -27,9 +27,20 @@ def train_and_evaluate(model, X_train, y_train, X_test, y_test, save_dir):
     train_metrics = model.evaluate(X_train, y_train)
     test_metrics = model.evaluate(X_test, y_test)
     
-    print(f"  Train MSE: {train_metrics['aggregated']['mse']:.4f} | Test MSE: {test_metrics['aggregated']['mse']:.4f}")
-    print(f"  Train MAE: {train_metrics['aggregated']['mae']:.4f} | Test MAE: {test_metrics['aggregated']['mae']:.4f}")
-    print(f"  Test R²: {test_metrics['aggregated']['r2']:.4f} | Test Pearson R: {test_metrics['aggregated']['pearson_r']:.4f}")
+    print("Train metrics - MSE: {:.4f} | MAE: {:.4f} | SD Error: {:.4f} | Spearman: {:.4f} | CCC: {:.4f}".format(
+        train_metrics['aggregated']['mse'],
+        train_metrics['aggregated']['mae'],
+        train_metrics['aggregated']['sd_error'],
+        train_metrics['aggregated']['spearman'],
+        train_metrics['aggregated']['ccc'],
+    ))
+    print("Test metrics  - MSE: {:.4f} | MAE: {:.4f} | SD Error: {:.4f} | Spearman: {:.4f} | CCC: {:.4f}".format(
+        test_metrics['aggregated']['mse'],
+        test_metrics['aggregated']['mae'],
+        test_metrics['aggregated']['sd_error'],
+        test_metrics['aggregated']['spearman'],
+        test_metrics['aggregated']['ccc'],
+    ))
     
     # Save model
     model_dir = os.path.join(save_dir, model.name)
@@ -102,13 +113,11 @@ def main():
     print("\n" + "="*100)
     print("Results Summary")
     print("="*100)
-    print(f"{'Model':<15} | {'MSE':<8} | {'MAE':<8} | {'SD_Err':<8} | {'R²':<8} | {'Pearson_R':<10}")
+    print(f"{'Model':<15} | {'MSE':<8} | {'MAE':<8} | {'SD_Err':<8} | {'Spearman':<8} | {'CCC':<8}")
     print("-"*100)
     for res in results_summary:
         tm = res['test_metrics']
-        print(f"{res['model']:<15} | {tm['aggregated']['mse']:<8.4f} | {tm['aggregated']['mae']:<8.4f} | {tm['aggregated']['sd_error']:<8.4f} | "
-              f"{tm['aggregated']['r2']:<8.4f} | {tm['aggregated']['pearson_r']:<10.4f}")
-    
+        print(f"{res['model']:<15} | {tm['aggregated']['mse']:<8.4f} | {tm['aggregated']['mae']:<8.4f} | {tm['aggregated']['sd_error']:<8.4f} | {tm['aggregated']['spearman']:<8.4f} | {tm['aggregated']['ccc']:<8.4f}")
     print(f"\nAll results saved to: {run_dir}")
 
 

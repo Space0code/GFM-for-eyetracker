@@ -168,5 +168,5 @@ metrics:
   - "mse"
   - "mae"
   - "sd_error"
-  - "r2"
-  - "pearson_r"
+  - "spearman"
+  - "ccc"
