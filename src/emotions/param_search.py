@@ -264,11 +264,11 @@ def main():
         print(f"\nSaved parameter search summary to: {summary_path}")
         
         # Create ordered summary by metrics
-        metric_cols = ['mse', 'mae', 'pearson_r', 'r2']
+        metric_cols = ['mse', 'mae']
         available_metrics = [m for m in metric_cols if m in df.columns]
         
         if available_metrics:
-            # Sort by: (1) MSE, (2) Pearson R (descending), (3) R2 (descending), (4) MAE
+            # Sort by: (1) MSE, (2) MAE
             sort_cols = []
             sort_ascending = []
             
@@ -276,13 +276,6 @@ def main():
                 sort_cols.append('mse')
                 sort_ascending.append(True)
             
-            if 'pearson_r' in available_metrics:
-                sort_cols.append('pearson_r')
-                sort_ascending.append(False)
-            
-            if 'r2' in available_metrics:
-                sort_cols.append('r2')
-                sort_ascending.append(False)
             
             if 'mae' in available_metrics:
                 sort_cols.append('mae')
@@ -296,7 +289,7 @@ def main():
             
             # Print top 5 configurations
             print("\n" + "="*100)
-            print("TOP 5 CONFIGURATIONS (by MSE, Pearson R, R2, MAE)")
+            print("TOP 5 CONFIGURATIONS (by MSE, MAE)")
             print("="*100)
             display_cols = ['config', 'strategy'] + param_columns + available_metrics
             display_cols = [c for c in display_cols if c in df_sorted.columns]
