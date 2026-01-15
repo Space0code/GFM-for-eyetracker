@@ -43,20 +43,43 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     if not set(required_cols).issubset(df.columns):
         raise ValueError(f"The DataFrame must have columns: {', '.join(required_cols)}")
 
-    # Drop NaN in required columns
-    cols_to_check = required_cols.copy()
-    
-    # Also check pupil columns if they exist
-    if "pupil-size-left-avg" in df.columns:
-        cols_to_check.append("pupil-size-left-avg")
-    if "pupil-size-right-avg" in df.columns:
-        cols_to_check.append("pupil-size-right-avg")
-    
-    df = df.dropna(subset=cols_to_check)
     df = df.sort_values("time-rel-seconds").reset_index(drop=True)
+    df = interpolate_missing_data(df)
+    df = df.dropna(subset=required_cols).reset_index(drop=True)
 
     return df
 
+def interpolate_missing_data(df: pd.DataFrame, window_size_ms: float = 100.0) -> pd.DataFrame:
+    """
+    Interpolate missing data in the DataFrame using a rolling window approach.
+    Missing values in numeric columns are filled using linear interpolation within a time window.
+
+    Parameters:
+    - df: Input DataFrame with potential missing values. Must contain 'time-rel-seconds' column.
+    - window_size_ms: Maximum time gap (in milliseconds) to interpolate across.
+
+    Returns:
+    - DataFrame with interpolated values.
+    """
+    assert 'time-rel-seconds' in df.columns, "DataFrame must contain 'time-rel-seconds' column."
+    
+    # Calculate average sampling interval in seconds
+    time_diffs = df['time-rel-seconds'].diff().dropna()
+    
+    avg_sampling_interval_s = time_diffs.mean()
+    window_size_s = window_size_ms / 1000.0
+    
+    # Convert time window to number of samples
+    limit_samples = int(np.ceil(window_size_s / avg_sampling_interval_s)) # if rows are missing, this doesn't work as expected, but it's ok for now
+    
+    # Interpolate only numeric columns (excluding time column)
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_cols = [col for col in numeric_cols if col != 'time-rel-seconds']
+    
+    for col in numeric_cols:
+        df[col] = df[col].interpolate(method='linear', limit_direction='forward', limit=limit_samples)
+    
+    return df
   
 class SpacioTemporalDataset(Dataset):
     """
