@@ -110,8 +110,8 @@ dataset:
   - sample_10_recording_10_merged.csv
   - sample_09_recording_10_merged.csv
   ignore_dirs: null
-  ks: 6
-  kt: 30
+  ks: 5
+  kt: 5
   recursive: true
   use_cache: true
   window_length: 60
