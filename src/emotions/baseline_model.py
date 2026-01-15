@@ -57,7 +57,6 @@ class BaselineModel:
             'mse': float(mean_squared_error(y_flat, y_pred_flat)),
             'mae': float(mean_absolute_error(y_flat, y_pred_flat)),
             'sd_error': float(np.std(y_flat - y_pred_flat)),
-            'r2': float(r2_score(y_flat, y_pred_flat))
         }
         
         # Pearson correlation for aggregated
@@ -78,7 +77,6 @@ class BaselineModel:
                 'mse': float(mean_squared_error(y_emo, y_pred_emo)),
                 'mae': float(mean_absolute_error(y_emo, y_pred_emo)),
                 'sd_error': float(np.std(y_emo - y_pred_emo)),
-                'r2': float(r2_score(y_emo, y_pred_emo))
             }
             
             # Pearson correlation per emotion
