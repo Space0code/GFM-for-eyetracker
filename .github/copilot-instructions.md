@@ -7,6 +7,7 @@
 - Use typing in function signatures
 - If instructions are not perfectly clear, ask for clarification before proceeding
 - Parameters should be configurable (no hardcoded paths or constants); if you want to hardcode something, ask for clarification first
+- you can hardcode values only in jupyter notebooks for exploration and visualization, never in scripts or modules
 - Do not write duplicate code; reuse when possible; if needed, create helper functions or classes
 - Log intermediate results when useful
 - Minimize dependencies
