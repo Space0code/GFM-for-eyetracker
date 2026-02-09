@@ -15,3 +15,4 @@
 - Make randomness, I/O, and assumptions explicit
 - Avoid data leakage and hidden side effects
 - Prefer readable vectorization over premature optimization
+- We always use conda environments; if you don't know which env to use, ask for clarification
