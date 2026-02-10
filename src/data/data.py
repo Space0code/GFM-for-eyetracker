@@ -174,7 +174,10 @@ class SpacioTemporalDataset(Dataset):
         return len(self.graphs)
 
     def __getitem__(self, idx):
-        return self.graphs[idx]
+        graph = self.graphs[idx]
+        # Add index as an attribute so we can retrieve metadata after batching
+        graph.idx = torch.tensor([idx], dtype=torch.long)
+        return graph
     
     def _get_cache_path(self, root_dir: str, recursive: bool, ignore_dirs: list, file_list: list) -> str:
         """

@@ -117,17 +117,29 @@ def build_tabular_samples(data_dir: str, file_list: List[str], window_length: in
     return samples
 
 
-def samples_to_xy(samples: List[TabularWindowSample], indices: np.ndarray) -> Tuple[pd.DataFrame, pd.DataFrame, List[str], List[str]]:
-    """Convert selected samples to X, y dataframes and column names."""
+def samples_to_xy(samples: List[TabularWindowSample], indices: np.ndarray) -> Tuple[pd.DataFrame, pd.DataFrame, List[Tuple[str, str]], List[str], List[str]]:
+    """Convert selected samples to X, y dataframes, metadata, and column names.
+
+    Returns:
+        X: Feature dataframe
+        y: Target dataframe
+        metadata: List of (subject, recording) tuples
+        feat_cols: Feature column names
+        target_cols: Target column names
+    """
     sel = [samples[int(i)] for i in indices]
     if not sel:
         empty = pd.DataFrame()
-        return empty, empty, [], []
+        return empty, empty, [], [], []
+
     feat_cols = sorted(sel[0].features.keys())
     target_cols = sorted(sel[0].targets.keys())
+
     X = pd.DataFrame([[s.features.get(c, np.nan) for c in feat_cols] for s in sel], columns=feat_cols)
     y = pd.DataFrame([[s.targets.get(c, np.nan) for c in target_cols] for s in sel], columns=target_cols)
-    return X, y, feat_cols, target_cols
+    metadata = [(s.subject, s.recording) for s in sel]
+
+    return X, y, metadata, feat_cols, target_cols
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -146,6 +158,75 @@ def create_splitter(strategy: str, samples: List[TabularWindowSample], val_size:
         return CombinedLOOSplitter(samples, val_size=val_size, random_state=random_state)
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
+
+
+def get_baselines_from_config(baseline_cfg: Dict[str, Any]):
+    """Get baseline models based on config selection.
+    
+    Args:
+        baseline_cfg: Baseline configuration dict with 'models' and 'hyperparameters'
+    
+    Returns:
+        List of baseline model instances
+    """
+    all_baselines = get_all_baselines()
+    selected_models = baseline_cfg.get('models', [])
+    hyperparams = baseline_cfg.get('hyperparameters', {})
+    
+    baselines = []
+    for baseline in all_baselines:
+        if baseline.name in selected_models:
+            if baseline.name in hyperparams and hyperparams[baseline.name]:
+                # Update model with hyperparameters
+                for key, value in hyperparams[baseline.name].items():
+                    if hasattr(baseline.model, key):
+                        setattr(baseline.model, key, value)
+            baselines.append(baseline)
+    
+    return baselines
+
+
+def train_baselines_fold(baseline_cfg: Dict[str, Any], train_idx: np.ndarray, val_idx: np.ndarray, 
+                         test_idx: np.ndarray, tabular_samples: List[TabularWindowSample], 
+                         fold_dir: str, metric_names: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Train all baseline models for one fold.
+    
+    Args:
+        baseline_cfg: Baseline configuration dict
+        train_idx: Training indices
+        val_idx: Validation indices
+        test_idx: Test indices
+        tabular_samples: List of tabular samples
+        fold_dir: Directory to save fold results
+        metric_names: List of metric names to compute
+    
+    Returns:
+        Dictionary mapping baseline names to their test metrics
+    """
+    X_train, y_train, metadata_train, feat_cols, target_cols = samples_to_xy(tabular_samples, train_idx)
+    X_val, y_val, metadata_val, _, _ = samples_to_xy(tabular_samples, val_idx)
+    X_test, y_test, metadata_test, _, _ = samples_to_xy(tabular_samples, test_idx)
+    
+    baselines = get_baselines_from_config(baseline_cfg)
+    baseline_results = {}
+    
+    for baseline in baselines:
+        baseline.fit(X_train, y_train)
+        test_metrics = baseline.evaluate(X_test, y_test, emotion_names=target_cols, metadata=metadata_test)
+        baseline_results[baseline.name] = test_metrics
+        
+        # Save model
+        model_dir = os.path.join(fold_dir, baseline.name)
+        os.makedirs(model_dir, exist_ok=True)
+        with open(os.path.join(model_dir, 'model.pkl'), 'wb') as f:
+            pickle.dump(baseline, f)
+        
+        # Save predictions
+        y_pred = baseline.predict(X_test)
+        np.save(os.path.join(model_dir, 'y_pred.npy'), y_pred)
+        np.save(os.path.join(model_dir, 'y_true.npy'), y_test.to_numpy())
+    
+    return baseline_results
 
 
 def parse_args():
@@ -219,10 +300,10 @@ def main():
         fold_num = 0
         for train_idx, val_idx, test_idx in splitter.split():
             fold_num += 1
-            # Prepare data matrices
-            X_train, y_train, feat_cols, target_cols = samples_to_xy(samples, train_idx)
-            X_val, y_val, _, _ = samples_to_xy(samples, val_idx)
-            X_test, y_test, _, _ = samples_to_xy(samples, test_idx)
+            # Prepare data matrices with metadata
+            X_train, y_train, metadata_train, feat_cols, target_cols = samples_to_xy(samples, train_idx)
+            X_val, y_val, metadata_val, _, _ = samples_to_xy(samples, val_idx)
+            X_test, y_test, metadata_test, _, _ = samples_to_xy(samples, test_idx)
 
             print(f"Fold {fold_num}: train={len(train_idx)} | val={len(val_idx)} | test={len(test_idx)}")
 
@@ -230,8 +311,12 @@ def main():
             for baseline in baselines:
                 # Fit on train only (minimal)
                 baseline.fit(X_train, y_train)
-                # Evaluate on test (returns nested dict with aggregated and per_emotion)
-                test_metrics = baseline.evaluate(X_test, y_test)
+                # Evaluate on test with metadata (returns nested dict with standard and per_pair_aggregated)
+                test_metrics = baseline.evaluate(
+                    X_test, y_test, 
+                    emotion_names=target_cols, 
+                    metadata=metadata_test
+                )
                 per_baseline_metrics[baseline.name].append(test_metrics)
 
                 # Optionally save model per fold
@@ -248,38 +333,81 @@ def main():
         strategy_results: Dict[str, Dict[str, Any]] = {}
         for bname, metrics_list in per_baseline_metrics.items():
             if metrics_list:
-                # Aggregated metrics
-                agg_metrics = {m: float(np.nanmean([mres['aggregated'][m] for mres in metrics_list])) for m in metrics_cfg}
-                
-                # Per-emotion metrics
-                per_emo = {}
                 first_result = metrics_list[0]
-                if 'per_emotion' in first_result and first_result['per_emotion']:
-                    for emo_name in first_result['per_emotion'].keys():
-                        per_emo[emo_name] = {m: float(np.nanmean([mres['per_emotion'][emo_name][m] for mres in metrics_list])) for m in metrics_cfg}
-                
-                strategy_results[bname] = {
-                    'aggregated': agg_metrics,
-                    'per_emotion': per_emo
+                has_pair_metrics = 'per_pair_aggregated' in first_result and first_result['per_pair_aggregated'] is not None
+
+                # ===== STANDARD METRICS =====
+                # Aggregated metrics (standard)
+                agg_metrics_std = {m: float(np.nanmean([mres['standard']['aggregated'][m] for mres in metrics_list])) for m in metrics_cfg}
+
+                # Per-emotion metrics (standard)
+                per_emo_std = {}
+                if 'per_emotion' in first_result['standard'] and first_result['standard']['per_emotion']:
+                    for emo_name in first_result['standard']['per_emotion'].keys():
+                        per_emo_std[emo_name] = {m: float(np.nanmean([mres['standard']['per_emotion'][emo_name][m] for mres in metrics_list])) for m in metrics_cfg}
+
+                result = {
+                    'standard': {
+                        'aggregated': agg_metrics_std,
+                        'per_emotion': per_emo_std
+                    }
                 }
+
+                # ===== PER-PAIR AGGREGATED METRICS =====
+                if has_pair_metrics:
+                    # Aggregated metrics (per-pair)
+                    agg_metrics_pair = {m: float(np.nanmean([mres['per_pair_aggregated']['aggregated'][m] for mres in metrics_list if mres['per_pair_aggregated'] is not None])) for m in metrics_cfg}
+
+                    # Per-emotion metrics (per-pair)
+                    per_emo_pair = {}
+                    if 'per_emotion' in first_result['per_pair_aggregated'] and first_result['per_pair_aggregated']['per_emotion']:
+                        for emo_name in first_result['per_pair_aggregated']['per_emotion'].keys():
+                            per_emo_pair[emo_name] = {m: float(np.nanmean([mres['per_pair_aggregated']['per_emotion'][emo_name][m] for mres in metrics_list if mres['per_pair_aggregated'] is not None])) for m in metrics_cfg}
+
+                    result['per_pair_aggregated'] = {
+                        'aggregated': agg_metrics_pair,
+                        'per_emotion': per_emo_pair
+                    }
+                else:
+                    result['per_pair_aggregated'] = None
+
+                strategy_results[bname] = result
             else:
                 strategy_results[bname] = {
-                    'aggregated': {m: float('nan') for m in metrics_cfg},
-                    'per_emotion': {}
+                    'standard': {
+                        'aggregated': {m: float('nan') for m in metrics_cfg},
+                        'per_emotion': {}
+                    },
+                    'per_pair_aggregated': None
                 }
 
         # Save CSV for this strategy
         df_rows = []
         for bname, result_dict in strategy_results.items():
             row = {'baseline': bname}
-            # Aggregated metrics with 'agg_' prefix
+
+            # Standard aggregated metrics with 'std_agg_' prefix
             for m in metrics_cfg:
-                row[f'agg_{m}'] = result_dict['aggregated'][m]
-            # Per-emotion metrics
-            if result_dict['per_emotion']:
-                for emo_name, emo_metrics in result_dict['per_emotion'].items():
+                row[f'std_agg_{m}'] = result_dict['standard']['aggregated'][m]
+
+            # Standard per-emotion metrics
+            if result_dict['standard']['per_emotion']:
+                for emo_name, emo_metrics in result_dict['standard']['per_emotion'].items():
                     for m in metrics_cfg:
-                        row[f'{emo_name}_{m}'] = emo_metrics[m]
+                        row[f'std_{emo_name}_{m}'] = emo_metrics[m]
+
+            # Per-pair aggregated metrics (if available)
+            if result_dict['per_pair_aggregated'] is not None:
+                # Aggregated metrics with 'pair_agg_' prefix
+                for m in metrics_cfg:
+                    row[f'pair_agg_{m}'] = result_dict['per_pair_aggregated']['aggregated'][m]
+
+                # Per-emotion metrics
+                if result_dict['per_pair_aggregated']['per_emotion']:
+                    for emo_name, emo_metrics in result_dict['per_pair_aggregated']['per_emotion'].items():
+                        for m in metrics_cfg:
+                            row[f'pair_{emo_name}_{m}'] = emo_metrics[m]
+
             df_rows.append(row)
         df = pd.DataFrame(df_rows)
         csv_path = os.path.join(strategy_dir, 'summary.csv')
@@ -291,67 +419,137 @@ def main():
 
         # Print concise summary
         print("\nStrategy Summary (averaged across folds):")
+
+        # Check if we have per_pair_aggregated metrics
+        first_baseline = next(iter(strategy_results.values()))
+        has_pair_metrics = 'per_pair_aggregated' in first_baseline and first_baseline['per_pair_aggregated'] is not None
+
+        # ===== STANDARD METRICS =====
+        print("\n[STANDARD APPROACH: Concatenate all predictions, then compute metrics]")
         print("\nAggregated Metrics:")
         print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
         print("-"*100)
         for bname, result_dict in strategy_results.items():
-            metric_str = " | ".join([f"{result_dict['aggregated'][m]:<10.4f}" for m in metrics_cfg])
+            metric_str = " | ".join([f"{result_dict['standard']['aggregated'][m]:<10.4f}" for m in metrics_cfg])
             print(f"{bname:<20} | {metric_str}")
-        
-        # Per-emotion summary
+
+        # Per-emotion summary (standard)
         if strategy_results:
-            first_baseline = next(iter(strategy_results.values()))
-            if first_baseline['per_emotion']:
-                for emo_name in first_baseline['per_emotion'].keys():
+            if first_baseline['standard']['per_emotion']:
+                for emo_name in first_baseline['standard']['per_emotion'].keys():
                     print(f"\n{emo_name}:")
                     print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
                     print("-"*100)
                     for bname, result_dict in strategy_results.items():
-                        emo_str = " | ".join([f"{result_dict['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                        emo_str = " | ".join([f"{result_dict['standard']['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
                         print(f"{bname:<20} | {emo_str}")
+
+        # ===== PER-PAIR AGGREGATED METRICS =====
+        if has_pair_metrics:
+            print("\n" + "-"*100)
+            print("[PER-PAIR AGGREGATED: Compute per (subject, recording) pair, then aggregate]")
+            print("\nAggregated Metrics:")
+            print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+            print("-"*100)
+            for bname, result_dict in strategy_results.items():
+                if result_dict['per_pair_aggregated'] is not None:
+                    metric_str = " | ".join([f"{result_dict['per_pair_aggregated']['aggregated'][m]:<10.4f}" for m in metrics_cfg])
+                    print(f"{bname:<20} | {metric_str}")
+
+            # Per-emotion summary (per-pair)
+            if first_baseline['per_pair_aggregated']['per_emotion']:
+                for emo_name in first_baseline['per_pair_aggregated']['per_emotion'].keys():
+                    print(f"\n{emo_name}:")
+                    print(f"{'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+                    print("-"*100)
+                    for bname, result_dict in strategy_results.items():
+                        if result_dict['per_pair_aggregated'] is not None:
+                            emo_str = " | ".join([f"{result_dict['per_pair_aggregated']['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                            print(f"{bname:<20} | {emo_str}")
+
 
     # Final comparison across strategies
     if len(strategies) > 1:
         print("\n" + "="*100)
         print("FINAL COMPARISON ACROSS STRATEGIES (averaged per baseline)")
         print("="*100)
-        
+
+        # Check if we have per_pair_aggregated metrics
+        first_strategy = next(iter(all_strategies_results.values()))
+        first_baseline = next(iter(first_strategy.values()))
+        has_pair_metrics = 'per_pair_aggregated' in first_baseline and first_baseline['per_pair_aggregated'] is not None
+
+        # ===== STANDARD METRICS =====
+        print("\n[STANDARD APPROACH: Concatenate all predictions, then compute metrics]")
         print("\nAggregated Metrics:")
         print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
         print("-"*120)
         rows = []
         for strategy, res in all_strategies_results.items():
             for bname, result_dict in res.items():
-                metric_str = " | ".join([f"{result_dict['aggregated'][m]:<10.4f}" for m in metrics_cfg])
+                metric_str = " | ".join([f"{result_dict['standard']['aggregated'][m]:<10.4f}" for m in metrics_cfg])
                 print(f"{strategy:<20} | {bname:<20} | {metric_str}")
                 row = {'strategy': strategy, 'baseline': bname}
+                # Add standard metrics
                 for m in metrics_cfg:
-                    row[f'agg_{m}'] = result_dict['aggregated'][m]
-                # Add per-emotion to row
-                if result_dict['per_emotion']:
-                    for emo_name, emo_metrics in result_dict['per_emotion'].items():
+                    row[f'std_agg_{m}'] = result_dict['standard']['aggregated'][m]
+                # Add standard per-emotion
+                if result_dict['standard']['per_emotion']:
+                    for emo_name, emo_metrics in result_dict['standard']['per_emotion'].items():
                         for m in metrics_cfg:
-                            row[f'{emo_name}_{m}'] = emo_metrics[m]
+                            row[f'std_{emo_name}_{m}'] = emo_metrics[m]
+                # Add per-pair metrics if available
+                if result_dict['per_pair_aggregated'] is not None:
+                    for m in metrics_cfg:
+                        row[f'pair_agg_{m}'] = result_dict['per_pair_aggregated']['aggregated'][m]
+                    if result_dict['per_pair_aggregated']['per_emotion']:
+                        for emo_name, emo_metrics in result_dict['per_pair_aggregated']['per_emotion'].items():
+                            for m in metrics_cfg:
+                                row[f'pair_{emo_name}_{m}'] = emo_metrics[m]
                 rows.append(row)
-        
-        # Per-emotion comparison
+
+        # Per-emotion comparison (standard)
         if all_strategies_results:
-            first_strategy = next(iter(all_strategies_results.values()))
-            first_baseline = next(iter(first_strategy.values()))
-            if first_baseline['per_emotion']:
-                for emo_name in first_baseline['per_emotion'].keys():
+            if first_baseline['standard']['per_emotion']:
+                for emo_name in first_baseline['standard']['per_emotion'].keys():
                     print(f"\n{emo_name}:")
                     print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
                     print("-"*120)
                     for strategy, res in all_strategies_results.items():
                         for bname, result_dict in res.items():
-                            emo_str = " | ".join([f"{result_dict['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                            emo_str = " | ".join([f"{result_dict['standard']['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
                             print(f"{strategy:<20} | {bname:<20} | {emo_str}")
-        
+
+        # ===== PER-PAIR AGGREGATED METRICS =====
+        if has_pair_metrics:
+            print("\n" + "="*100)
+            print("[PER-PAIR AGGREGATED: Compute per (subject, recording) pair, then aggregate]")
+            print("\nAggregated Metrics:")
+            print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+            print("-"*120)
+            for strategy, res in all_strategies_results.items():
+                for bname, result_dict in res.items():
+                    if result_dict['per_pair_aggregated'] is not None:
+                        metric_str = " | ".join([f"{result_dict['per_pair_aggregated']['aggregated'][m]:<10.4f}" for m in metrics_cfg])
+                        print(f"{strategy:<20} | {bname:<20} | {metric_str}")
+
+            # Per-emotion comparison (per-pair)
+            if first_baseline['per_pair_aggregated']['per_emotion']:
+                for emo_name in first_baseline['per_pair_aggregated']['per_emotion'].keys():
+                    print(f"\n{emo_name}:")
+                    print(f"{'Strategy':<20} | {'Baseline':<20} | " + " | ".join([f"{m.upper():<10}" for m in metrics_cfg]))
+                    print("-"*120)
+                    for strategy, res in all_strategies_results.items():
+                        for bname, result_dict in res.items():
+                            if result_dict['per_pair_aggregated'] is not None:
+                                emo_str = " | ".join([f"{result_dict['per_pair_aggregated']['per_emotion'][emo_name][m]:<10.4f}" for m in metrics_cfg])
+                                print(f"{strategy:<20} | {bname:<20} | {emo_str}")
+
         df = pd.DataFrame(rows)
         csv_path = os.path.join(run_dir, 'all_strategies_comparison.csv')
         df.to_csv(csv_path, index=False)
         print(f"\nSaved final comparison to: {csv_path}")
+
 
     print(f"\nAll results saved to: {run_dir}")
     end_time = datetime.now()

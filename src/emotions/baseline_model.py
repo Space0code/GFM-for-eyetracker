@@ -1,201 +1,175 @@
 """
 Baseline models for emotion prediction.
+
+Supported models: Mean, SVM, LightGBM
 """
 
 import numpy as np
 from sklearn.svm import SVR
 from sklearn.multioutput import MultiOutputRegressor
-from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import StandardScaler
-from sklearn.neural_network import MLPRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scipy.stats import pearsonr
 import lightgbm as lgb
+
+from emotions.metrics import compute_metrics
 
 
 class BaselineModel:
     """Base class for baseline models."""
-    
+
     def __init__(self, name):
         self.name = name
         self.model = None
-    
+
     def fit(self, X_train, y_train):
         """Train model."""
         self.model.fit(X_train, y_train)
-    
+
     def predict(self, X):
         """Predict on data."""
         return self.model.predict(X)
-    
-    def evaluate(self, X, y, emotion_names=None):
-        """Compute comprehensive evaluation metrics (aggregated and per-emotion).
-        
+
+    def evaluate(self, X, y, emotion_names=None, metadata=None, pair_aggregation_fn=np.mean):
+        """Compute comprehensive evaluation metrics.
+
         Args:
-            X: Input features
-            y: Target values (can be DataFrame with column names or array)
-            emotion_names: Optional list of emotion names (extracted from y if DataFrame)
-        
+            X: Input features (DataFrame or array)
+            y: Target values (DataFrame or array)
+            emotion_names: Optional list of emotion names
+            metadata: Optional list of (subject, recording) tuples
+            pair_aggregation_fn: Function to aggregate per-pair metrics (default: np.mean)
+
         Returns:
-            dict: Dictionary containing aggregated and per-emotion metrics
+            dict: Dictionary containing 'standard' and 'per_pair_aggregated' metrics
         """
         y_pred = self.predict(X)
-        y_array = y.values if hasattr(y, 'values') else y
-        y_pred_array = y_pred.values if hasattr(y_pred, 'values') else y_pred
-        
-        # Extract emotion names from DataFrame columns if available
-        if emotion_names is None and hasattr(y, 'columns'):
-            emotion_names = list(y.columns)
-        elif emotion_names is None:
-            emotion_names = [f'emotion_{i}' for i in range(y_array.shape[1] if len(y_array.shape) > 1 else 1)]
-        
-        # Aggregated metrics (flatten all emotions)
-        y_flat = y_array.flatten()
-        y_pred_flat = y_pred_array.flatten()
-        
-        aggregated = {
-            'mse': float(mean_squared_error(y_flat, y_pred_flat)),
-            'mae': float(mean_absolute_error(y_flat, y_pred_flat)),
-            'sd_error': float(np.std(y_flat - y_pred_flat)),
-        }
-        
-        # Pearson correlation for aggregated
-        if np.std(y_flat) > 1e-8 and np.std(y_pred_flat) > 1e-8:
-            aggregated['pearson_r'] = float(pearsonr(y_flat, y_pred_flat)[0])
-        else:
-            aggregated['pearson_r'] = 0.0
-        
-        # Per-emotion metrics
-        per_emotion = {}
-        num_emotions = y_array.shape[1] if len(y_array.shape) > 1 else 1
-        
-        for i, emo_name in enumerate(emotion_names[:num_emotions]):
-            y_emo = y_array[:, i] if len(y_array.shape) > 1 else y_array
-            y_pred_emo = y_pred_array[:, i] if len(y_pred_array.shape) > 1 else y_pred_array
-            
-            per_emotion[emo_name] = {
-                'mse': float(mean_squared_error(y_emo, y_pred_emo)),
-                'mae': float(mean_absolute_error(y_emo, y_pred_emo)),
-                'sd_error': float(np.std(y_emo - y_pred_emo)),
-            }
-            
-            # Pearson correlation per emotion
-            if np.std(y_emo) > 1e-8 and np.std(y_pred_emo) > 1e-8:
-                per_emotion[emo_name]['pearson_r'] = float(pearsonr(y_emo, y_pred_emo)[0])
-            else:
-                per_emotion[emo_name]['pearson_r'] = 0.0
-        
-        return {
-            'aggregated': aggregated,
-            'per_emotion': per_emotion
-        }
+        return compute_metrics(
+            y_pred, y,
+            emotion_names=emotion_names,
+            metadata=metadata,
+            pair_aggregation_fn=pair_aggregation_fn
+        )
 
 
 class MeanEstimator(BaselineModel):
     """Predict mean of training targets."""
     
     def __init__(self):
-        super().__init__("MeanEstimator")
+        super().__init__("Mean")
     
     def fit(self, X_train, y_train):
-        y_array = y_train.values if hasattr(y_train, 'values') else y_train
-        self.mean_ = y_array.mean(axis=0)
+        y_array = y_train.values if hasattr(y_train, 'values') else np.array(y_train)
+        self.mean_ = np.array(y_array.mean(axis=0)).flatten()
     
     def predict(self, X):
-        return np.tile(self.mean_, (len(X), 1))
+        X_len = len(X) if hasattr(X, '__len__') else X.shape[0]
+        return np.tile(self.mean_, (X_len, 1))
 
 
 class SVMBaseline(BaselineModel):
     """SVM regressor with RBF kernel and feature normalization."""
     
-    def __init__(self):
+    def __init__(self, n_jobs=-1, **kwargs):
         super().__init__("SVM")
         self.scaler = StandardScaler()
-        self.model = MultiOutputRegressor(SVR(kernel='rbf', C=1.0, epsilon=0.1))
-    
-    def fit(self, X_train, y_train):
-        """Train model with normalized features."""
-        X_scaled = self.scaler.fit_transform(X_train)
-        self.model.fit(X_scaled, y_train)
-    
-    def predict(self, X):
-        """Predict on normalized data."""
-        X_scaled = self.scaler.transform(X)
-        return self.model.predict(X_scaled)
-
-
-class GaussianNBBaseline(BaselineModel):
-    """Gaussian Naive Bayes (discretized for regression)."""
-    
-    def __init__(self):
-        super().__init__("GaussianNB")
-        self.model = MultiOutputRegressor(GaussianNB())
-
-
-class MLPBaseline(BaselineModel):
-    """2-layer Multi-Layer Perceptron."""
-    
-    def __init__(self, hidden_layer_sizes=(512, 128)):
-        super().__init__("MLP")
-        self.scaler = StandardScaler()
-        self.model = MLPRegressor(
-            hidden_layer_sizes=hidden_layer_sizes,
-            activation='relu',
-            solver='adam',
-            max_iter=500,
-            random_state=42,
-            early_stopping=True,
-            validation_fraction=0.1,
-            verbose=False
+        self.model = MultiOutputRegressor(
+            SVR(kernel='rbf', C=1.0, epsilon=0.1),
+            n_jobs=n_jobs
         )
+        self.n_jobs = n_jobs
     
     def fit(self, X_train, y_train):
         """Train model with normalized features."""
-        X_scaled = self.scaler.fit_transform(X_train)
-        self.model.fit(X_scaled, y_train)
+        X_array = X_train.values if hasattr(X_train, 'values') else np.array(X_train)
+        y_array = y_train.values if hasattr(y_train, 'values') else np.array(y_train)
+        X_scaled = self.scaler.fit_transform(X_array)
+        self.model.fit(X_scaled, y_array)
     
     def predict(self, X):
         """Predict on normalized data."""
-        X_scaled = self.scaler.transform(X)
+        X_array = X.values if hasattr(X, 'values') else np.array(X)
+        X_scaled = self.scaler.transform(X_array)
         return self.model.predict(X_scaled)
 
 
 class LGBMBaseline(BaselineModel):
     """LightGBM gradient boosting."""
     
-    def __init__(self, n_estimators=100):
+    def __init__(self, n_estimators=100, n_jobs=-1, verbose=-1, **kwargs):
         super().__init__("LightGBM")
         self.n_estimators = n_estimators
+        self.n_jobs = n_jobs
+        self.verbose = verbose
         self.models = []
     
     def fit(self, X_train, y_train):
         """Train separate model for each target."""
         self.models = []
-        y_array = y_train.values if hasattr(y_train, 'values') else y_train
+        X_array = X_train.values if hasattr(X_train, 'values') else np.array(X_train)
+        y_array = y_train.values if hasattr(y_train, 'values') else np.array(y_train)
         for i in range(y_array.shape[1]):
             model = lgb.LGBMRegressor(
                 n_estimators=self.n_estimators,
                 learning_rate=0.05,
                 max_depth=5,
-                verbose=-1
+                n_jobs=self.n_jobs,
+                verbose=self.verbose
             )
-            model.fit(X_train, y_array[:, i])
+            model.fit(X_array, y_array[:, i])
             self.models.append(model)
     
     def predict(self, X):
         """Predict with all models."""
-        predictions = np.zeros((len(X), len(self.models)))
+        X_array = X.values if hasattr(X, 'values') else np.array(X)
+        predictions = np.zeros((len(X_array), len(self.models)))
         for i, model in enumerate(self.models):
-            predictions[:, i] = model.predict(X)
+            predictions[:, i] = model.predict(X_array)
         return predictions
 
 
-def get_all_baselines():
-    """Return list of all baseline models."""
+def get_all_baselines(**hyperparams):
+    """Return list of all baseline models with optional hyperparameters.
+    
+    Args:
+        **hyperparams: Dict of model_name -> dict of hyperparameters
+        
+    Returns:
+        List of baseline model instances
+    """
+    models = {
+        'Mean': MeanEstimator,
+        'SVM': SVMBaseline,
+        'LightGBM': LGBMBaseline
+    }
+    
     return [
-        MeanEstimator(),
-        SVMBaseline(),
-        GaussianNBBaseline(),
-        MLPBaseline(),
-        LGBMBaseline()
+        model_class(**hyperparams.get(name, {}))
+        for name, model_class in models.items()
     ]
+
+
+def get_baseline_by_name(model_name: str, **hyperparams):
+    """Get a single baseline model by name.
+    
+    Args:
+        model_name: Name of the model ('Mean', 'SVM', 'LightGBM')
+        **hyperparams: Hyperparameters for the model
+        
+    Returns:
+        Baseline model instance
+        
+    Raises:
+        ValueError: If model_name is not supported
+    """
+    models = {
+        'Mean': MeanEstimator,
+        'SVM': SVMBaseline,
+        'LightGBM': LGBMBaseline
+    }
+    
+    if model_name not in models:
+        raise ValueError(
+            f"Unknown model: {model_name}. "
+            f"Supported models: {', '.join(models.keys())}"
+        )
+    
+    return models[model_name](**hyperparams)

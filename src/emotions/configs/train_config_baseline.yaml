@@ -1,10 +1,24 @@
 # Configuration file for baseline models cross-validation
+# Supported models: Mean, SVM, LightGBM
 
 dataset:
   data_dir: "./data/processed/eSEEd_v2/"  # Path to processed CSVs
   file_list: null  # null = load all *.csv in data_dir
   window_length: 10  # seconds
   dropping_emotion_threshold: 0  # Drop (subject, recording) pairs where all emotion values are <= this threshold
+
+baselines:
+  models:
+    - Mean
+    - SVM
+    - LightGBM
+  hyperparameters:
+    Mean: {}
+    SVM:
+      n_jobs: -1
+    LightGBM:
+      n_jobs: -1
+      verbose: -1
 
 cross_validation:
   strategies:

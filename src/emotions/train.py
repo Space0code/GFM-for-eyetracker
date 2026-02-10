@@ -1,55 +1,227 @@
-# train.py
-
 """
-Example usage:
-python src/emotions/train.py
-python src/emotions/train.py --config src/emotions/train_config.yaml
+GNN-specific training functions for emotion prediction.
+
+This module contains training, evaluation, and fold-level logic for
+SpatioTemporalHeteroGNN models. Use train_combined.py as the main script.
 """
 
 import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scipy.stats import spearmanr
-from datetime import datetime
-import sys
-import os
 import numpy as np
-import yaml
-import argparse
-import pandas as pd
+import os
 
-
-# Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from data.data import SpacioTemporalDataset
 from emotions.model import SpatioTemporalHeteroGNN
-from emotions.splits import SubjectLOOSplitter, RecordingLOOSplitter, CombinedLOOSplitter
+from emotions.metrics import compute_metrics
 
 
-class Logger:
-    """Logger that writes to both console and file."""
-    def __init__(self, log_file):
-        self.terminal = sys.stdout
-        self.log = open(log_file, 'a')
+def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
+    """Train model for one epoch.
     
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
+    Args:
+        model: GNN model to train
+        loader: DataLoader with training data
+        optimizer: Optimizer
+        device: Device to train on        grad_clip_max_norm: Maximum gradient norm for clipping
+        
+    Returns:
+        Average loss over epoch
+    """
+    model.train()
+    total_loss = 0
     
-    def flush(self):
-        self.terminal.flush()
-        self.log.flush()
+    for data in loader:
+        data = data.to(device)
+        optimizer.zero_grad()
+        
+        out = model(data)
+        target = data.y.view(-1, 4)
+        
+        loss = F.mse_loss(out, target)
+        loss.backward()
+        
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_max_norm)
+        optimizer.step()
+        
+        total_loss += loss.item()
     
-    def close(self):
-        self.log.close()
+    return total_loss / len(loader)
 
 
-def save_strategy_results_csv(config_file, run_dir, all_strategies_results, metric_names):
+def evaluate(model, loader, device, emotion_names=None, save_outputs=False, 
+            save_dir=None, pair_aggregation_fn=np.mean):
+    """Evaluate the model and compute comprehensive metrics.
+
+    Args:
+        model: GNN model to evaluate
+        loader: DataLoader with test data
+        device: Device to run evaluation on
+        emotion_names: List of emotion names (optional)
+        save_outputs: Whether to save outputs
+        save_dir: Directory to save outputs
+        pair_aggregation_fn: Function to aggregate per-pair metrics (default: np.mean)
+
+    Returns:
+        Dictionary with 'standard' and 'per_pair_aggregated' metrics
+    """
+    model.eval()
+    total_loss = 0
+
+    all_outputs = []
+    all_targets = []
+    all_metadata = []
+
+    with torch.no_grad():
+        for data in loader:
+            data = data.to(device)
+            out = model(data)
+            target = data.y.view(-1, 4)
+
+            loss = F.mse_loss(out, target)
+            total_loss += loss.item()
+
+            all_outputs.append(out.cpu())
+            all_targets.append(target.cpu())
+
+            # Collect metadata (subject, recording) for each sample in batch
+            if hasattr(data, 'idx'):
+                batch_indices = data.idx.cpu().numpy().flatten()
+                for graph_idx in batch_indices:
+                    try:
+                        original_graph = loader.dataset[int(graph_idx)]
+                        if hasattr(original_graph, 'subject') and hasattr(original_graph, 'recording'):
+                            all_metadata.append((original_graph.subject, original_graph.recording))
+                        else:
+                            all_metadata.append(None)
+                    except (AttributeError, IndexError, KeyError):
+                        all_metadata.append(None)
+
+    # Concatenate all outputs and targets
+    outputs = torch.cat(all_outputs, dim=0)
+    targets = torch.cat(all_targets, dim=0)
+
+    # Validate metadata
+    if len(all_metadata) == 0:
+        print("Warning: No metadata collected. Per-pair metrics will be disabled.")
+        all_metadata = None
+    elif len(all_metadata) != len(outputs):
+        print(f"Warning: metadata length ({len(all_metadata)}) != outputs length ({len(outputs)}). Using None.")
+        all_metadata = None
+    elif any(m is None for m in all_metadata):
+        print("Warning: Some metadata entries are None. Disabling per-pair metrics.")
+        all_metadata = None
+
+    # Compute comprehensive metrics
+    metrics = compute_metrics(
+        outputs,
+        targets,
+        emotion_names=emotion_names,
+        metadata=all_metadata,
+        pair_aggregation_fn=pair_aggregation_fn
+    )
+
+    # Add loss to metrics
+    avg_loss = total_loss / len(loader)
+    metrics['standard']['aggregated']['loss'] = avg_loss
+    if metrics['per_pair_aggregated'] is not None:
+        metrics['per_pair_aggregated']['aggregated']['loss'] = avg_loss
+
+    if save_outputs and save_dir:
+        torch.save({
+            'outputs': outputs,
+            'targets': targets,
+            'metadata': all_metadata,
+            'metrics': metrics
+        }, save_dir)
+
+    return metrics
+
+
+def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray, 
+                   test_idx: np.ndarray, dataset, fold_dir: str, 
+                   test_name: str, device: torch.device) -> dict:
+    """Train GNN model for one cross-validation fold.
+    
+    Args:
+        config: Full configuration dictionary
+        train_idx: Training indices
+        val_idx: Validation indices
+        test_idx: Test indices
+        dataset: Graph dataset
+        fold_dir: Directory to save fold results
+        test_name: Name of test fold for logging
+        device: Device to train on
+    
+    Returns:
+        Dictionary of test metrics
+    """
+    gnn_cfg = config['gnn']
+    training_cfg = gnn_cfg['training']
+    model_cfg = gnn_cfg['model']
+    logging_cfg = config['logging']
+    
+    train_dataset = [dataset[i] for i in train_idx]
+    val_dataset = [dataset[i] for i in val_idx]
+    test_dataset = [dataset[i] for i in test_idx]
+    
+    emotion_names = dataset.emotion_names if hasattr(dataset, 'emotion_names') else None
+    
+    train_loader = DataLoader(train_dataset, batch_size=training_cfg['batch_size'], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
+    
+    model = SpatioTemporalHeteroGNN(
+        in_channels=model_cfg['in_channels'],
+        hidden_channels=model_cfg['hidden_channels'],
+        out_channels=model_cfg['out_channels'],
+        output_scale=model_cfg.get('output_scale', 10.0),
+        use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
+        add_self_loops=model_cfg.get('add_self_loops', False),
+        dropout_mlp=model_cfg.get('dropout_mlp', 0.1),
+        dropout_gnn=model_cfg.get('dropout_gnn', 0.1),
+        dropout_head=model_cfg.get('dropout_head', 0.1),
+        aggr=model_cfg.get('aggr', 'mean'),
+        conv_type=model_cfg.get('conv_type', 'GCNConv')
+    ).to(device)
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
+    
+    num_epochs = training_cfg['num_epochs']
+    best_val_loss = float('inf')
+    
+    save_interval = logging_cfg.get('save_outputs_interval', 10)
+    save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
+    
+    gnn_fold_dir = os.path.join(fold_dir, 'gnn')
+    os.makedirs(gnn_fold_dir, exist_ok=True)
+    
+    print(f"Training GNN for {test_name}...")
+    for epoch in range(1, num_epochs + 1):
+        train_loss = train_epoch(model, train_loader, optimizer, device, 
+                                training_cfg['grad_clip_max_norm'])
+        val_metrics = evaluate(model, val_loader, device, emotion_names=emotion_names)
+        val_loss = val_metrics['standard']['aggregated']['loss']
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), os.path.join(gnn_fold_dir, 'best_model.pt'))
+        
+        if epoch in save_epochs or epoch == num_epochs:
+            print(f"  Epoch {epoch}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+    
+    # Load best model and evaluate on test
+    model.load_state_dict(torch.load(os.path.join(gnn_fold_dir, 'best_model.pt')))
+    test_metrics = evaluate(model, test_loader, device, emotion_names=emotion_names)
+    
+    # Clean up
+    del model, optimizer
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    
+    return test_metrics
+
     """Save per-config comparison results to CSV.
-    
+
     Args:
         config_file: Path to config file
         run_dir: Directory to save results
@@ -59,21 +231,36 @@ def save_strategy_results_csv(config_file, run_dir, all_strategies_results, metr
     csv_data = []
     for strategy, test_metrics in all_strategies_results.items():
         row = {'strategy': strategy}
-        
-        # Aggregated metrics
-        final_metrics_agg = {f'agg_{metric}': np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
-        row.update(final_metrics_agg)
-        
-        # Per-emotion metrics
+
+        first_fold = next(iter(test_metrics.values()))
+        has_pair_metrics = 'per_pair_aggregated' in first_fold and first_fold['per_pair_aggregated'] is not None
+
+        # ===== STANDARD METRICS =====
+        # Aggregated metrics (standard)
+        final_metrics_agg_std = {f'std_agg_{metric}': np.nanmean([test_metrics[fold_id]['standard']['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
+        row.update(final_metrics_agg_std)
+
+        # Per-emotion metrics (standard)
         if test_metrics:
-            first_fold = next(iter(test_metrics.values()))
-            if 'per_emotion' in first_fold and first_fold['per_emotion']:
-                for emo_name in first_fold['per_emotion'].keys():
-                    emo_metrics = {f'{emo_name}_{metric}': np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
-                    row.update(emo_metrics)
-        
+            if 'per_emotion' in first_fold['standard'] and first_fold['standard']['per_emotion']:
+                for emo_name in first_fold['standard']['per_emotion'].keys():
+                    emo_metrics_std = {f'std_{emo_name}_{metric}': np.nanmean([test_metrics[fold_id]['standard']['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+                    row.update(emo_metrics_std)
+
+        # ===== PER-PAIR AGGREGATED METRICS =====
+        if has_pair_metrics:
+            # Aggregated metrics (per-pair)
+            final_metrics_agg_pair = {f'pair_agg_{metric}': np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['aggregated'][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+            row.update(final_metrics_agg_pair)
+
+            # Per-emotion metrics (per-pair)
+            if 'per_emotion' in first_fold['per_pair_aggregated'] and first_fold['per_pair_aggregated']['per_emotion']:
+                for emo_name in first_fold['per_pair_aggregated']['per_emotion'].keys():
+                    emo_metrics_pair = {f'pair_{emo_name}_{metric}': np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['per_emotion'][emo_name][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+                    row.update(emo_metrics_pair)
+
         csv_data.append(row)
-    
+
     config_basename = os.path.splitext(os.path.basename(config_file))[0]
     csv_filename = f"{config_basename}.csv"
     csv_path = os.path.join(run_dir, csv_filename)
@@ -121,7 +308,7 @@ def save_all_configs_comparison_csv(config_files, all_configs_results):
 
 def print_strategy_summary(strategy, test_metrics, metric_names):
     """Print summary statistics for a single strategy.
-    
+
     Args:
         strategy: Name of the strategy
         test_metrics: Dictionary of test metrics
@@ -131,26 +318,51 @@ def print_strategy_summary(strategy, test_metrics, metric_names):
     fold_type = "Subjects" if strategy == 'subject_loo' else "Recordings" if strategy == 'recording_loo' else "Subject-Recording Pairs"
     print(f"Summary for {strategy.upper()} (Averaged Across {fold_type})")
     print("="*100)
-    
-    # Aggregated metrics
-    final_metrics_agg = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
-    metric_str = " | ".join([f"{metric.upper()}: {final_metrics_agg[metric]:.4f}" for metric in metric_names])
+
+    # Check if we have per_pair_aggregated metrics
+    first_fold = next(iter(test_metrics.values()))
+    has_pair_metrics = 'per_pair_aggregated' in first_fold and first_fold['per_pair_aggregated'] is not None
+
+    # ========== STANDARD METRICS ==========
+    print("\n[STANDARD APPROACH: Concatenate all predictions, then compute metrics]")
+
+    # Aggregated metrics (standard)
+    final_metrics_agg_std = {metric: np.nanmean([test_metrics[fold_id]['standard']['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
+    metric_str = " | ".join([f"{metric.upper()}: {final_metrics_agg_std[metric]:.4f}" for metric in metric_names])
     print(f"\nAggregated: {metric_str}")
-    
-    # Per-emotion metrics
+
+    # Per-emotion metrics (standard)
     if test_metrics:
-        first_fold = next(iter(test_metrics.values()))
-        if 'per_emotion' in first_fold and first_fold['per_emotion']:
+        if 'per_emotion' in first_fold['standard'] and first_fold['standard']['per_emotion']:
             print("\nPer-emotion:")
-            for emo_name in first_fold['per_emotion'].keys():
-                emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+            for emo_name in first_fold['standard']['per_emotion'].keys():
+                emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['standard']['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
                 emo_str = " | ".join([f"{metric.upper()}: {emo_metrics[metric]:.4f}" for metric in metric_names])
                 print(f"  {emo_name}: {emo_str}")
+
+    # ========== PER-PAIR AGGREGATED METRICS ==========
+    if has_pair_metrics:
+        print("\n" + "-"*100)
+        print("[PER-PAIR AGGREGATED: Compute per (subject, recording) pair, then aggregate]")
+
+        # Aggregated metrics (per-pair)
+        final_metrics_agg_pair = {metric: np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['aggregated'][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+        metric_str_pair = " | ".join([f"{metric.upper()}: {final_metrics_agg_pair[metric]:.4f}" for metric in metric_names])
+        print(f"\nAggregated: {metric_str_pair}")
+
+        # Per-emotion metrics (per-pair)
+        if 'per_emotion' in first_fold['per_pair_aggregated'] and first_fold['per_pair_aggregated']['per_emotion']:
+            print("\nPer-emotion:")
+            for emo_name in first_fold['per_pair_aggregated']['per_emotion'].keys():
+                emo_metrics_pair = {metric: np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['per_emotion'][emo_name][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+                emo_str_pair = " | ".join([f"{metric.upper()}: {emo_metrics_pair[metric]:.4f}" for metric in metric_names])
+                print(f"  {emo_name}: {emo_str_pair}")
+
 
 
 def print_strategies_comparison(all_strategies_results, metric_names):
     """Print comparison table across all strategies.
-    
+
     Args:
         all_strategies_results: Dictionary of results per strategy
         metric_names: List of metric names to display
@@ -158,30 +370,61 @@ def print_strategies_comparison(all_strategies_results, metric_names):
     print("\n" + "="*100)
     print("FINAL COMPARISON ACROSS ALL STRATEGIES")
     print("="*100)
-    
+
+    # Check if we have per_pair_aggregated metrics
+    first_strategy = next(iter(all_strategies_results.values()))
+    first_fold = next(iter(first_strategy.values()))
+    has_pair_metrics = 'per_pair_aggregated' in first_fold and first_fold['per_pair_aggregated'] is not None
+
+    # ========== STANDARD METRICS ==========
+    print("\n[STANDARD APPROACH: Concatenate all predictions, then compute metrics]")
     print("\nAggregated Metrics:")
     print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
     print("-"*100)
-    
+
     for strategy, test_metrics in all_strategies_results.items():
-        final_metrics = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
+        final_metrics = {metric: np.nanmean([test_metrics[fold_id]['standard']['aggregated'][metric] for fold_id in test_metrics]) for metric in metric_names}
         metric_str = " | ".join([f"{final_metrics[m]:<10.4f}" for m in metric_names])
         print(f"{strategy:<20} | {metric_str}")
-    
-    # Per-emotion comparison
+
+    # Per-emotion comparison (standard)
     if all_strategies_results:
-        first_strategy = next(iter(all_strategies_results.values()))
-        first_fold = next(iter(first_strategy.values()))
-        if 'per_emotion' in first_fold and first_fold['per_emotion']:
-            emotion_names = list(first_fold['per_emotion'].keys())
+        if 'per_emotion' in first_fold['standard'] and first_fold['standard']['per_emotion']:
+            emotion_names = list(first_fold['standard']['per_emotion'].keys())
             for emo_name in emotion_names:
                 print(f"\n{emo_name}:")
                 print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
                 print("-"*100)
                 for strategy, test_metrics in all_strategies_results.items():
-                    emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
+                    emo_metrics = {metric: np.nanmean([test_metrics[fold_id]['standard']['per_emotion'][emo_name][metric] for fold_id in test_metrics]) for metric in metric_names}
                     emo_str = " | ".join([f"{emo_metrics[m]:<10.4f}" for m in metric_names])
                     print(f"{strategy:<20} | {emo_str}")
+
+    # ========== PER-PAIR AGGREGATED METRICS ==========
+    if has_pair_metrics:
+        print("\n" + "="*100)
+        print("[PER-PAIR AGGREGATED: Compute per (subject, recording) pair, then aggregate]")
+        print("\nAggregated Metrics:")
+        print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
+        print("-"*100)
+
+        for strategy, test_metrics in all_strategies_results.items():
+            final_metrics_pair = {metric: np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['aggregated'][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+            metric_str_pair = " | ".join([f"{final_metrics_pair[m]:<10.4f}" for m in metric_names])
+            print(f"{strategy:<20} | {metric_str_pair}")
+
+        # Per-emotion comparison (per-pair)
+        if 'per_emotion' in first_fold['per_pair_aggregated'] and first_fold['per_pair_aggregated']['per_emotion']:
+            emotion_names_pair = list(first_fold['per_pair_aggregated']['per_emotion'].keys())
+            for emo_name in emotion_names_pair:
+                print(f"\n{emo_name}:")
+                print(f"{'Strategy':<20} | " + " | ".join([f"{m.upper():<10}" for m in metric_names]))
+                print("-"*100)
+                for strategy, test_metrics in all_strategies_results.items():
+                    emo_metrics_pair = {metric: np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['per_emotion'][emo_name][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in metric_names}
+                    emo_str_pair = " | ".join([f"{emo_metrics_pair[m]:<10.4f}" for m in metric_names])
+                    print(f"{strategy:<20} | {emo_str_pair}")
+
 
 
 def load_config(config_path: str = None) -> dict:
@@ -222,81 +465,6 @@ def create_splitter(strategy: str, dataset, val_size: int, random_state: int = N
                         f"Valid options: 'subject_loo', 'recording_loo', 'combined_loo'")
 
 
-def compute_metrics(outputs, targets, emotion_names=None, eps = 1e-8):
-    """Compute comprehensive evaluation metrics (aggregated and per-emotion).
-    
-    Args:
-        outputs: torch.Tensor of predictions [num_samples, num_emotions]
-        targets: torch.Tensor of ground truth [num_samples, num_emotions]
-        emotion_names: list of emotion column names (optional)
-        
-    Returns:
-        dict: Dictionary containing aggregated and per-emotion metrics
-    """
-    def _ccc(y_pred, y_true):
-        """Compute Concordance Correlation Coefficient (CCC) between outputs and targets."""
-        pred_mean = np.mean(y_pred, axis=0)
-        true_mean = np.mean(y_true, axis=0)
-        pred_var = np.var(y_pred, axis=0)
-        true_var = np.var(y_true, axis=0)
-        if pred_var < eps or true_var < eps:
-            return 0.0
-        
-        covariance = np.mean((y_pred - pred_mean) * (y_true - true_mean), axis=0)
-        
-        ccc = (2 * covariance) / (pred_var + true_var + (pred_mean - true_mean) ** 2)
-        return ccc
-
-    # Convert to numpy
-    y_pred = outputs.cpu().numpy()
-    y_true = targets.cpu().numpy()
-    
-    # Aggregated metrics (flatten all emotions)
-    y_pred_flat = y_pred.flatten()
-    y_true_flat = y_true.flatten()
-
-    # Pearson correlation for aggregated
-    if np.std(y_true_flat) > eps and np.std(y_pred_flat) > eps:
-        rho, _ = spearmanr(y_true_flat, y_pred_flat)
-    else:
-        rho = 0.0
-    
-    aggregated = {
-        'mse': float(mean_squared_error(y_true_flat, y_pred_flat)),
-        'mae': float(mean_absolute_error(y_true_flat, y_pred_flat)),
-        'sd_error': float(np.std(y_true_flat - y_pred_flat)),
-        'spearman': rho,
-        'ccc': _ccc(y_pred_flat, y_true_flat)
-    }
-    
-    # Per-emotion metrics
-    per_emotion = {}
-    num_emotions = y_pred.shape[1] if len(y_pred.shape) > 1 else 1
-    
-    if emotion_names is None:
-        emotion_names = [f'emotion_{i}' for i in range(num_emotions)]
-    
-    for i, emo_name in enumerate(emotion_names[:num_emotions]):
-        y_pred_emo = y_pred[:, i] if len(y_pred.shape) > 1 else y_pred
-        y_true_emo = y_true[:, i] if len(y_true.shape) > 1 else y_true
-        
-        if np.std(y_true_emo) > eps and np.std(y_pred_emo) > eps:
-            rho_emo, _ = spearmanr(y_true_emo, y_pred_emo)
-        else:
-            rho_emo = 0.0
-
-        per_emotion[emo_name] = {
-            'mse': float(mean_squared_error(y_true_emo, y_pred_emo)),
-            'mae': float(mean_absolute_error(y_true_emo, y_pred_emo)),
-            'sd_error': float(np.std(y_true_emo - y_pred_emo)),
-            'spearman': rho_emo,
-            'ccc': _ccc(y_pred_emo, y_true_emo),
-        }
-    
-    return {
-        'aggregated': aggregated,
-        'per_emotion': per_emotion
-    }
 
 
 def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
@@ -322,38 +490,181 @@ def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     return total_loss / len(loader)
 
 
-def evaluate(model, loader, device, emotion_names=None, save_outputs=False, save_dir=None):
-    """Evaluate the model and compute comprehensive metrics."""
+def evaluate(model, loader, device, emotion_names=None, save_outputs=False, save_dir=None, pair_aggregation_fn=np.mean):
+    """Evaluate the model and compute comprehensive metrics.
+
+    Args:
+        model: The model to evaluate
+        loader: DataLoader with test data
+        device: Device to run evaluation on
+        emotion_names: List of emotion names (optional)
+        save_outputs: Whether to save outputs
+        save_dir: Directory to save outputs
+        pair_aggregation_fn: Function to aggregate per-pair metrics (default: np.mean)
+
+    Returns:
+        dict: Dictionary with 'standard' and 'per_pair_aggregated' metrics
+    """
     model.eval()
     total_loss = 0
-    
+
     all_outputs = []
     all_targets = []
-    
+    all_metadata = []
+
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
             out = model(data)
             target = data.y.view(-1, 4)
-            
+
             loss = F.mse_loss(out, target)
             total_loss += loss.item()
-            
+
             all_outputs.append(out.cpu())
             all_targets.append(target.cpu())
-    
+
+            # Collect metadata (subject, recording) for each sample in batch
+            # PyG batches the idx tensor, so we can extract individual graph indices
+            if hasattr(data, 'idx'):
+                batch_indices = data.idx.cpu().numpy().flatten()
+                for graph_idx in batch_indices:
+                    try:
+                        # Access original dataset graph using the stored index
+                        original_graph = loader.dataset[int(graph_idx)]
+                        if hasattr(original_graph, 'subject') and hasattr(original_graph, 'recording'):
+                            all_metadata.append((original_graph.subject, original_graph.recording))
+                        else:
+                            all_metadata.append(None)
+                    except (AttributeError, IndexError, KeyError):
+                        all_metadata.append(None)
+            else:
+                # If no idx attribute, cannot reliably extract metadata
+                # This will disable per-pair metrics
+                pass
+
     # Concatenate all outputs and targets
     outputs = torch.cat(all_outputs, dim=0)
     targets = torch.cat(all_targets, dim=0)
-    
-    # Compute comprehensive metrics
-    metrics = compute_metrics(outputs, targets, emotion_names=emotion_names)
-    metrics['aggregated']['loss'] = total_loss / len(loader)
-    
+
+    # Ensure metadata matches output length and clean up None values
+    if len(all_metadata) == 0:
+        print(f"Warning: No metadata collected. Per-pair metrics will be disabled.")
+        all_metadata = None
+    elif len(all_metadata) != len(outputs):
+        print(f"Warning: metadata length ({len(all_metadata)}) doesn't match outputs length ({len(outputs)}). Using None for metadata.")
+        all_metadata = None
+    elif any(m is None for m in all_metadata):
+        print(f"Warning: Some metadata entries are None. Disabling per-pair metrics.")
+        all_metadata = None
+
+    # Compute comprehensive metrics (both standard and per-pair aggregated)
+    metrics = compute_metrics(
+        outputs,
+        targets,
+        emotion_names=emotion_names,
+        metadata=all_metadata,
+        pair_aggregation_fn=pair_aggregation_fn
+    )
+
+    # Add loss to both standard and per_pair_aggregated
+    avg_loss = total_loss / len(loader)
+    metrics['standard']['aggregated']['loss'] = avg_loss
+    if metrics['per_pair_aggregated'] is not None:
+        metrics['per_pair_aggregated']['aggregated']['loss'] = avg_loss
+
     if save_outputs and save_dir:
-        torch.save({'outputs': outputs, 'targets': targets, 'metrics': metrics}, save_dir)
-    
+        torch.save({
+            'outputs': outputs,
+            'targets': targets,
+            'metadata': all_metadata,
+            'metrics': metrics
+        }, save_dir)
+
     return metrics
+
+
+def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray, test_idx: np.ndarray,
+                   dataset, fold_dir: str, test_name: str, device: torch.device) -> dict:
+    """Train GNN model for one fold.
+    
+    Args:
+        config: Full configuration dictionary
+        train_idx: Training indices
+        val_idx: Validation indices
+        test_idx: Test indices
+        dataset: Graph dataset
+        fold_dir: Directory to save fold results
+        test_name: Name of test fold for logging
+        device: Device to train on
+    
+    Returns:
+        Dictionary of test metrics
+    """
+    gnn_cfg = config['gnn']
+    training_cfg = gnn_cfg['training']
+    model_cfg = gnn_cfg['model']
+    logging_cfg = config['logging']
+    
+    train_dataset = [dataset[i] for i in train_idx]
+    val_dataset = [dataset[i] for i in val_idx]
+    test_dataset = [dataset[i] for i in test_idx]
+    
+    emotion_names = dataset.emotion_names if hasattr(dataset, 'emotion_names') else None
+    
+    train_loader = DataLoader(train_dataset, batch_size=training_cfg['batch_size'], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
+    
+    model = SpatioTemporalHeteroGNN(
+        in_channels=model_cfg['in_channels'],
+        hidden_channels=model_cfg['hidden_channels'],
+        out_channels=model_cfg['out_channels'],
+        output_scale=model_cfg.get('output_scale', 10.0),
+        use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
+        add_self_loops=model_cfg.get('add_self_loops', False),
+        dropout_mlp=model_cfg.get('dropout_mlp', 0.1),
+        dropout_gnn=model_cfg.get('dropout_gnn', 0.1),
+        dropout_head=model_cfg.get('dropout_head', 0.1),
+        aggr=model_cfg.get('aggr', 'mean'),
+        conv_type=model_cfg.get('conv_type', 'GCNConv')
+    ).to(device)
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
+    
+    num_epochs = training_cfg['num_epochs']
+    best_val_loss = float('inf')
+    
+    save_interval = logging_cfg.get('save_outputs_interval', 10)
+    save_epochs = set(range(save_interval, num_epochs + 1, save_interval))
+    
+    gnn_fold_dir = os.path.join(fold_dir, 'gnn')
+    os.makedirs(gnn_fold_dir, exist_ok=True)
+    
+    print(f"Training GNN for {test_name}...")
+    for epoch in range(1, num_epochs + 1):
+        train_loss = train_epoch(model, train_loader, optimizer, device, training_cfg['grad_clip_max_norm'])
+        val_metrics = evaluate(model, val_loader, device, emotion_names=emotion_names)
+        val_loss = val_metrics['standard']['aggregated']['loss']
+        
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), os.path.join(gnn_fold_dir, 'best_model.pt'))
+        
+        if epoch in save_epochs or epoch == num_epochs:
+            print(f"  Epoch {epoch}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+    
+    # Load best model and evaluate on test
+    model.load_state_dict(torch.load(os.path.join(gnn_fold_dir, 'best_model.pt')))
+    test_metrics = evaluate(model, test_loader, device, emotion_names=emotion_names)
+    
+    # Clean up
+    del model, optimizer
+    if device.type == 'cuda':
+        torch.cuda.empty_cache()
+    
+    return test_metrics
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train SpatioTemporalHeteroGNN for emotion prediction")
@@ -571,16 +882,16 @@ def main():
                     save_outputs = logging_cfg.get('save_validation_outputs', False) and epoch in save_epochs
                     save_path = os.path.join(fold_data_dir, f'epoch_{epoch:03d}.pt') if save_outputs else None
                     val_metrics = evaluate(model, val_loader, device, emotion_names=emotion_names, save_outputs=save_outputs, save_dir=save_path)
-                    val_loss = val_metrics['aggregated']['loss']
-                    
+                    val_loss = val_metrics['standard']['aggregated']['loss']
+
                     if val_loss < best_val_loss:
                         best_val_loss = val_loss
                         if logging_cfg.get('save_best_model', True):
                             torch.save(model.state_dict(), os.path.join(fold_dir, 'best_model.pt'))
-                    
+
                     print_every = logging_cfg.get('print_every', 10)
                     if epoch % print_every == 0 or epoch == 1:
-                        agg = val_metrics['aggregated']
+                        agg = val_metrics['standard']['aggregated']
                         print(f"Epoch {epoch:3d} | Train Loss: {train_loss:.4f} | Val MSE: {agg['mse']:.4f} | "
                             f"MAE: {agg['mae']:.4f} | Spearman rho: {agg['spearman']:.4f} | CCC: {agg['ccc']:.4f} "
                             f" | Time: {datetime.now() - epoch_start_time}")
@@ -618,11 +929,19 @@ def main():
             # Save to CSV
             save_strategy_results_csv(config_file, run_dir, all_strategies_results, metric_names)
         
-        # Store results for this config file
+        # Store results for this config file (both standard and per-pair)
         config_results = {}
         for strategy, test_metrics in all_strategies_results.items():
-            final_metrics = {metric: np.nanmean([test_metrics[fold_id]['aggregated'][metric] for fold_id in test_metrics]) for metric in config['metrics']}
-            config_results[strategy] = final_metrics
+            # Standard metrics
+            final_metrics_std = {f'std_{metric}': np.nanmean([test_metrics[fold_id]['standard']['aggregated'][metric] for fold_id in test_metrics]) for metric in config['metrics']}
+
+            # Per-pair aggregated metrics (if available)
+            first_fold = next(iter(test_metrics.values()))
+            if 'per_pair_aggregated' in first_fold and first_fold['per_pair_aggregated'] is not None:
+                final_metrics_pair = {f'pair_{metric}': np.nanmean([test_metrics[fold_id]['per_pair_aggregated']['aggregated'][metric] for fold_id in test_metrics if test_metrics[fold_id]['per_pair_aggregated'] is not None]) for metric in config['metrics']}
+                final_metrics_std.update(final_metrics_pair)
+
+            config_results[strategy] = final_metrics_std
         all_configs_results[config_file] = {
             'run_dir': run_dir,
             'timestamp': timestamp,
