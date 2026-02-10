@@ -104,7 +104,7 @@ class LGBMBaseline(BaselineModel):
     def fit(self, X_train, y_train):
         """Train separate model for each target."""
         self.models = []
-        X_array = X_train.values if hasattr(X_train, 'values') else np.array(X_train)
+        # Keep as DataFrame to preserve feature names for LightGBM
         y_array = y_train.values if hasattr(y_train, 'values') else np.array(y_train)
         for i in range(y_array.shape[1]):
             model = lgb.LGBMRegressor(
@@ -114,15 +114,16 @@ class LGBMBaseline(BaselineModel):
                 n_jobs=self.n_jobs,
                 verbose=self.verbose
             )
-            model.fit(X_array, y_array[:, i])
+            model.fit(X_train, y_array[:, i])
             self.models.append(model)
     
     def predict(self, X):
         """Predict with all models."""
-        X_array = X.values if hasattr(X, 'values') else np.array(X)
-        predictions = np.zeros((len(X_array), len(self.models)))
+        # Keep as DataFrame to preserve feature names for LightGBM
+        n_samples = len(X)
+        predictions = np.zeros((n_samples, len(self.models)))
         for i, model in enumerate(self.models):
-            predictions[:, i] = model.predict(X_array)
+            predictions[:, i] = model.predict(X)
         return predictions
 
 

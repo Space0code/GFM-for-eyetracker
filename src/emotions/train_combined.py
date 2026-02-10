@@ -138,34 +138,70 @@ def main():
         strategy_dir = os.path.join(run_dir, strategy)
         os.makedirs(strategy_dir, exist_ok=True)
         
-        # Create splitter (use GNN dataset if available, else tabular)
-        dataset_for_split = gnn_dataset if run_experiments['gnn'] else tabular_samples
-        splitter = create_splitter(
-            strategy=strategy,
-            samples=dataset_for_split,
-            val_size=cv_cfg['val_size'],
-            random_state=cv_cfg.get('random_state')
-        )
+        # Create splitters for each dataset type
+        if run_experiments['baselines']:
+            baseline_splitter = create_splitter(
+                strategy=strategy,
+                samples=tabular_samples,
+                val_size=cv_cfg['val_size'],
+                random_state=cv_cfg.get('random_state')
+            )
+        
+        if run_experiments['gnn']:
+            gnn_splitter = create_splitter(
+                strategy=strategy,
+                samples=gnn_dataset,
+                val_size=cv_cfg['val_size'],
+                random_state=cv_cfg.get('random_state')
+            )
+        
+        # Use one splitter for fold identification (prefer GNN if available)
+        reference_splitter = gnn_splitter if run_experiments['gnn'] else baseline_splitter
+        reference_dataset = gnn_dataset if run_experiments['gnn'] else tabular_samples
         
         # Storage for this strategy
         baseline_results_all_folds = {name: {} for name in config['baselines']['models']} if run_experiments['baselines'] else {}
         gnn_results_all_folds = {}
         
         fold_num = 0
-        for train_idx, val_idx, test_idx in splitter.split():
-            fold_num += 1
+        
+        # Get iterators
+        if run_experiments['baselines'] and run_experiments['gnn']:
+            # Both enabled: iterate both in parallel
+            baseline_splits = list(baseline_splitter.split())
+            gnn_splits = list(gnn_splitter.split())
+            num_folds = len(baseline_splits)
+        elif run_experiments['baselines']:
+            baseline_splits = list(baseline_splitter.split())
+            num_folds = len(baseline_splits)
+        else:
+            gnn_splits = list(gnn_splitter.split())
+            num_folds = len(gnn_splits)
+        
+        for fold_num in range(num_folds):
+            # Get indices for this fold
+            if run_experiments['baselines']:
+                baseline_train_idx, baseline_val_idx, baseline_test_idx = baseline_splits[fold_num]
+            if run_experiments['gnn']:
+                gnn_train_idx, gnn_val_idx, gnn_test_idx = gnn_splits[fold_num]
+            
+            # Use reference dataset for fold identification
+            if run_experiments['gnn']:
+                ref_test_idx = gnn_test_idx
+            else:
+                ref_test_idx = baseline_test_idx
             
             # Identify test fold
             if strategy == 'subject_loo':
-                test_subjects = sorted(set(dataset_for_split[i].subject for i in test_idx))
+                test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
                 test_id = f"s_{'_'.join(map(str, test_subjects))}"
                 test_name = f"Subjects {', '.join(map(str, test_subjects))}"
             elif strategy == 'recording_loo':
-                test_recordings = sorted(set(dataset_for_split[i].recording for i in test_idx))
+                test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
                 test_id = f"r_{'_'.join(map(str, test_recordings))}"
                 test_name = f"Recordings {', '.join(map(str, test_recordings))}"
             elif strategy == 'combined_loo':
-                test_pairs = sorted(set((dataset_for_split[i].subject, dataset_for_split[i].recording) for i in test_idx))
+                test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
                 test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
                 test_name = f"Pairs {', '.join([f'({s}, {r})' for s, r in test_pairs])}"
             else:
@@ -175,7 +211,12 @@ def main():
             fold_dir = os.path.join(strategy_dir, test_id)
             os.makedirs(fold_dir, exist_ok=True)
             
-            print(f"\n{test_name}: train={len(train_idx)} | val={len(val_idx)} | test={len(test_idx)}")
+            if run_experiments['baselines'] and run_experiments['gnn']:
+                print(f"\n{test_name}: baseline(train={len(baseline_train_idx)}, val={len(baseline_val_idx)}, test={len(baseline_test_idx)}) | gnn(train={len(gnn_train_idx)}, val={len(gnn_val_idx)}, test={len(gnn_test_idx)})")
+            elif run_experiments['baselines']:
+                print(f"\n{test_name}: train={len(baseline_train_idx)} | val={len(baseline_val_idx)} | test={len(baseline_test_idx)}")
+            else:
+                print(f"\n{test_name}: train={len(gnn_train_idx)} | val={len(gnn_val_idx)} | test={len(gnn_test_idx)}")
             
             # Train baselines
             if run_experiments['baselines']:
@@ -183,7 +224,7 @@ def main():
                 baseline_fold_dir = os.path.join(fold_dir, 'baselines')
                 os.makedirs(baseline_fold_dir, exist_ok=True)
                 baseline_results = train_baselines_fold(
-                    config['baselines'], train_idx, val_idx, test_idx,
+                    config['baselines'], baseline_train_idx, baseline_val_idx, baseline_test_idx,
                     tabular_samples, baseline_fold_dir, metric_names
                 )
                 for model_name, metrics in baseline_results.items():
@@ -192,7 +233,7 @@ def main():
             # Train GNN
             if run_experiments['gnn']:
                 gnn_metrics = train_gnn_fold(
-                    config, train_idx, val_idx, test_idx,
+                    config, gnn_train_idx, gnn_val_idx, gnn_test_idx,
                     gnn_dataset, fold_dir, test_name, device
                 )
                 gnn_results_all_folds[test_id] = gnn_metrics
