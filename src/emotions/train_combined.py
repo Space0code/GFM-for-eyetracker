@@ -11,13 +11,17 @@ import argparse
 import yaml
 from datetime import datetime
 from typing import Dict, Any, List
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 
 # Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Add project root to Python path
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from data.data import SpacioTemporalDataset
 from emotions.train_gnn import train_gnn_fold
@@ -31,13 +35,6 @@ from emotions.utils import (
     save_comparison_csv,
     print_comparison_table
 )
-
-
-
-
-
-
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train GNN and baseline models with cross-validation")
@@ -161,12 +158,12 @@ def main():
             # Identify test fold
             if strategy == 'subject_loo':
                 test_subjects = sorted(set(dataset_for_split[i].subject for i in test_idx))
-                test_id = f"s_{'_'.join(test_subjects)}"
-                test_name = f"Subjects {', '.join(test_subjects)}"
+                test_id = f"s_{'_'.join(map(str, test_subjects))}"
+                test_name = f"Subjects {', '.join(map(str, test_subjects))}"
             elif strategy == 'recording_loo':
                 test_recordings = sorted(set(dataset_for_split[i].recording for i in test_idx))
-                test_id = f"r_{'_'.join(test_recordings)}"
-                test_name = f"Recordings {', '.join(test_recordings)}"
+                test_id = f"r_{'_'.join(map(str, test_recordings))}"
+                test_name = f"Recordings {', '.join(map(str, test_recordings))}"
             elif strategy == 'combined_loo':
                 test_pairs = sorted(set((dataset_for_split[i].subject, dataset_for_split[i].recording) for i in test_idx))
                 test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
