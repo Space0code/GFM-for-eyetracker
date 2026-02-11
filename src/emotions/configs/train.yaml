@@ -9,16 +9,16 @@ run_experiments:
 # Dataset configuration (shared by both GNN and baselines)
 dataset:
   data_dir: "data/processed/eSEEd_v2_processed"
-  file_list: 
-    - sample_01_recording_01_merged.csv
-    - sample_01_recording_02_merged.csv
-    - sample_01_recording_03_merged.csv
-    - sample_02_recording_01_merged.csv
-    - sample_02_recording_02_merged.csv
-    - sample_02_recording_03_merged.csv
-    - sample_03_recording_01_merged.csv
-    - sample_03_recording_02_merged.csv
-    - sample_03_recording_03_merged.csv
+  # file_list: 
+  #   - sample_01_recording_01_merged.csv
+  #   - sample_01_recording_02_merged.csv
+  #   - sample_01_recording_03_merged.csv
+  #   - sample_02_recording_01_merged.csv
+  #   - sample_02_recording_02_merged.csv
+  #   - sample_02_recording_03_merged.csv
+  #   - sample_03_recording_01_merged.csv
+  #   - sample_03_recording_02_merged.csv
+  #   - sample_03_recording_03_merged.csv
   recursive: true
   ignore_dirs: []
   window_length: 10
@@ -32,7 +32,7 @@ dataset:
 # Cross-validation configuration (shared)
 cross_validation:
   strategies: 
-    # - subject_loo
+    - subject_loo
     - recording_loo
     # - combined_loo
   val_size: 1  # Number of subjects/recordings/pairs for validation
@@ -40,11 +40,12 @@ cross_validation:
 
 # Baseline models configuration
 baselines:
-  # List of baseline models to train (options: Mean, SVM, LightGBM)
+  # List of baseline models to train (options: Mean, SVM, LightGBM, MLP)
   models:
     - Mean
     - SVM
     - LightGBM
+    - MLP
   
   # Hyperparameters for each model (optional, uses defaults if not specified)
   hyperparameters:
@@ -54,6 +55,11 @@ baselines:
     LightGBM:
       n_jobs: -1
       verbose: -1
+    MLP:
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+      early_stopping: false  # Set to true for large datasets
 
 # GNN model configuration
 gnn:

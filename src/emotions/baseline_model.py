@@ -1,11 +1,12 @@
 """
 Baseline models for emotion prediction.
 
-Supported models: Mean, SVM, LightGBM
+Supported models: Mean, SVM, LightGBM, MLP
 """
 
 import numpy as np
 from sklearn.svm import SVR
+from sklearn.neural_network import MLPRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.preprocessing import StandardScaler
 import lightgbm as lgb
@@ -127,6 +128,48 @@ class LGBMBaseline(BaselineModel):
         return predictions
 
 
+class MLPBaseline(BaselineModel):
+    """Simple 2-layer MLP regressor with feature normalization."""
+    
+    def __init__(self, hidden_layer_size=64, max_iter=200, random_state=42, 
+                 early_stopping=False, **kwargs):
+        super().__init__("MLP")
+        self.hidden_layer_size = hidden_layer_size
+        self.max_iter = max_iter
+        self.random_state = random_state
+        self.early_stopping = early_stopping
+        self.scaler = StandardScaler()
+        
+        # Only use early stopping if explicitly enabled and we have enough data
+        mlp_kwargs = {
+            'hidden_layer_sizes': (hidden_layer_size, hidden_layer_size),
+            'activation': 'relu',
+            'solver': 'adam',
+            'max_iter': max_iter,
+            'random_state': random_state
+        }
+        
+        if early_stopping:
+            mlp_kwargs['early_stopping'] = True
+            mlp_kwargs['validation_fraction'] = 0.1
+            mlp_kwargs['n_iter_no_change'] = 10
+        
+        self.model = MultiOutputRegressor(MLPRegressor(**mlp_kwargs))
+    
+    def fit(self, X_train, y_train):
+        """Train model with normalized features."""
+        X_array = X_train.values if hasattr(X_train, 'values') else np.array(X_train)
+        y_array = y_train.values if hasattr(y_train, 'values') else np.array(y_train)
+        X_scaled = self.scaler.fit_transform(X_array)
+        self.model.fit(X_scaled, y_array)
+    
+    def predict(self, X):
+        """Predict on normalized data."""
+        X_array = X.values if hasattr(X, 'values') else np.array(X)
+        X_scaled = self.scaler.transform(X_array)
+        return self.model.predict(X_scaled)
+
+
 def get_all_baselines(**hyperparams):
     """Return list of all baseline models with optional hyperparameters.
     
@@ -139,7 +182,8 @@ def get_all_baselines(**hyperparams):
     models = {
         'Mean': MeanEstimator,
         'SVM': SVMBaseline,
-        'LightGBM': LGBMBaseline
+        'LightGBM': LGBMBaseline,
+        'MLP': MLPBaseline
     }
     
     return [
@@ -152,7 +196,7 @@ def get_baseline_by_name(model_name: str, **hyperparams):
     """Get a single baseline model by name.
     
     Args:
-        model_name: Name of the model ('Mean', 'SVM', 'LightGBM')
+        model_name: Name of the model ('Mean', 'SVM', 'LightGBM', 'MLP')
         **hyperparams: Hyperparameters for the model
         
     Returns:
@@ -164,7 +208,8 @@ def get_baseline_by_name(model_name: str, **hyperparams):
     models = {
         'Mean': MeanEstimator,
         'SVM': SVMBaseline,
-        'LightGBM': LGBMBaseline
+        'LightGBM': LGBMBaseline,
+        'MLP': MLPBaseline
     }
     
     if model_name not in models:

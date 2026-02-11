@@ -37,7 +37,7 @@ from emotions.utils import (
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train GNN and baseline models with cross-validation")
-    parser.add_argument("--config", type=str, default="src/emotions/configs/train_config.yaml", help="Path to unified config YAML file")
+    parser.add_argument("--config", type=str, default="src/emotions/configs/train.yaml", help="Path to unified config YAML file")
     return parser.parse_args()
 
 
