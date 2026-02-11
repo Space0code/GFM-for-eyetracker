@@ -230,7 +230,7 @@ def _compute_per_pair_metrics(
             pair_per_emotion_metrics[emo_name].append(emo_metrics)
 
     if skipped_pairs > 0:
-        print(f"Warning: Skipped {skipped_pairs} pairs with <{min_samples} samples")
+        print(f"        Warning: Skipped {skipped_pairs} pairs with <{min_samples} samples")
 
     if not pair_aggregated_metrics:
         return None

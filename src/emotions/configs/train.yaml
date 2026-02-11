@@ -9,7 +9,16 @@ run_experiments:
 # Dataset configuration (shared by both GNN and baselines)
 dataset:
   data_dir: "data/processed/eSEEd_v2_processed"
-  file_list: null  # null = use all files
+  file_list: 
+    - sample_01_recording_01_merged.csv
+    - sample_01_recording_02_merged.csv
+    - sample_01_recording_03_merged.csv
+    - sample_02_recording_01_merged.csv
+    - sample_02_recording_02_merged.csv
+    - sample_02_recording_03_merged.csv
+    - sample_03_recording_01_merged.csv
+    - sample_03_recording_02_merged.csv
+    - sample_03_recording_03_merged.csv
   recursive: true
   ignore_dirs: []
   window_length: 10
@@ -73,8 +82,8 @@ gnn:
 metrics:
   - mse
   - mae
-  - r2
   - spearman
+  - ccc
 
 # Logging configuration (shared)
 logging:

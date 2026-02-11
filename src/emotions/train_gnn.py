@@ -2,7 +2,7 @@
 GNN-specific training functions for emotion prediction.
 
 This module contains training, evaluation, and fold-level logic for
-SpatioTemporalHeteroGNN models. Use train_combined.py as the main script.
+SpatioTemporalHeteroGNN models. Use train.py as the main script.
 """
 
 import torch
@@ -205,12 +205,17 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
             best_val_loss = val_loss
             torch.save(model.state_dict(), os.path.join(gnn_fold_dir, 'best_model.pt'))
         
-        if epoch in save_epochs or epoch == num_epochs:
+        if epoch in save_epochs or epoch == num_epochs or epoch == 1:
             print(f"  Epoch {epoch}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
     
     # Load best model and evaluate on test
     model.load_state_dict(torch.load(os.path.join(gnn_fold_dir, 'best_model.pt')))
     test_metrics = evaluate(model, test_loader, device, emotion_names=emotion_names)
+    
+    # Log test metrics
+    test_mae = test_metrics['standard']['aggregated']['mae']
+    test_mse = test_metrics['standard']['aggregated']['mse']
+    print(f" GNN - Test MAE: {test_mae:.4f} | Test MSE: {test_mse:.4f}")
     
     # Clean up
     del model, optimizer
