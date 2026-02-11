@@ -243,7 +243,7 @@ def main():
                     baseline_results_all_folds[model_name][test_id] = metrics
                     # Log test MAE for this baseline model
                     test_mae = metrics['standard']['aggregated']['mae']
-                    print(f" {model_name} - Test MAE: {test_mae:.4f}")
+                    print(f" ❗{model_name} - Test MAE: {test_mae:.4f}")
             
             # Train GNN
             if run_experiments['gnn']:

@@ -215,7 +215,7 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
     # Log test metrics
     test_mae = test_metrics['standard']['aggregated']['mae']
     test_mse = test_metrics['standard']['aggregated']['mse']
-    print(f" GNN - Test MAE: {test_mae:.4f} | Test MSE: {test_mse:.4f}")
+    print(f" ❗GNN - Test MAE: {test_mae:.4f} | Test MSE: {test_mse:.4f}")
     
     # Clean up
     del model, optimizer
