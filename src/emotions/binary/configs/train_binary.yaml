@@ -84,11 +84,17 @@ gnn:
   
   training:
     num_epochs: 12
-    batch_size: 32
+    batch_size: 512
     learning_rate: 0.001
     grad_clip_max_norm: 1.0
     device: auto  # 'auto', 'cuda', or 'cpu'
     random_seed: 42
+    
+    # DataLoader optimization (Plan A - Quick Wins)
+    num_workers: 8  # Parallel data loading (increase to 8 for larger datasets)
+    pin_memory: true  # Faster CPU->GPU transfer
+    persistent_workers: true  # Avoid respawning workers
+    use_torch_compile: true  # JIT compilation (10-30% speedup, PyTorch 2.0+)
 
 # Binary classification metrics
 metrics:
