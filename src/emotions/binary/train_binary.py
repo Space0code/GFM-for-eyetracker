@@ -20,6 +20,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
+import joblib
 
 # Add src directory to Python path
 src_dir = Path(__file__).resolve().parents[2]  # Go up to src/ directory
@@ -233,9 +234,9 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
 
 def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx, 
                          samples, fold_dir, metric_names, emotion_name, verbose: bool = True):
-    """Train baseline models for one fold."""
-    baseline_dir = os.path.join(fold_dir, 'baselines')
-    os.makedirs(baseline_dir, exist_ok=True)
+    """Train baseline models for one fold and save them with predictions."""
+    baselines_dir = os.path.join(fold_dir, 'baselines')
+    os.makedirs(baselines_dir, exist_ok=True)
     
     # Convert to X, y
     X_train, y_train, train_meta, feat_cols, targ_cols = samples_to_xy(samples, train_idx)
@@ -258,6 +259,10 @@ def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx,
         if verbose:
             print(f"  Training {model_name}...")
         
+        # Create model-specific directory
+        model_dir = os.path.join(baselines_dir, model_name)
+        os.makedirs(model_dir, exist_ok=True)
+        
         # Get hyperparameters
         hyperparams = baseline_cfg.get('hyperparameters', {}).get(model_name, {})
         
@@ -277,6 +282,18 @@ def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx,
             metadata=test_metadata,
             threshold=0.5
         )
+        
+        # Get predictions
+        test_pred = model.predict_proba(X_test)
+        test_true = y_test.values if hasattr(y_test, 'values') else np.array(y_test)
+        
+        # Save model
+        model_path = os.path.join(model_dir, 'model.pkl')
+        joblib.dump(model, model_path)
+        
+        # Save predictions and targets
+        np.save(os.path.join(model_dir, 'test_predictions.npy'), test_pred)
+        np.save(os.path.join(model_dir, 'test_targets.npy'), test_true)
         
         results[model_name] = test_metrics
         
