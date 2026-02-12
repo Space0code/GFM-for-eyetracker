@@ -73,9 +73,9 @@ baselines:
 gnn:
   model:
     in_channels: 5  # 5 node features: time, x, y, pupil-left, pupil-right
-    hidden_channels: 64
+    hidden_channels: 128
     use_preprocess_mlp: true
-    add_self_loops: false
+    add_self_loops: true
     dropout_mlp: 0.1
     dropout_gnn: 0.1
     dropout_head: 0.1
@@ -102,3 +102,4 @@ metrics:
 logging:
   results_dir: "results/binary"
   save_outputs_interval: 10  # Save outputs every N epochs for GNN
+  verbose: false
