@@ -319,3 +319,59 @@ Simplify the problem as much as possible. Advance to the next step only when the
     1. Binary 0 vs. >0.
     2. "something" on labels 1-10.
 5. Think about presenting preliminary work on a workshop/poster.
+
+## Binary classification on the **whole** dataset
+### Emotion: Anger
+Complete results in `RETAIN_2026-02-12_14-50-31`.
+#### Recording LOO
+
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.461    | 0.442     | 0.900  | 0.546 | 0.500 |
+| SVM      | 0.448    | 0.535     | 0.791  | 0.550 | 0.556 |
+| LightGBM | 0.469    | 0.539     | 0.735  | 0.541 | 0.564 |
+| MLP      | 0.507    | 0.555     | 0.664  | 0.535 | 0.575 |
+| GNN      | 0.522    | 0.522     | 1.000  | 0.636 | 0.506 |
+
+#### Subject LOO
+
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.570    | 0.570     | 1.000  | 0.704 | 0.479 |
+| SVM      | 0.536    | 0.563     | 0.812  | 0.627 | 0.512 |
+| LightGBM | 0.546    | 0.578     | 0.739  | 0.618 | 0.513 |
+| MLP      | 0.526    | 0.586     | 0.630  | 0.597 | 0.516 |
+| GNN      | 0.570    | 0.570     | 1.000  | 0.704 | 0.558 |
+
+
+## Dataset cleaning
+### Pupil size problems
+We noticed major problems with inconsistent pupil sizes. Left and right pupil size sometimes differ for a couple of millimeters at the same point in time. This is worse in some subjects than others. We removed datapoints with |MAE| between left and right pupil size > 1.5. Subjects that still had |MAE| > 0.5, were removed.
+### Coordinates (x, y)
+There were not (yet) many issues found with the coordinates' data. For now only some missing data and some big outliers. Outlier points - those with x or y outside (0,1) range were removed, then the subjects with a lot of missing data were removed (3,15,16,31 additionally to the previously removed subjects from pupil size cleaning).
+### 31 subjects remaining
+Remaining subjects: 1, 2, 4, 9, 10, 11, 12, 14, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 29, 30, 32, 33, 35, 38, 41, 42, 43, 44, 45, 46, 47
+
+
+## Binary classification on the **cleaned** dataset
+### Emotion: Anger
+Complete results in `RETAIN_2026-02-12_17-45-05`.
+#### Recording LOO
+
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.559    | 0.559     | 1.000  | 0.676 | 0.500 |
+| SVM      | 0.522    | 0.576     | 0.780  | 0.606 | 0.588 |
+| LightGBM | 0.524    | 0.578     | 0.781  | 0.609 | 0.556 |
+| MLP      | 0.555    | 0.590     | 0.713  | 0.602 | 0.583 |
+| GNN      | 0.559    | 0.559     | 1.000  | 0.676 | 0.505 |
+
+#### Subject LOO
+
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.602    | 0.602     | 1.000  | 0.728 | 0.468 |
+| SVM      | 0.608    | 0.643     | 0.806  | 0.677 | 0.553 |
+| LightGBM | 0.573    | 0.616     | 0.793  | 0.664 | 0.502 |
+| MLP      | 0.569    | 0.630     | 0.663  | 0.620 | 0.538 |
+| GNN      | 0.602    | 0.602     | 1.000  | 0.727 | 0.544 |
