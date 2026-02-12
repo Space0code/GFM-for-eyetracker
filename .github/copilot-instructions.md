@@ -18,3 +18,6 @@
 - We always use conda environments; if you don't know which env to use, ask for clarification
 
 - when using python, first activate conda environment named `gfm`
+
+Hardware
+- I have NVIDIA GeForce RTX 4070 with 12282MiB memory
