@@ -41,14 +41,12 @@ class BinarySpacioTemporalDataset(Dataset):
                     f"Target emotion '{target_emotion}' not found. "
                     f"Available emotions: {available}"
                 )
-            self.emotion_idx = base_dataset.emotion_names.index(target_emotion)
         else:
             # Fallback: try to get from first sample
             sample = base_dataset[0]
             if hasattr(sample, 'emotion_names'):
                 if target_emotion not in sample.emotion_names:
                     raise ValueError(f"Target emotion '{target_emotion}' not found")
-                self.emotion_idx = sample.emotion_names.index(target_emotion)
             else:
                 raise ValueError("Cannot determine emotion names from dataset")
     
@@ -61,7 +59,7 @@ class BinarySpacioTemporalDataset(Dataset):
         
         # Extract target emotion value
         if hasattr(data, 'y') and data.y is not None:
-            emotion_value = data.y[self.emotion_idx].item()
+            emotion_value = data.y[0].item() # data.y is expected to be a tensor of shape [1] since we only have one target emotion
             
             # Convert to binary label
             binary_label = 1.0 if emotion_value > self.threshold else 0.0
