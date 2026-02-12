@@ -32,7 +32,7 @@ dataset:
   kt: 5  # Temporal k-NN for GNN
   ks: 5  # Spatial k-NN for GNN
   cache_dir: "data/cache"
-  use_cache: false
+  use_cache: true
   dropping_emotion_threshold: -1  # Drop samples where all emotions <= this value (-1 to disable)
 
 # Cross-validation configuration (shared)
@@ -84,17 +84,17 @@ gnn:
   
   training:
     num_epochs: 12
-    batch_size: 512
+    batch_size: 256
     learning_rate: 0.001
     grad_clip_max_norm: 1.0
     device: auto  # 'auto', 'cuda', or 'cpu'
     random_seed: 42
     
     # DataLoader optimization (Plan A - Quick Wins)
-    num_workers: 8  # Parallel data loading (increase to 8 for larger datasets)
-    pin_memory: true  # Faster CPU->GPU transfer
-    persistent_workers: true  # Avoid respawning workers
-    use_torch_compile: true  # JIT compilation (10-30% speedup, PyTorch 2.0+)
+    num_workers: 8  # Parallel data loading (increase to 8 for larger datasets) (doesn't help much in current case)
+    pin_memory: true  # Faster CPU->GPU transfer (actually helps a bit)
+    persistent_workers: true  # Avoid respawning workers (actually helps a bit)
+    use_torch_compile: true  # JIT compilation (10-30% speedup, PyTorch 2.0+) (actually helps quite a bit)
 
 # Binary classification metrics
 metrics:
