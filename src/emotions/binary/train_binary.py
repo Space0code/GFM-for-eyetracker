@@ -10,6 +10,7 @@ import sys
 import argparse
 import yaml
 import warnings
+import time
 from datetime import datetime
 from typing import Dict, Any, List
 from pathlib import Path
@@ -61,7 +62,7 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     
     for data in loader:
         data = data.to(device)
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         
         out = model(data).squeeze()  # [batch_size]
         target = data.y.squeeze()    # [batch_size]
@@ -146,26 +147,46 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
     
     # Create model
     model = BinarySpatioTemporalGNN(**model_cfg).to(device)
+    
+    # Apply torch.compile for JIT optimization (PyTorch 2.0+)
+    # Expected 10-30% speedup on forward/backward passes
+    use_compile = training_cfg.get('use_torch_compile', True)
+    if use_compile and hasattr(torch, 'compile'):
+        model = torch.compile(model, mode='default')
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
     
-    # Create data loaders
+    # Create data loaders with optimizations:
+    # - num_workers: parallel data loading (2-3x faster)
+    # - pin_memory: faster CPU->GPU transfer
+    # - persistent_workers: avoid respawning workers each epoch
+    loader_kwargs = {
+        'batch_size': training_cfg['batch_size'],
+        'num_workers': training_cfg.get('num_workers', 4),
+        'pin_memory': training_cfg.get('pin_memory', True) if device.type == 'cuda' else False,
+        'persistent_workers': training_cfg.get('persistent_workers', True)
+    }
+    
     train_loader = DataLoader(
         [dataset[i] for i in train_idx],
-        batch_size=training_cfg['batch_size'],
-        shuffle=True
+        shuffle=True,
+        **loader_kwargs
     )
     val_loader = DataLoader(
         [dataset[i] for i in val_idx],
-        batch_size=training_cfg['batch_size']
+        shuffle=False,
+        **loader_kwargs
     )
     test_loader = DataLoader(
         [dataset[i] for i in test_idx],
-        batch_size=training_cfg['batch_size']
+        shuffle=False,
+        **loader_kwargs
     )
     
     # Training loop
     best_val_loss = float('inf')
     best_epoch = 0
+    start_time = time.time()
     
     print(f"Training GNN for {test_name}...")
     for epoch in range(training_cfg['num_epochs']):
@@ -191,6 +212,7 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
             torch.save(model.state_dict(), os.path.join(fold_dir, 'best_model.pt'))
     
     print(f"  Best model at epoch {best_epoch+1}")
+    print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
     
     # Load best model and evaluate on test
     model.load_state_dict(torch.load(os.path.join(fold_dir, 'best_model.pt')))
