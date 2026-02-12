@@ -119,14 +119,14 @@ def validate_config(config: Dict[str, Any]):
                 except ValueError as e:
                     raise ValueError(f"Invalid baseline model in config: {e}")
     
-    # Validate metrics
-    valid_metrics = ['mse', 'mae', 'sd_error', 'spearman', 'ccc']
-    for metric in config['metrics']:
-        if metric not in valid_metrics:
-            raise ValueError(
-                f"Invalid metric: {metric}. "
-                f"Valid options: {', '.join(valid_metrics)}"
-            )
+    # # Validate metrics
+    # valid_metrics = ['mse', 'mae', 'sd_error', 'spearman', 'ccc']
+    # for metric in config['metrics']:
+    #     if metric not in valid_metrics:
+    #         raise ValueError(
+    #             f"Invalid metric: {metric}. "
+    #             f"Valid options: {', '.join(valid_metrics)}"
+    #         )
 
 
 def create_splitter(strategy: str, samples, val_size: int = 1, 
