@@ -8,7 +8,7 @@ run_experiments:
 
 # Binary classification task configuration
 binary_task:
-  target_emotion: "emotion-anger"  # Which emotion to predict (choose one)
+  target_emotion: "emotion-tenderness"  # Which emotion to predict (choose one)
   threshold: 0.0  # Intensity threshold: <=threshold -> class 0, >threshold -> class 1
 
 # Dataset configuration (shared by both GNN and baselines)
@@ -32,7 +32,7 @@ dataset:
   kt: 5  # Temporal k-NN for GNN
   ks: 5  # Spatial k-NN for GNN
   cache_dir: "data/cache"
-  use_cache: true
+  use_cache: false
   dropping_emotion_threshold: -1  # Drop samples where all emotions <= this value (-1 to disable)
 
 # Cross-validation configuration (shared)
