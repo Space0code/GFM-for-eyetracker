@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import yaml
+import warnings
 from datetime import datetime
 from typing import Dict, Any, List
 from pathlib import Path
@@ -136,7 +137,7 @@ def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
 
 
 def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir, 
-                   test_name, device):
+                   test_name, device, verbose: bool = True):
     """Train GNN for one fold."""
     model_cfg = config['gnn']['model']
     training_cfg = config['gnn']['training']
@@ -177,7 +178,7 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
             model, val_loader, device, emotion_name, threshold
         )
         
-        if (epoch + 1) % 10 == 0 or epoch == training_cfg['num_epochs'] - 1 or epoch == 0:
+        if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg['num_epochs'] - 1 or epoch == 0):
             val_acc = val_metrics['standard']['aggregated']['accuracy']
             print(f"  Epoch {epoch+1}/{training_cfg['num_epochs']}: "
                   f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, "
@@ -202,13 +203,14 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
     np.save(os.path.join(fold_dir, 'test_targets.npy'), test_true)
     
     test_acc = test_metrics['standard']['aggregated']['accuracy']
-    print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
+    if verbose:
+        print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
     
     return test_metrics
 
 
 def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx, 
-                         samples, fold_dir, metric_names, emotion_name):
+                         samples, fold_dir, metric_names, emotion_name, verbose: bool = True):
     """Train baseline models for one fold."""
     baseline_dir = os.path.join(fold_dir, 'baselines')
     os.makedirs(baseline_dir, exist_ok=True)
@@ -231,14 +233,20 @@ def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx,
     results = {}
     
     for model_name in baseline_cfg['models']:
-        print(f"  Training {model_name}...")
+        if verbose:
+            print(f"  Training {model_name}...")
         
         # Get hyperparameters
         hyperparams = baseline_cfg.get('hyperparameters', {}).get(model_name, {})
         
         # Create and train model
         model = get_binary_baseline_by_name(model_name, **hyperparams)
-        model.fit(X_train, y_train)
+        
+        # Suppress ConvergenceWarning from sklearn's neural network models
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=UserWarning, 
+                                    message='.*Stochastic Optimizer.*')
+            model.fit(X_train, y_train)
         
         # Evaluate on test set
         test_metrics = model.evaluate(
@@ -252,7 +260,8 @@ def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx,
         
         # Log accuracy
         test_acc = test_metrics['standard']['aggregated']['accuracy']
-        print(f"    ❗{model_name} - Test Accuracy: {test_acc:.4f}")
+        if verbose:
+            print(f"    ❗{model_name} - Test Accuracy: {test_acc:.4f}")
     
     return results
 
@@ -268,6 +277,7 @@ def main():
     cv_cfg = config['cross_validation']
     logging_cfg = config['logging']
     metric_names = config['metrics']
+    verbose = logging_cfg.get('verbose', True)
     
     # Get binary task parameters
     target_emotion = binary_task_cfg['target_emotion']
@@ -458,7 +468,7 @@ def main():
                 baseline_results = train_baselines_fold(
                     config['baselines'], baseline_train_idx, baseline_val_idx,
                     baseline_test_idx, tabular_samples, fold_dir,
-                    metric_names, target_emotion
+                    metric_names, target_emotion, verbose
                 )
                 for model_name, metrics in baseline_results.items():
                     baseline_results_all_folds[model_name][test_id] = metrics
@@ -467,7 +477,7 @@ def main():
             if run_experiments['gnn']:
                 gnn_metrics = train_gnn_fold(
                     config, gnn_train_idx, gnn_val_idx, gnn_test_idx,
-                    gnn_dataset, fold_dir, test_name, device
+                    gnn_dataset, fold_dir, test_name, device, verbose
                 )
                 gnn_results_all_folds[test_id] = gnn_metrics
         
