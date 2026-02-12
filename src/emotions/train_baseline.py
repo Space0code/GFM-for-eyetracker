@@ -128,58 +128,124 @@ def drop_pairs_with_emotions_below_threshold(df: pd.DataFrame,
     return filtered_df
 
 
-def build_tabular_samples(data_dir: str, file_list: Optional[List[str]] = None, 
+def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
+                         filter_subjects: list = None, filter_recordings: list = None,
+                         file_list: Optional[List[str]] = None, 
                          window_length: int = 10, 
                          dropping_emotion_threshold: float = -1) -> List[TabularWindowSample]:
     """Load CSVs and build windowed samples with subject/recording metadata.
     
     Args:
-        data_dir: Directory containing CSV files
-        file_list: Optional list of specific file names to load
+        data_dir: Directory containing CSV files (mutually exclusive with data_filepath)
+        data_filepath: Single CSV file with all data (mutually exclusive with data_dir)
+        filter_subjects: List of subject IDs to include (only with data_filepath)
+        filter_recordings: List of recording IDs to include (only with data_filepath)
+        file_list: Optional list of specific file names to load (only with data_dir)
         window_length: Window size in seconds
         dropping_emotion_threshold: Drop pairs where all emotions <= this value
         
     Returns:
         List of TabularWindowSample objects
     """
-    root = Path(data_dir)
-    files = [root / f for f in file_list] if file_list else list(root.glob('*.csv'))
+    # Validate input
+    if (data_dir is None) == (data_filepath is None):
+        raise ValueError("Must provide exactly one of: data_dir or data_filepath")
+    
     samples: List[TabularWindowSample] = []
-
-    for fpath in tqdm(files, desc="Loading data files"):
-        df = pd.read_csv(fpath)
-        df = df.dropna()
-        if len(df) == 0:
-            continue
+    
+    if data_filepath is not None:
+        # New behavior: load from single CSV file
+        if not os.path.exists(data_filepath):
+            raise FileNotFoundError(f"Data file not found: {data_filepath}")
         
-        # Drop if all emotions below threshold
-        emotion_cols = [c for c in df.columns if 'emotion' in c.lower()]
-        if emotion_cols and dropping_emotion_threshold > -np.inf:
-            df = drop_pairs_with_emotions_below_threshold(
-                df, emotion_cols, dropping_emotion_threshold
-            )
+        df = pd.read_csv(data_filepath)
+        df = df.dropna()
+        
+        # Check required columns
+        if 'subject' not in df.columns or 'recording' not in df.columns:
+            raise ValueError(f"CSV must contain 'subject' and 'recording' columns")
+        
+        # Apply filters
+        if filter_subjects is not None:
+            df = df[df['subject'].isin(filter_subjects)]
+        if filter_recordings is not None:
+            df = df[df['recording'].isin(filter_recordings)]
+        
+        if len(df) == 0:
+            raise ValueError("No data remaining after applying filters")
+        
+        # Group by (subject, recording) and process each group
+        grouped = df.groupby(['subject', 'recording'])
+        for (subject, recording), group_df in tqdm(grouped, desc="Loading data groups"):
+            group_df = group_df.reset_index(drop=True)
+            
+            # Drop if all emotions below threshold
+            emotion_cols = [c for c in group_df.columns if 'emotion' in c.lower()]
+            if emotion_cols and dropping_emotion_threshold > -np.inf:
+                group_df = drop_pairs_with_emotions_below_threshold(
+                    group_df, emotion_cols, dropping_emotion_threshold
+                )
+                if len(group_df) == 0:
+                    continue
+            
+            time_col = 'time-rel-seconds'
+            max_time = group_df[time_col].max()
+            start_time = 0
+            
+            while start_time < max_time:
+                end_time = start_time + window_length
+                window_data = group_df[(group_df[time_col] >= start_time) & (group_df[time_col] < end_time)]
+                
+                if len(window_data) > 10:
+                    agg = aggregate_window(window_data)
+                    
+                    # Separate features and targets
+                    features = {k: v for k, v in agg.items() if 'emotion' not in k.lower()}
+                    targets = {k: v for k, v in agg.items() if 'emotion' in k.lower()}
+                    
+                    samples.append(TabularWindowSample(features, targets, subject, recording))
+                
+                start_time += window_length
+    
+    else:
+        # Old behavior: load from directory
+        root = Path(data_dir)
+        files = [root / f for f in file_list] if file_list else list(root.glob('*.csv'))
+
+        for fpath in tqdm(files, desc="Loading data files"):
+            df = pd.read_csv(fpath)
+            df = df.dropna()
             if len(df) == 0:
                 continue
-        
-        subject, recording = parse_subject_recording_from_name(str(fpath))
-        time_col = 'time-rel-seconds'
-        max_time = df[time_col].max()
-        start_time = 0
-        
-        while start_time < max_time:
-            end_time = start_time + window_length
-            window_data = df[(df[time_col] >= start_time) & (df[time_col] < end_time)]
             
-            if len(window_data) > 10:
-                agg = aggregate_window(window_data)
-                
-                # Separate features and targets
-                features = {k: v for k, v in agg.items() if 'emotion' not in k.lower()}
-                targets = {k: v for k, v in agg.items() if 'emotion' in k.lower()}
-                
-                samples.append(TabularWindowSample(features, targets, subject, recording))
+            # Drop if all emotions below threshold
+            emotion_cols = [c for c in df.columns if 'emotion' in c.lower()]
+            if emotion_cols and dropping_emotion_threshold > -np.inf:
+                df = drop_pairs_with_emotions_below_threshold(
+                    df, emotion_cols, dropping_emotion_threshold
+                )
+                if len(df) == 0:
+                    continue
             
-            start_time += window_length
+            subject, recording = parse_subject_recording_from_name(str(fpath))
+            time_col = 'time-rel-seconds'
+            max_time = df[time_col].max()
+            start_time = 0
+            
+            while start_time < max_time:
+                end_time = start_time + window_length
+                window_data = df[(df[time_col] >= start_time) & (df[time_col] < end_time)]
+                
+                if len(window_data) > 10:
+                    agg = aggregate_window(window_data)
+                    
+                    # Separate features and targets
+                    features = {k: v for k, v in agg.items() if 'emotion' not in k.lower()}
+                    targets = {k: v for k, v in agg.items() if 'emotion' in k.lower()}
+                    
+                    samples.append(TabularWindowSample(features, targets, subject, recording))
+                
+                start_time += window_length
 
     return samples
 

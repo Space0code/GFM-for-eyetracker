@@ -33,6 +33,44 @@ def load_csv_files(self, root_dir, recursive, ignore_dirs, file_list):
         search_type = "recursively" if recursive else "in root directory"
         raise FileNotFoundError(f"No CSVs found {search_type} in {root_dir}")
 
+def load_single_csv_file(self, data_filepath, filter_subjects=None, filter_recordings=None):
+    """Load data from a single CSV file containing all subjects and recordings.
+    
+    Args:
+        data_filepath: Path to the single CSV file
+        filter_subjects: Optional list of subject IDs to include
+        filter_recordings: Optional list of recording IDs to include
+    """
+    if not os.path.exists(data_filepath):
+        raise FileNotFoundError(f"Data file not found: {data_filepath}")
+    
+    df = pd.read_csv(data_filepath)
+    
+    # Check required columns
+    if 'subject' not in df.columns or 'recording' not in df.columns:
+        raise ValueError(f"CSV must contain 'subject' and 'recording' columns")
+    
+    # Apply filters if provided
+    if filter_subjects is not None:
+        df = df[df['subject'].isin(filter_subjects)]
+    if filter_recordings is not None:
+        df = df[df['recording'].isin(filter_recordings)]
+    
+    if len(df) == 0:
+        raise ValueError("No data remaining after applying filters")
+    
+    # Group by (subject, recording) and create virtual file entries
+    self.files = []
+    self.dataframes = {}  # Store dataframes by virtual filename
+    
+    grouped = df.groupby(['subject', 'recording'])
+    for (subject, recording), group_df in grouped:
+        virtual_filename = f"subject_{subject}_recording_{recording}.csv"
+        self.files.append(virtual_filename)
+        self.dataframes[virtual_filename] = group_df.reset_index(drop=True)
+    
+    print(f"Loaded data from {data_filepath}: {len(self.files)} subject-recording pairs")
+
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the dataset by removing rows with NaN values in required feature columns.
@@ -87,15 +125,21 @@ class SpacioTemporalDataset(Dataset):
     Each CSV becomes a graph (or multiple graphs) with both spatial and temporal connections.
     """
     def __init__(
-            self, root_dir: str, recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
+            self, root_dir: str = None, data_filepath: str = None, 
+            filter_subjects: list = None, filter_recordings: list = None,
+            recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
             kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, 
             cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
         """
-        Load all CSV files from directory and convert to graphs.
-        If file_list is provided, search for the files in the list in root_dir.
+        Load CSV files and convert to graphs.
+        
+        Use either root_dir (old behavior) or data_filepath (new behavior).
 
         Parameters:
-        - root_dir: root dir of data files
+        - root_dir: root dir of data files (mutually exclusive with data_filepath)
+        - data_filepath: path to single CSV file with all data (mutually exclusive with root_dir)
+        - filter_subjects: list of subject IDs to include (only with data_filepath)
+        - filter_recordings: list of recording IDs to include (only with data_filepath)
         - recursive: search recursively (bool)
         - ignore_dirs: list of directories with data to ignore
         - file_list: list of csv files relative root_dir to be loaded (exclusively these)
@@ -103,10 +147,14 @@ class SpacioTemporalDataset(Dataset):
         - ks: k spatial neigbors
         - window_length: in seconds
         - window_overlap: fraction in range [0, 1)
-        - cache_dir: directory to store cached processed graphs (default: root_dir/.cache)
+        - cache_dir: directory to store cached processed graphs (default: root_dir/.cache for old, data/.cache for new)
         - use_cache: whether to use caching (default: True)
         - dropping_emotion_threshold: threshold to drop (subject, recording) pairs where all emotion values are <= this threshold
         """
+        
+        # Validate input: exactly one of root_dir or data_filepath must be provided
+        if (root_dir is None) == (data_filepath is None):
+            raise ValueError("Must provide exactly one of: root_dir or data_filepath")
 
         self.kt = kt  # temporal horizon
         self.ks = ks  # k for spatial kNN
@@ -116,16 +164,26 @@ class SpacioTemporalDataset(Dataset):
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
         self.dropping_emotion_threshold = dropping_emotion_threshold
+        self.dataframes = {}  # For single CSV mode
+        self.use_single_file = data_filepath is not None
+        self.filter_subjects = filter_subjects
+        self.filter_recordings = filter_recordings
 
         # Setup cache directory
         if cache_dir is None:
-            cache_dir = os.path.join(root_dir, ".cache")
+            if root_dir is not None:
+                cache_dir = os.path.join(root_dir, ".cache")
+            else:
+                cache_dir = os.path.join(os.path.dirname(data_filepath), ".cache")
         self.cache_dir = cache_dir
         self.use_cache = use_cache
         
         # Try to load from cache first
         if use_cache:
-            cache_path = self._get_cache_path(root_dir, recursive, ignore_dirs, file_list)
+            cache_path = self._get_cache_path(
+                root_dir, data_filepath, filter_subjects, filter_recordings,
+                recursive, ignore_dirs, file_list
+            )
             if os.path.exists(cache_path):
                 print(f"Loading dataset from cache: {cache_path}")
                 with open(cache_path, 'rb') as f:
@@ -133,13 +191,17 @@ class SpacioTemporalDataset(Dataset):
                     self.graphs = cached_data['graphs']
                     self.files = cached_data['files']
                     self.emotion_names = cached_data.get('emotion_names', [])
+                    self.dataframes = cached_data.get('dataframes', {})
                 print(f"Loaded {len(self.graphs)} graphs from cache")
                 return
         else:
             print("Caching disabled, processing dataset from scratch.")
 
         # Process dataset from scratch
-        load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
+        if data_filepath is not None:
+            load_single_csv_file(self, data_filepath, filter_subjects, filter_recordings)
+        else:
+            load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
         
         # pre-load all graphs into memory for simplicity
         for path in self.files:
@@ -164,7 +226,9 @@ class SpacioTemporalDataset(Dataset):
                 if not self.emotion_names and hasattr(graph, 'emotion_names'):
                     self.emotion_names = graph.emotion_names
                 self.graphs.append(graph)
-        print(f"Loaded {len(self.graphs)} graphs from {root_dir}")
+        
+        source_desc = data_filepath if data_filepath else root_dir
+        print(f"Loaded {len(self.graphs)} graphs from {source_desc}")
         
         # Save to cache
         if use_cache:
@@ -179,14 +243,21 @@ class SpacioTemporalDataset(Dataset):
         graph.idx = torch.tensor([idx], dtype=torch.long)
         return graph
     
-    def _get_cache_path(self, root_dir: str, recursive: bool, ignore_dirs: list, file_list: list) -> str:
+    def _get_cache_path(self, root_dir: str, data_filepath: str, 
+                       filter_subjects: list, filter_recordings: list,
+                       recursive: bool, ignore_dirs: list, file_list: list) -> str:
         """
         Generate a unique cache filename based on dataset parameters.
         Uses hash of configuration to ensure different parameters create different caches.
         """
         # Create a unique identifier based on parameters
         config_str = f"kt={self.kt}_ks={self.ks}_wl={self.window_length}_wo={self.window_overlap}"
-        config_str += f"_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+        
+        if data_filepath is not None:
+            config_str += f"_file={os.path.basename(data_filepath)}"
+            config_str += f"_subj={filter_subjects}_rec={filter_recordings}"
+        else:
+            config_str += f"_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
         
         # Hash the configuration
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -207,6 +278,7 @@ class SpacioTemporalDataset(Dataset):
                     'graphs': self.graphs,
                     'files': self.files,
                     'emotion_names': self.emotion_names,
+                    'dataframes': self.dataframes if self.use_single_file else {},
                     'kt': self.kt,
                     'ks': self.ks,
                     'window_length': self.window_length,
@@ -218,7 +290,11 @@ class SpacioTemporalDataset(Dataset):
             # Continue without caching - don't fail the entire dataset loading
 
     def _load_df(self, path: str) -> pd.DataFrame:
-        df = pd.read_csv(path)
+        # Check if using single file mode
+        if self.use_single_file and path in self.dataframes:
+            df = self.dataframes[path].copy()
+        else:
+            df = pd.read_csv(path)
         df = clean_dataset(df)
         return df
 

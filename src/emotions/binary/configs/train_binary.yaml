@@ -13,68 +13,17 @@ binary_task:
 
 # Dataset configuration (shared by both GNN and baselines)
 dataset:
-  data_dir: "data/processed/eSEEd_v2_processed"
-  # file_list: 
+  # Choose ONE of the following:
+  # Option 1: Single CSV file (NEW - recommended)
+  data_filepath: "data/processed/eSEEd_v2_cleaned/eSEEd_pupil_x_y_cleaned.csv"
+  filter_subjects:  # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
+  filter_recordings:  # Optional: list of recording IDs to include, e.g., [1, 2, 3]
+  
+  # Option 2: Directory with multiple CSV files (OLD - for backward compatibility)
+  # data_dir: "data/processed/eSEEd_v2_processed"
+  # file_list:  # Optional: specify which files to load from data_dir
   #   - sample_12_recording_01_merged.csv
   #   - sample_12_recording_02_merged.csv
-  #   - sample_12_recording_03_merged.csv
-  #   - sample_12_recording_04_merged.csv
-  #   - sample_12_recording_05_merged.csv
-  #   - sample_12_recording_06_merged.csv
-  #   - sample_12_recording_07_merged.csv
-  #   - sample_12_recording_08_merged.csv
-  #   - sample_12_recording_09_merged.csv
-  #   - sample_12_recording_10_merged.csv
-  #   - sample_21_recording_01_merged.csv
-  #   - sample_21_recording_02_merged.csv
-  #   - sample_21_recording_03_merged.csv
-  #   - sample_21_recording_04_merged.csv
-  #   - sample_21_recording_05_merged.csv
-  #   - sample_21_recording_06_merged.csv
-  #   - sample_21_recording_07_merged.csv
-  #   - sample_21_recording_08_merged.csv
-  #   - sample_21_recording_09_merged.csv
-  #   - sample_21_recording_10_merged.csv
-  #   - sample_26_recording_01_merged.csv
-  #   - sample_26_recording_02_merged.csv
-  #   - sample_26_recording_03_merged.csv
-  #   - sample_26_recording_04_merged.csv
-  #   - sample_26_recording_05_merged.csv
-  #   - sample_26_recording_06_merged.csv
-  #   - sample_26_recording_07_merged.csv
-  #   - sample_26_recording_08_merged.csv
-  #   - sample_26_recording_09_merged.csv
-  #   - sample_26_recording_10_merged.csv
-  #   - sample_29_recording_01_merged.csv
-  #   - sample_29_recording_02_merged.csv
-  #   - sample_29_recording_03_merged.csv
-  #   - sample_29_recording_04_merged.csv
-  #   - sample_29_recording_05_merged.csv
-  #   - sample_29_recording_06_merged.csv
-  #   - sample_29_recording_07_merged.csv
-  #   - sample_29_recording_08_merged.csv
-  #   - sample_29_recording_09_merged.csv
-  #   - sample_29_recording_10_merged.csv
-  #   - sample_32_recording_01_merged.csv
-  #   - sample_32_recording_02_merged.csv
-  #   - sample_32_recording_03_merged.csv
-  #   - sample_32_recording_04_merged.csv
-  #   - sample_32_recording_05_merged.csv
-  #   - sample_32_recording_06_merged.csv
-  #   - sample_32_recording_07_merged.csv
-  #   - sample_32_recording_08_merged.csv
-  #   - sample_32_recording_09_merged.csv
-  #   - sample_32_recording_10_merged.csv
-  #   - sample_45_recording_01_merged.csv
-  #   - sample_45_recording_02_merged.csv
-  #   - sample_45_recording_03_merged.csv
-  #   - sample_45_recording_04_merged.csv
-  #   - sample_45_recording_05_merged.csv
-  #   - sample_45_recording_06_merged.csv
-  #   - sample_45_recording_07_merged.csv
-  #   - sample_45_recording_08_merged.csv
-  #   - sample_45_recording_09_merged.csv
-  #   - sample_45_recording_10_merged.csv
   
   recursive: true
   ignore_dirs: []

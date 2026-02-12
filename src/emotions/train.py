@@ -94,7 +94,10 @@ def main():
     if run_experiments['gnn']:
         print("Loading graph dataset for GNN...")
         gnn_dataset = SpacioTemporalDataset(
-            root_dir=dataset_cfg['data_dir'],
+            root_dir=dataset_cfg.get('data_dir'),
+            data_filepath=dataset_cfg.get('data_filepath'),
+            filter_subjects=dataset_cfg.get('filter_subjects'),
+            filter_recordings=dataset_cfg.get('filter_recordings'),
             file_list=dataset_cfg.get('file_list'),
             recursive=dataset_cfg['recursive'],
             ignore_dirs=dataset_cfg.get('ignore_dirs', []),
@@ -111,7 +114,10 @@ def main():
     if run_experiments['baselines']:
         print("Loading tabular samples for baselines...")
         tabular_samples = build_tabular_samples(
-            data_dir=dataset_cfg['data_dir'],
+            data_dir=dataset_cfg.get('data_dir'),
+            data_filepath=dataset_cfg.get('data_filepath'),
+            filter_subjects=dataset_cfg.get('filter_subjects'),
+            filter_recordings=dataset_cfg.get('filter_recordings'),
             file_list=dataset_cfg.get('file_list'),
             window_length=dataset_cfg.get('window_length', 10),
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1)

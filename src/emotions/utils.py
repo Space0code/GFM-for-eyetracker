@@ -77,12 +77,8 @@ def validate_config(config: Dict[str, Any]):
     
     # Validate dataset
     dataset_cfg = config['dataset']
-    if 'data_dir' not in dataset_cfg:
-        raise ValueError("Missing 'data_dir' in dataset config")
-    
-    data_dir = dataset_cfg['data_dir']
-    if not os.path.exists(data_dir):
-        raise ValueError(f"Data directory does not exist: {data_dir}")
+    if 'data_dir' not in dataset_cfg and 'data_filepath' not in dataset_cfg:
+        raise ValueError("Missing 'data_dir' or 'data_filepath' in dataset config")
     
     # Validate dropping_emotion_threshold
     threshold = dataset_cfg.get('dropping_emotion_threshold', -1)
