@@ -132,7 +132,7 @@ def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
         threshold=threshold
     )
     
-    return metrics, total_loss / len(loader)
+    return metrics, total_loss / len(loader), y_pred, y_true
 
 
 def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir, 
@@ -173,7 +173,7 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
             training_cfg.get('grad_clip_max_norm', 1.0)
         )
         
-        val_metrics, val_loss = evaluate_gnn(
+        val_metrics, val_loss, _, _ = evaluate_gnn(
             model, val_loader, device, emotion_name, threshold
         )
         
@@ -193,9 +193,13 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
     
     # Load best model and evaluate on test
     model.load_state_dict(torch.load(os.path.join(fold_dir, 'best_model.pt')))
-    test_metrics, test_loss = evaluate_gnn(
+    test_metrics, test_loss, test_pred, test_true = evaluate_gnn(
         model, test_loader, device, emotion_name, threshold
     )
+    
+    # Save predictions and targets
+    np.save(os.path.join(fold_dir, 'test_predictions.npy'), test_pred)
+    np.save(os.path.join(fold_dir, 'test_targets.npy'), test_true)
     
     test_acc = test_metrics['standard']['aggregated']['accuracy']
     print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
