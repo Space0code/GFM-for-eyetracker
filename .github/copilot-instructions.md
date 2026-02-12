@@ -21,3 +21,25 @@
 
 Hardware
 - I have NVIDIA GeForce RTX 4070 with 12282MiB memory
+- I use Ubuntu
+- The important snippet from the output of `sudo lshw -short` is as follows:
+Device           Class          Description
+===========================================
+                 system         B550M-ITX/ac (To Be Filled By O.E.M.)
+                 bus            B550M-ITX/ac
+                 memory         64KiB BIOS
+                 memory         32GiB System Memory
+                 memory         16GiB DIMM DDR4 Synchronous Unbuffered (Unregistered) 3600 MHz (0.3 ns)
+                 memory         16GiB DIMM DDR4 Synchronous Unbuffered (Unregistered) 3600 MHz (0.3 ns)
+                 memory         512KiB L1 cache
+                 memory         4MiB L2 cache
+                 memory         32MiB L3 cache
+                 processor      AMD Ryzen 7 5700X 8-Core Processor
+                 bridge         Starship/Matisse Root Complex
+                 bridge         Starship/Matisse GPP Bridge
+/dev/nvme0       storage        Samsung SSD 990 PRO 2TB
+hwmon0           disk           NVMe disk
+/dev/ng0n1       disk           NVMe disk
+/dev/nvme0n1     disk           2TB NVMe disk
+/dev/nvme0n1p1   volume         1074MiB Windows FAT volume
+/dev/nvme0n1p2   volume         1861GiB EXT4 volume
