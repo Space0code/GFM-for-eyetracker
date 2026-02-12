@@ -322,7 +322,7 @@ Simplify the problem as much as possible. Advance to the next step only when the
 
 ## Binary classification on the **whole** dataset
 ### Emotion: Anger
-Complete results in `RETAIN_2026-02-12_14-50-31`.
+Complete results in `results/binary/RETAIN_2026-02-12_14-50-31`.
 #### Recording LOO
 
 | Model    | Accuracy | Precision | Recall | F1    | AUC   |
@@ -355,7 +355,7 @@ Remaining subjects: 1, 2, 4, 9, 10, 11, 12, 14, 18, 19, 20, 21, 22, 23, 25, 26, 
 
 ## Binary classification on the **cleaned** dataset
 ### Emotion: Anger
-Complete results in `RETAIN_2026-02-12_17-45-05`.
+Complete results in `results/binary/RETAIN_2026-02-12_17-45-05`.
 #### Recording LOO
 
 | Model    | Accuracy | Precision | Recall | F1    | AUC   |
@@ -374,4 +374,25 @@ Complete results in `RETAIN_2026-02-12_17-45-05`.
 | SVM      | 0.608    | 0.643     | 0.806  | 0.677 | 0.553 |
 | LightGBM | 0.573    | 0.616     | 0.793  | 0.664 | 0.502 |
 | MLP      | 0.569    | 0.630     | 0.663  | 0.620 | 0.538 |
+| GNN      | 0.602    | 0.602     | 1.000  | 0.727 | 0.544 |
+
+### Emotion: Tenderness
+`RETAIN_2026-02-12_18-26-47`
+#### Recording LOO
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.667    | 0.000     | 0.000  | 0.000 | 0.400 |
+| SVM      | 0.612    | 0.336     | 0.176  | 0.116 | 0.513 |
+| LightGBM | 0.606    | 0.235     | 0.146  | 0.099 | 0.500 |
+| MLP      | 0.589    | 0.361     | 0.341  | 0.211 | 0.515 |
+| GNN      | 0.559    | 0.559     | 1.000  | 0.676 | 0.506 |
+
+#### Subject LOO
+
+| Model    | Accuracy | Precision | Recall | F1    | AUC   |
+|----------|----------|-----------|--------|-------|-------|
+| Mean     | 0.708    | 0.000     | 0.000  | 0.000 | 0.500 |
+| SVM      | 0.698    | 0.414     | 0.162  | 0.189 | 0.695 |
+| LightGBM | 0.692    | 0.382     | 0.168  | 0.203 | 0.638 |
+| MLP      | 0.672    | 0.423     | 0.366  | 0.355 | 0.655 |
 | GNN      | 0.602    | 0.602     | 1.000  | 0.727 | 0.544 |
