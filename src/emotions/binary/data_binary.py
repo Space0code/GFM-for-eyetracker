@@ -54,12 +54,22 @@ class BinarySpacioTemporalDataset(Dataset):
         return len(self.base_dataset)
     
     def __getitem__(self, idx):
-        # Get original graph data
-        data = self.base_dataset[idx]
+        # Get original graph data and clone it to avoid in-place modification
+        data = self.base_dataset[idx].clone()
         
         # Extract target emotion value
         if hasattr(data, 'y') and data.y is not None:
-            emotion_value = data.y[0].item() # data.y is expected to be a tensor of shape [1] since we only have one target emotion
+            # Find the index of target emotion in emotion_names
+            if hasattr(data, 'emotion_names') and self.target_emotion in data.emotion_names:
+                emotion_idx = data.emotion_names.index(self.target_emotion)
+            elif hasattr(self.base_dataset, 'emotion_names') and self.target_emotion in self.base_dataset.emotion_names:
+                # Fallback: use base_dataset emotion_names
+                emotion_idx = self.base_dataset.emotion_names.index(self.target_emotion)
+            else:
+                raise ValueError(f"Cannot find emotion index for '{self.target_emotion}'")
+            
+            # Extract the target emotion value
+            emotion_value = data.y[emotion_idx].item()
             
             # Convert to binary label
             binary_label = 1.0 if emotion_value > self.threshold else 0.0
