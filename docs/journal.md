@@ -364,3 +364,41 @@ Remaining subjects: 1, 2, 4, 9, 10, 11, 12, 14, 18, 19, 20, 21, 22, 23, 25, 26, 
     - `results/binary/RETAIN_2026-02-12_19-45-27`
 
 The results show the problem is still difficult. Majority baseline is rarely beaten. GNN has a serious issue - it collapses to always predicting 1 in all experiments (all emotions, both LOOs).
+
+## GNN collapse
+Debugging embedding collapse. 
+#### Embedding Statistics (Batch 2/10, size=176)
+
+| Stage | var_mean | cos_mean | L2_mean | within_var | Status |
+|-------|----------|----------|---------|-----------|--------|
+| input_raw | 1.36e+02 | 0.9207 | 29.9191 | 1.56e+00 | ✓ |
+| preprocess_none | 1.36e+02 | 0.9207 | 29.9191 | 1.56e+00 | ✓ |
+| conv1 | 2.67e+00 | 0.9232 | 22.1433 | 6.69e-02 | ⚠ Variance collapse |
+| conv2 | 9.37e-01 | 0.9323 | 12.5929 | 2.73e-02 | ✓ |
+| pool_g2 | 9.89e-01 | 0.9504 | 12.7663 | N/A | ✓ |
+| head_logits | 1.11e-02 | 1.0000 | 0.1215 | N/A | ⚠ Variance collapse |
+| head_prob | 6.48e-04 | 0.0000 | 0.0000 | N/A | ⚠ Variance collapse |
+
+**Logits details**: min=−0.5743, max=−0.1745, range=0.3998, std=0.1052, ratio(std/range)=0.2630
+
+#### Aggregate Metrics (Mean Across Batches)
+
+| Stage | var_mean | std | cos_mean | L2_mean |
+|-------|----------|-----|----------|---------|
+| input_raw | 1.37e+02 | 1.87e+01 | 0.9202 | 29.4389 |
+| preprocess_none | 1.37e+02 | 1.87e+01 | 0.9202 | 29.4389 |
+| conv1 | 2.69e+00 | 2.64e+00 | 0.9205 | 21.8115 |
+| conv2 | 9.44e-01 | 1.52e+00 | 0.9332 | 12.2126 |
+| pool_g2 | 9.98e-01 | 1.58e+00 | 0.9510 | 12.6060 |
+| head_logits | 1.13e-02 | 1.06e-01 | 1.0000 | 0.1221 |
+| head_prob | 6.65e-04 | 2.58e-02 | 0.0000 | 0.0000 |
+
+### Discussion
+
+The embedding diagnostics indicate that the model suffers from an early-stage representation collapse. With preprocessing disabled, raw node features show substantial diversity both within graphs (`within_var ≈ 1.5`) and between graphs (`var_mean ≈ 1e2`). The first major loss of information then occurs at the first message-passing step (**conv1**), where `within_var` drops by ~20–25× (to ~6e−2), consistent with strong smoothing from neighbor aggregation. Given the graph construction (temporal neighbors + spatial kNN, unweighted edges), a GCN-style update can quickly homogenize node embeddings even with self-loops, suggesting oversmoothing begins immediately.
+
+Importantly, **enabling the preprocess MLP yields a very similar overall picture**, but shifts the first major loss of information *one step earlier*: the preprocess MLP itself produces a large reduction in within-graph variance, after which the subsequent GNN layers continue smoothing. This suggests that the preprocessing stage can already compress subject/graph-specific variability (likely due to feature scale/unit mismatch and the MLP learning a dominant “common component”), making the downstream message passing start from a less informative representation.
+
+Downstream, pooled graph embeddings (`pool_g2`) retain some variance, but the head output becomes nearly constant: `head_logits var_mean ≈ 1e−2` and logits lie in a narrow negative range (≈ −0.57 to −0.17), mapping to probabilities mostly below 0.5. The observed `cos_mean = 1.0` for `head_logits` is expected for a 1D output when logits share the same sign and should not be over-interpreted; the key issue is the **low logit spread** and resulting near-baseline predictions.
+
+Overall, the results point to two interacting problems: (i) **early collapse** (either in the preprocess MLP when enabled, or in conv1 when preprocessing is disabled), and (ii) a **low-variance head regime** that yields near-constant outputs. This motivates focusing mitigation on the first collapsing step (feature normalization and/or residualized/normed preprocessing; reduced mixing strength/attention/weighted edges for conv1), rather than tuning later layers.
