@@ -6,7 +6,7 @@ from torch_geometric.nn import GCNConv, GATConv, HeteroConv, global_mean_pool
 class SpatioTemporalHeteroGNN(nn.Module):
     def __init__(
             self, in_channels: int, hidden_channels: int, out_channels: int, 
-            output_scale: float, use_preprocess_mlp: bool = True, add_self_loops: bool = False,
+            output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
             ):
@@ -77,11 +77,15 @@ class SpatioTemporalHeteroGNN(nn.Module):
             # nn.Sigmoid()  # Output in [0, 1], will scale to [0, output_scale]
         )
         self.output_scale = output_scale
+        self.use_edge_weights = use_edge_weights
 
     def forward(self, data):
         
         # data is a HeteroData from your SpacioTemporalDataset
         x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
+        edge_weight_dict = None
+        if self.use_edge_weights:
+            edge_weight_dict = {k: data[k].edge_attr for k in edge_index_dict.keys() if hasattr(data[k], 'edge_attr')}
         
         # Preprocess raw input with MLP
         if self.use_preprocess_mlp:
@@ -92,7 +96,10 @@ class SpatioTemporalHeteroGNN(nn.Module):
         
         # 1st layer with residual + layer norm
         # x1 = LN(GELU(conv1(x0)) + proj_x0(x0))
-        x_dict = self.conv1(x_dict, edge_index_dict)
+        if self.use_edge_weights and edge_weight_dict:
+            x_dict = self.conv1(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
+        else:
+            x_dict = self.conv1(x_dict, edge_index_dict)    
         x_dict = {k: self.gnn_activation(v) for k, v in x_dict.items()}
         x_dict["node"] = self.ln1(x_dict["node"] + self.proj_x0(x_input["node"]))
         x_dict = {k: self.gnn_dropout(v) for k, v in x_dict.items()}
@@ -102,7 +109,10 @@ class SpatioTemporalHeteroGNN(nn.Module):
 
         # 2nd layer with residual + layer norm
         # x2 = LN(GELU(conv2(x1)) + x1)
-        x_dict = self.conv2(x_dict, edge_index_dict)
+        if self.use_edge_weights and edge_weight_dict:
+            x_dict = self.conv2(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
+        else:
+            x_dict = self.conv2(x_dict, edge_index_dict)
         x_dict = {k: self.gnn_activation(v) for k, v in x_dict.items()}
         x_dict["node"] = self.ln2(x_dict["node"] + x_prev["node"])
         x_dict = {k: self.gnn_dropout(v) for k, v in x_dict.items()}

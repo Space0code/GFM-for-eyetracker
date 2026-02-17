@@ -18,6 +18,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+# resolve warnings
+torch.set_float32_matmul_precision("high")
+torch._dynamo.config.capture_scalar_outputs = True
+os.environ["TORCH_LOGS"] = ""          # disables torch compile logs
+os.environ["TORCHDYNAMO_VERBOSE"] = "0"
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 import joblib
@@ -43,6 +48,7 @@ from emotions.binary.data_binary import (
 from emotions.binary.model_binary import BinarySpatioTemporalGNN
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
+
 
 
 def parse_args():
@@ -189,6 +195,19 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
         shuffle=False,
         **loader_kwargs
     )
+    
+    # # Validate edge weights (print once per fold)
+    # print("Validating edge weights from first batch...")
+    # first_batch = next(iter(train_loader))
+    # first_batch = first_batch.to(device)
+    
+    # if hasattr(first_batch[("node", "temporal", "node")], "edge_attr"):
+    #     w_temporal = first_batch[("node", "temporal", "node")].edge_attr
+    #     print(f"  w_temporal: min={w_temporal.min():.4f}, max={w_temporal.max():.4f}, mean={w_temporal.mean():.4f}")
+    
+    # if hasattr(first_batch[("node", "spatial", "node")], "edge_attr"):
+    #     w_spatial = first_batch[("node", "spatial", "node")].edge_attr
+    #     print(f"  w_spatial:  min={w_spatial.min():.4f}, max={w_spatial.max():.4f}, mean={w_spatial.mean():.4f}")
     
     # Training loop
     best_val_loss = float('inf')
@@ -384,6 +403,8 @@ def main():
             window_overlap=dataset_cfg['window_overlap'],
             kt=dataset_cfg['kt'],
             ks=dataset_cfg['ks'],
+            use_edge_weights=dataset_cfg['use_edge_weights'],
+            tau=dataset_cfg['tau'],
             cache_dir=dataset_cfg.get('cache_dir'),
             use_cache=dataset_cfg.get('use_cache', True),
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),

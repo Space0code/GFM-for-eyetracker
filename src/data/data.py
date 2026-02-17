@@ -128,7 +128,8 @@ class SpacioTemporalDataset(Dataset):
             self, root_dir: str = None, data_filepath: str = None, 
             filter_subjects: list = None, filter_recordings: list = None,
             recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
-            kt: int = 5, ks: int = 10, window_length: int = 60, window_overlap: float = 0, 
+            kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05, 
+            window_length: int = 60, window_overlap: float = 0, 
             cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
         """
         Load CSV files and convert to graphs.
@@ -158,6 +159,8 @@ class SpacioTemporalDataset(Dataset):
 
         self.kt = kt  # temporal horizon
         self.ks = ks  # k for spatial kNN
+        self.use_edge_weights = use_edge_weights
+        self.tau = tau # edge weight time decay constant (in seconds)
         self.window_length = window_length
         self.window_overlap = window_overlap
         self.files = []
@@ -266,7 +269,7 @@ class SpacioTemporalDataset(Dataset):
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Cache filename includes parameters for readability
-        cache_filename = f"dataset_kt{self.kt}_ks{self.ks}_wl{self.window_length}_wo{self.window_overlap}_{config_hash}.pkl"
+        cache_filename = f"dataset_kt{self.kt}_ks{self.ks}_tau{self.tau}_wl{self.window_length}_wo{self.window_overlap}_{config_hash}.pkl"
         return os.path.join(self.cache_dir, cache_filename)
     
     def _save_to_cache(self, cache_path: str):
@@ -345,9 +348,11 @@ class SpacioTemporalDataset(Dataset):
         kt = self.kt
 
         # Select feature columns
-        feature_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+        # feature_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+        feature_cols = ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
         df_window = df.loc[window_slice, :]
         n = len(df_window)
+        t = torch.tensor(df_window["time-rel-seconds"].values, dtype=torch.float32)
 
         #### node features matrix X
         X = torch.tensor(df_window[feature_cols].values, dtype=torch.float32)
@@ -382,6 +387,10 @@ class SpacioTemporalDataset(Dataset):
         dst = dst[valid]
 
         edge_index_temporal = torch.stack([src, dst], dim=0)  # [2, E]
+        if self.use_edge_weights:
+            src, dst = edge_index_temporal[0], edge_index_temporal[1]
+            df_temporal = (t[dst] - t[src]).abs()
+            w_temporal = torch.exp(-df_temporal / self.tau)  # shape [E]
 
         #### creating SPATIAL edge_index matrix
         tree = KDTree(X[:, 1:3].numpy())  # use (x, y) for spatial neighbors
@@ -397,12 +406,19 @@ class SpacioTemporalDataset(Dataset):
 
         # remove duplicate spatial edges
         edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
+        if self.use_edge_weights:
+            src, dst = edge_index_spatial[0], edge_index_spatial[1]
+            df_spatial = (t[dst] - t[src]).abs()
+            w_spatial = torch.exp(-df_spatial / self.tau)  # shape [E]
 
         data = HeteroData()
         data["node"].x = X
         data["node"].num_nodes = n
         data["node", "temporal", "node"].edge_index = edge_index_temporal
         data["node", "spatial", "node"].edge_index = edge_index_spatial
+        if self.use_edge_weights:
+            data["node", "temporal", "node"].edge_attr = w_temporal
+            data["node", "spatial", "node"].edge_attr = w_spatial
         
         # Add emotion targets if available
         if y is not None:

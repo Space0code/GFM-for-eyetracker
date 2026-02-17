@@ -158,6 +158,7 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
     training_cfg = gnn_cfg['training']
     model_cfg = gnn_cfg['model']
     logging_cfg = config['logging']
+    data_cfg = config['dataset']
     
     train_dataset = [dataset[i] for i in train_idx]
     val_dataset = [dataset[i] for i in val_idx]
@@ -175,6 +176,7 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
         out_channels=model_cfg['out_channels'],
         output_scale=model_cfg.get('output_scale', 10.0),
         use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
+        use_edge_weights=data_cfg.get('use_edge_weights', True),
         add_self_loops=model_cfg.get('add_self_loops', False),
         dropout_mlp=model_cfg.get('dropout_mlp', 0.1),
         dropout_gnn=model_cfg.get('dropout_gnn', 0.1),
