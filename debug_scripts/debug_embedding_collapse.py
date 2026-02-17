@@ -46,7 +46,7 @@ from torch_geometric.nn import global_mean_pool
 
 # ========================== HARDCODED CONFIG ==========================
 CFG_PATH = "src/emotions/binary/configs/train_binary.yaml"
-CHKPT_PATH = "results/binary/2026-02-17_11-14-12/recording_loo/r_2/best_model.pt"
+CHKPT_PATH = "results/binary/2026-02-17_12-35-13/recording_loo/r_2/best_model.pt"
 DEVICE = "cuda"
 NUM_BATCHES = 10
 MAX_PAIRS = 512
@@ -350,6 +350,7 @@ def main():
     print(f"\nProcessing batches...\n")
     
     all_batch_metrics = []
+    all_probs = []  # Collect probabilities across all batches
     
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
@@ -444,7 +445,8 @@ def main():
             h_act = model.head[2](h_act)  # Dropout (no-op in eval)
             logits = model.head[3](h_act)  # Linear - raw logits
             prob = torch.sigmoid(logits)  # Apply sigmoid to get probabilities
-            
+            all_probs.append(prob.cpu())
+
             stage_name = "head_logits"
             logits_metrics = compute_variance_metrics(logits)
             logits_metrics["prob_std"] = torch.std(prob).item()
@@ -579,6 +581,39 @@ def main():
         else:
             print(f"\n  ✓  Logits are well-distributed (std/range = {avg_ratio:.1%})")
     
+    # Print probability distribution summary
+    if all_probs:
+        print("\n" + "-"*80)
+        print("PROBABILITY DISTRIBUTION SUMMARY (aggregated across batches)")
+        print("-"*80)
+        
+        # Concatenate all probabilities
+        prob_all = torch.cat(all_probs)  # [total_samples]
+        
+        # Basic statistics
+        prob_min = prob_all.min().item()
+        prob_max = prob_all.max().item()
+        prob_mean = prob_all.mean().item()
+        prob_std = prob_all.std().item()
+        
+        # Quantiles
+        quantiles = torch.quantile(prob_all, torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95]))
+        
+        # Proportion of predictions > 0.5
+        pos_pred_rate = (prob_all > 0.5).float().mean().item()
+        
+        print(f"  min:      {prob_min:>10.6f}")
+        print(f"  max:      {prob_max:>10.6f}")
+        print(f"  mean:     {prob_mean:>10.6f}")
+        print(f"  std:      {prob_std:>10.6f}")
+        print(f"\n  Quantiles:")
+        print(f"    5%:   {quantiles[0].item():>10.6f}")
+        print(f"    25%:  {quantiles[1].item():>10.6f}")
+        print(f"    50%:  {quantiles[2].item():>10.6f}")
+        print(f"    75%:  {quantiles[3].item():>10.6f}")
+        print(f"    95%:  {quantiles[4].item():>10.6f}")
+        print(f"\n  Predictions >0.5: {pos_pred_rate:>10.6f} ({pos_pred_rate*100:.2f}%)")
+    
     # ==================== 6. SAVE JSON REPORT ====================
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     # report_path = debug_dir / f"collapse_{timestamp}.json"
@@ -608,10 +643,10 @@ def main():
         },
     }
     
-    with open(report_path, 'w') as f:
-        json.dump(report, f, indent=2)
+    # with open(report_path, 'w') as f:
+    #     json.dump(report, f, indent=2)
     
-    print(f"\nJSON report saved to: {report_path}")
+    # print(f"\nJSON report saved to: {report_path}")
     print("\n" + "="*120)
     print("DEBUG ANALYSIS COMPLETE")
     print("="*120)

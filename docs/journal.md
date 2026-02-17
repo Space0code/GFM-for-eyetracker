@@ -412,6 +412,14 @@ What we tried in order. Each next step includes all previous steps unless stated
     - w = exp(-dt / tau) 
     - tau = 0.05 (meaning w0 = 1, w1 = 0.82, w2 = 0.67, ...)
     - note: internal self loops in pyg take care of w0 = 1 (always)
+4. added LayerNorm to preprocess MLP
+    - now: Linear -> GELU -> LN -> Dropout -> Linear -> LN
+    - no embedding collapse in the preprocess MLP anymore!
+    - results for emotion-tenderness:
+        - within_var: 0.535 → 0.386 → 0.163 → 0.048 (smooth, not a sudden 20–30× crash)
+        - prediction quartiles for [0.05,0.25,0.5,0.75,0.95] ~ [0.200, 0.366, 0.488, 0.547, 0.587]
+        - ~48% of predictions are over 0.50
+    - results for emotion-sadness a bit more clustered around 0.53 with std of 0.08
 
 We assessed embeddings with `debug_embedding_collapse.py` - we log var_mean, std, cos_mean, L2_mean at each layer of GNN (raw input, (preprocess mlp), conv1, conv2, pool, head logits, head prob)
 
