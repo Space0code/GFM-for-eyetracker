@@ -19,8 +19,10 @@ class SpatioTemporalHeteroGNN(nn.Module):
             self.preprocess_mlp = nn.Sequential(
                 nn.Linear(in_channels, hidden_channels),
                 nn.GELU(),
+                nn.LayerNorm(hidden_channels),
                 nn.Dropout(p=dropout_mlp),
                 nn.Linear(hidden_channels, hidden_channels),
+                nn.LayerNorm(hidden_channels),
             )
 
             conv1_in_channels = hidden_channels
