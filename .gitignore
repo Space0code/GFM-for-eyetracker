@@ -11,4 +11,7 @@ data/**
 notebooks/temp.ipynb
 checkpoints/**
 results/**
+
+# debug files
 src/emotions/binary/temp.py
+scripts/debug_embedding_collapse_from_yaml.py
