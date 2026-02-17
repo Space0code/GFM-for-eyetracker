@@ -252,8 +252,8 @@ def main():
     np.random.seed(SEED)
     
     # Create output directory
-    debug_dir = Path("debug_reports")
-    debug_dir.mkdir(exist_ok=True)
+    # debug_dir = Path("debug_reports")
+    # debug_dir.mkdir(exist_ok=True)
     
     # Check if config and checkpoint exist
     if not os.path.exists(CFG_PATH):
@@ -581,7 +581,7 @@ def main():
     
     # ==================== 6. SAVE JSON REPORT ====================
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = debug_dir / f"collapse_{timestamp}.json"
+    # report_path = debug_dir / f"collapse_{timestamp}.json"
     
     report = {
         "metadata": {
