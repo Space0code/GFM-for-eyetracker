@@ -169,9 +169,11 @@ Metrics are computed at two levels:
 
 ### Loss Function
 
-**GNN**: Binary cross-entropy
+**GNN**: Binary cross-entropy with logits (model outputs raw logits)
 ```python
-loss = F.binary_cross_entropy(predictions, targets)
+loss = F.binary_cross_entropy_with_logits(logits, targets)
+# Sigmoid applied only during evaluation to get probabilities
+prob = torch.sigmoid(logits)
 ```
 
 **Baselines**: Use sklearn's built-in loss functions

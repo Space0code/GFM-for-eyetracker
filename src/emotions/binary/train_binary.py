@@ -57,7 +57,10 @@ def parse_args():
 
 
 def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
-    """Train GNN for one epoch with binary cross-entropy loss."""
+    """Train GNN for one epoch with binary cross-entropy with logits loss.
+    
+    Model outputs raw logits; loss function includes sigmoid internally.
+    """
     model.train()
     total_loss = 0
     
@@ -65,11 +68,11 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
         data = data.to(device)
         optimizer.zero_grad(set_to_none=True)
         
-        out = model(data).squeeze()  # [batch_size]
+        out = model(data).squeeze()  # [batch_size] - raw logits
         target = data.y.squeeze()    # [batch_size]
         
-        # Binary cross-entropy loss
-        loss = F.binary_cross_entropy(out, target)
+        # Binary cross-entropy with logits (includes sigmoid internally)
+        loss = F.binary_cross_entropy_with_logits(out, target)
         loss.backward()
         
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_max_norm)
@@ -93,13 +96,16 @@ def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
-            out = model(data).squeeze()
+            out = model(data).squeeze()  # [batch_size] - raw logits
             target = data.y.squeeze()
             
-            loss = F.binary_cross_entropy(out, target)
+            # Loss uses logits directly
+            loss = F.binary_cross_entropy_with_logits(out, target)
             total_loss += loss.item()
             
-            all_outputs.append(out.cpu())
+            # Convert logits to probabilities for metrics
+            prob = torch.sigmoid(out)
+            all_outputs.append(prob.cpu())
             all_targets.append(target.cpu())
             
             # Collect metadata
@@ -390,6 +396,7 @@ def main():
             threshold=threshold
         )
         print(f"Loaded {len(gnn_dataset)} graph samples")
+
     
     if run_experiments['baselines']:
         print("Loading tabular samples for baselines...")
@@ -410,6 +417,10 @@ def main():
             threshold=threshold
         )
         print(f"Loaded {len(tabular_samples)} tabular samples")
+        unique_subjects = set(sample.subject for sample in tabular_samples if hasattr(sample, 'subject') and sample.subject is not None)
+        unique_recordings = set(sample.recording for sample in tabular_samples if hasattr(sample, 'recording') and sample.recording is not None)
+        print(f"Unique subjects in tabular samples: {sorted(unique_subjects)}")
+        print(f"Unique recordings in tabular samples: {sorted(unique_recordings)}")
     
     # Get CV strategies
     strategies = cv_cfg['strategies']
