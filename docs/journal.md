@@ -402,3 +402,18 @@ Importantly, **enabling the preprocess MLP yields a very similar overall picture
 Downstream, pooled graph embeddings (`pool_g2`) retain some variance, but the head output becomes nearly constant: `head_logits var_mean ≈ 1e−2` and logits lie in a narrow negative range (≈ −0.57 to −0.17), mapping to probabilities mostly below 0.5. The observed `cos_mean = 1.0` for `head_logits` is expected for a 1D output when logits share the same sign and should not be over-interpreted; the key issue is the **low logit spread** and resulting near-baseline predictions.
 
 Overall, the results point to two interacting problems: (i) **early collapse** (either in the preprocess MLP when enabled, or in conv1 when preprocessing is disabled), and (ii) a **low-variance head regime** that yields near-constant outputs. This motivates focusing mitigation on the first collapsing step (feature normalization and/or residualized/normed preprocessing; reduced mixing strength/attention/weighted edges for conv1), rather than tuning later layers.
+
+### What we tried 
+What we tried in order. Each next step includes all previous steps unless stated otherwise. All were tried with and without preprocess mlp. 
+1. z-score normalization of all 5 features (time, x, y, pupil-l, pupil-r)
+    - the normalization was done per subject on all data (not on train and test separately) in order to do quick testing
+2. drop time from nodes => we have only 4 features in nodes (and no edge weights)
+3. add dt as edge weights (both edge types)
+    - w = exp(-dt / tau) 
+    - tau = 0.05 (meaning w0 = 1, w1 = 0.82, w2 = 0.67, ...)
+    - note: internal self loops in pyg take care of w0 = 1 (always)
+
+We assessed embeddings with `debug_embedding_collapse.py` - we log var_mean, std, cos_mean, L2_mean at each layer of GNN (raw input, (preprocess mlp), conv1, conv2, pool, head logits, head prob)
+
+Results (embedding behavior) didn't change much until ... (still waiting)
+

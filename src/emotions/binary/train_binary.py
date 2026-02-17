@@ -21,8 +21,6 @@ import torch
 # resolve warnings
 torch.set_float32_matmul_precision("high")
 torch._dynamo.config.capture_scalar_outputs = True
-os.environ["TORCH_LOGS"] = ""          # disables torch compile logs
-os.environ["TORCHDYNAMO_VERBOSE"] = "0"
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 import joblib
