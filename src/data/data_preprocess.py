@@ -15,10 +15,10 @@ SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
 DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
     # "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
-    # "hci-tagging/emotion-elicitation": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/emotion-elicitation/"),
-    # "hci-tagging/video-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/video-tagging/"),
-    # "hci-tagging/image-tagging-1": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-1/"),
-    # "hci-tagging/image-tagging-2": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-2/"),
+    "hci-tagging/emotion-elicitation": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/emotion-elicitation/"),
+    "hci-tagging/video-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/video-tagging/"),
+    "hci-tagging/image-tagging-1": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-1/"),
+    "hci-tagging/image-tagging-2": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-2/"),
     # "deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
     # "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
 }
@@ -76,6 +76,13 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
     """Preprocess one CSV file and save it to destination directory."""
     df = pd.read_csv(file_path)
 
+    if "hci-tagging" in dir_name:
+        if "recording" in df.columns:
+            df["experiment-type"] = df["recording"]
+        if "media-file" in df.columns:
+            df["recording"] = df["media-file"]
+            df = df.drop(columns=["media-file"])
+
     mandatory_columns = [
         "time-rel-seconds",
         "x-avg",
@@ -94,7 +101,6 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
         "session-id",
         "experiment-type",
         "is-stimulus",
-        "media-file",
     ]
 
     for col in mandatory_columns:
