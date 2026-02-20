@@ -1,4 +1,4 @@
-# Road to GFM4ET Journal
+# Road to GFM4ET
 
 - tried next point prediction => caught trends
 - moved on to classification/regression
@@ -320,7 +320,7 @@ Simplify the problem as much as possible. Advance to the next step only when the
     2. "something" on labels 1-10.
 5. Think about presenting preliminary work on a workshop/poster.
 
-## Binary classification on the **whole** dataset
+## Binary classification on the **whole** eSEEd_v2 dataset
 ### Emotion: Anger
 Complete results in `results/binary/RETAIN_2026-02-12_14-50-31`.
 #### Recording LOO
@@ -344,7 +344,7 @@ Complete results in `results/binary/RETAIN_2026-02-12_14-50-31`.
 | GNN      | 0.570    | 0.570     | 1.000  | 0.704 | 0.558 |
 
 
-## Dataset cleaning
+## Dataset cleaning (eSEEd_v2)
 ### Pupil size problems
 We noticed major problems with inconsistent pupil sizes. Left and right pupil size sometimes differ for a couple of millimeters at the same point in time. This is worse in some subjects than others. We removed datapoints with |MAE| between left and right pupil size > 1.5. Subjects that still had |MAE| > 0.5, were removed.
 ### Coordinates (x, y)
@@ -425,3 +425,28 @@ We assessed embeddings with `debug_embedding_collapse.py` - we log var_mean, std
 
 Results (embedding behavior) didn't change much until ... (still waiting)
 
+## Transitioning to MAHNOB-HCI-TAGGING DATABASE 
+### Papers using it
+More references for this dataset than for eSEEd_v2 - more hope :)
+- A Multimodal Database for Affect Recognition and Implicit Tagging 
+    - Mohammad Soleymani; Jeroen Lichtenauer; Thierry Pun; Maja Pantic 
+    - https://ibug.doc.ic.ac.uk/media/uploads/documents/taffcsi-2010-11-0112-2.pdf 
+- Emotion recognition using eye gaze based on shallow CNN with identity mapping 
+    - Shan Jin; Chunmei Qing; Xiangmin Xu; Yang Wang 
+    - https://link.springer.com/chapter/10.1007/978-3-030-39431-8_7 
+- Implicit Affective Video Tagging Using Pupillary Response 
+    - Dongdong Gui; Sheng-hua Zhong; Ming Zhong 
+    - https://link.springer.com/chapter/10.1007/978-3-319-73600-6_15 
+- Multimodal insights into granger causality connectivity: Integrating physiological signals and gated eye-tracking data for emotion recognition using convolutional neural network 
+    - Javid Farhadi Sedehi; Nader Jafarnia Dabanloo; Keivan Maghooli; Ali Sheikhani 
+    - https://www.cell.com/heliyon/fulltext/S2405-8440%2824%2912442-5 
+
+### EDA
+
+
+### Binary classifications
+First, we will test the dataset with simple binary classification problems.
+- Binary: predict tagAgree (agree vs disagree)
+- Binary: predict tagValid (valid vs invalid)
+- Binary: predict high vs low valence (feltVlnc)
+- Binary: predict high vs low arousal (feltArsl)

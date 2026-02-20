@@ -3,12 +3,12 @@
 
 # Control which experiments to run
 run_experiments:
-  baselines: false  # Run baseline classifiers
+  baselines: true  # Run baseline classifiers
   gnn: true        # Run GNN classifier
 
 # Binary classification task configuration
 binary_task:
-  target_emotion: "emotion-tenderness"  # Which emotion to predict (choose one)
+  target_emotion: "emotion-sadness"  # Which emotion to predict (choose one)
   threshold: 0.0  # Intensity threshold: <=threshold -> class 0, >threshold -> class 1
 
 # Dataset configuration (shared by both GNN and baselines)
@@ -85,7 +85,7 @@ gnn:
     conv_type: GCNConv # GCNConv, GATConv. GATConv does not support edge weights!
   
   training:
-    num_epochs: 12
+    num_epochs: 120
     batch_size: 256
     learning_rate: 0.001
     grad_clip_max_norm: 1.0
