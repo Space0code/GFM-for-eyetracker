@@ -442,6 +442,12 @@ More references for this dataset than for eSEEd_v2 - more hope :)
     - https://www.cell.com/heliyon/fulltext/S2405-8440%2824%2912442-5 
 
 ### EDA
+- Ran quick EDA on `data/processed/hci-tagging/emotion-elicitation` (`942` sections, `24` subjects, `3,797,165` rows).
+- Label coverage is solid: `3,214,000` rows are labeled (`emotion-derivation-status=ok`), `583,165` are unlabeled baseline/neutral periods (`not-reported`).
+- Emotion labels are distributed across 9 classes (`0,1,2,3,4,5,6,11,12`), with largest classes: Neutral (`726,659`) and Amusement (`669,438`).
+- Signal quality is good after robust filtering: outlier removal in sampled signal plots stayed low overall (~`1.0%` for `x`, `3.08%` for `y`, ~`1.6%` for pupil sizes).
+- Pupil left/right consistency is strong (`corr=0.902`), with moderate subject-specific asymmetry outliers (largest mean abs diff: `P28=0.590`).
+- Overall, this HCI emotion data looks much cleaner and more usable than eSEEd_v2 (better label availability and fewer severe preprocessing/pathology issues).
 
 
 ### Binary classifications
