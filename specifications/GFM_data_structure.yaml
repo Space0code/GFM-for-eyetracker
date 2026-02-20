@@ -9,9 +9,10 @@ screen-height-mm: float | null  # height of the screen in millimeters
 
 # Identifiers
 id: int               # unique identifier for the data point
-event-id: int | null  # unique identifier for the event
-session-id: str | null  # session identifier
-subject-id: str | null   # subject identifier
+event: int | null  # unique identifier for the event
+session: int | null  # session identifier
+subject: int | null   # subject identifier
+recording: int | null  # recording identifier
 
 # Timestamps
 time-abs-seconds: float | null         # absolute timestamp (s)
@@ -30,7 +31,7 @@ z-avg: float | null
 
 # Fixation data
 fixation: bool | null
-fixation-dur: float | null
+fixation-duration: float | null
 fixation-count: int | null
 fixation-index: int | null
 confidence-fixation: float | null  # confidence in the fixation detection (0 to 1, the higher the better)
@@ -38,14 +39,14 @@ confidence-fixation: float | null  # confidence in the fixation detection (0 to 
 # Saccade data
 saccade: bool | null
 saccade-amp: float | null
-saccade-dur: float | null
+saccade-duration: float | null
 saccade-vel: float | null
 saccade-acc: float | null
 confidence-saccade: float | null  # confidence in the saccade detection (0 to 1, the higher the better)
 
 # Smooth pursuit data
 smooth-pursuit: bool | null
-smooth-pursuit-dur: float | null
+smooth-pursuit-duration: float | null
 smooth-pursuit-vel: float | null
 smooth-pursuit-acc: float | null
 confidence-smooth-pursuit: float | null  # confidence in the smooth pursuit detection (0 to 1, the higher the better)
@@ -74,8 +75,8 @@ confidence-pupil-right: float | null # confidence in the right pupil size (0 to 
 
 # Blink data
 blink: bool | null
-blink-dur: float | null
-blink-dur-total: float | null
+blink-duration: float | null
+blink-duration-total: float | null
 blink-rate: float | null
 blink-count: int | null
 blink-start: float | null

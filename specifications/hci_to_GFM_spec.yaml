@@ -30,22 +30,22 @@ mappings:
   "PupilRight": "pupil-size-right-avg"
 
   # Validity / confidence
-  "ValidityLeft": "confidence-gaze-left"
-  "ValidityRight": "confidence-gaze-right"
+  "ValidityLeft": "raw-validity-gaze-left"
+  "ValidityRight": "raw-validity-gaze-right"
 
   # Fixation data
   "FixationIndex": "fixation-index"
   "MappedFixationPointX": ""
   "MappedFixationPointY": ""
-  "FixationDuration": "fixation-dur"
+  "FixationDuration": "fixation-duration"
 
   # AOI / Event / Stimulus
-  "Event": ""                                   # drop
+  "Event": "event-type"
   "EventKey": ""
   "Data1": ""
   "Data2": ""
   "Descriptor": ""
-  "StimuliName": "stimulus-type"
+  "StimuliName": "event"
   "StimuliID": "stimulus-id"
 
   # Media properties (drop)

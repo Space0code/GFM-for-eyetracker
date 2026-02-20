@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import pandas as pd
 
 """
@@ -12,25 +13,48 @@ python src/data/data_preprocess.py --dataset cog-load
 SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
 DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
-    "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
-    "hci-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/"),
+    # "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
+    "hci-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/"),
     #"deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
-    "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
+    # "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
 }
 
-def preprocess_dir(dir_name, source_dir_path, dest_data_dir):
+SUBJECT_PATTERN = re.compile(r"(P\d+)")
+
+
+def _extract_subject_id(filename: str) -> str | None:
+    """Extract subject id from filename, e.g. P20."""
+    match = SUBJECT_PATTERN.search(filename)
+    if match is None:
+        return None
+    return match.group(1)
+
+
+def preprocess_dir(dir_name, source_dir_path, dest_data_dir, seen_subjects: set[str] | None = None):
     """
     Preprocess the data in the given directory.
     This function is not used in this script but can be useful for future extensions.
     """
+    if seen_subjects is None:
+        seen_subjects = set()
+
     for file in os.listdir(source_dir_path):
         if file.endswith(".csv"):
-            print(f"Processing file: {file}")
+            subject_id = _extract_subject_id(file)
+            if subject_id is not None and subject_id not in seen_subjects:
+                print(f"Starting subject: {subject_id}")
+                seen_subjects.add(subject_id)
+            # print(f"Processing file: {file}")
             filename = os.path.join(source_dir_path, file)
             preprocess_file(dir_name, file, filename, dest_data_dir)
         # elif is directory, recursion
         elif os.path.isdir(os.path.join(source_dir_path, file)):
-            preprocess_dir(dir_name, os.path.join(source_dir_path, file), dest_data_dir)
+            preprocess_dir(
+                dir_name,
+                os.path.join(source_dir_path, file),
+                dest_data_dir,
+                seen_subjects=seen_subjects,
+            )
 
 def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
@@ -51,6 +75,13 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
         "subject",
         "recording",
     ]
+    raw_validity_cols = []
+    if "hci-tagging" in dir_name:
+        raw_validity_cols = [
+            col
+            for col in ["raw-validity-gaze-left", "raw-validity-gaze-right"]
+            if col in df.columns
+        ]
     # check if all mandatory columns are present
     for col in MANDATORY_COLUMNS:
         if col not in df.columns:
@@ -58,29 +89,52 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     # Include emotion columns if they exist
     emotion_cols = [col for col in df.columns if "emotion" in col.lower()]
-    present_cols = MANDATORY_COLUMNS + [col for col in OPTIONAL_COLUMNS if col in df.columns] + emotion_cols
+    present_cols = (
+        MANDATORY_COLUMNS
+        + [col for col in OPTIONAL_COLUMNS if col in df.columns]
+        + raw_validity_cols
+        + emotion_cols
+    )
+    present_cols = list(dict.fromkeys(present_cols))
 
     df = dfOG[present_cols].copy()
     # print("COLUMNS of processed df:", df.columns)
+    df["confidence-gaze-left"] = pd.to_numeric(df["confidence-gaze-left"], errors="coerce")
+    df["confidence-gaze-right"] = pd.to_numeric(df["confidence-gaze-right"], errors="coerce")
 
     if "cog-load" in dir_name:
         # rows that have both confidence = 0, put x-avg and y-avg to float('nan')
         condition_good = (df["confidence-gaze-left"] == 1) & (df["confidence-gaze-right"] == 1)
     elif "hci-tagging" in dir_name:
         # rows that have at least one confidence > 0, put x-avg and y-avg to float('nan')
-        condition_good = (df["confidence-gaze-left"] == 0) & (df["confidence-gaze-right"] == 0)
+        condition_good = (df["confidence-gaze-left"] == 1) & (df["confidence-gaze-right"] == 1)
     elif "eSEEd_v2" in dir_name:
         # rows that have both confidence >= 0.5, put x-avg and y-avg to float('nan')
         condition_good = (df["confidence-gaze-left"] >= 0.75) & (df["confidence-gaze-right"] >= 0.75)
     else:
         raise ValueError(f"Unknown dataset directory name: {dir_name}")
 
-    cols_to_nan = [col for col in present_cols if col not in ["time-rel-seconds", "subject", "recording"]]
+    condition_good = condition_good.fillna(False)
+    cols_to_nan = [
+        col
+        for col in present_cols
+        if col not in ["time-rel-seconds", "subject", "recording"] + raw_validity_cols
+    ]
     df.loc[~condition_good, cols_to_nan] = float('nan')
 
     # drop all rows until the first row with good confidence
-    first_valid_index = df[condition_good].index[0]
-    last_valid_index = df[condition_good].index[-1]
+    valid_indices = df.index[condition_good]
+    if len(valid_indices) == 0:
+        print(f"Warning: no valid confidence rows in {file_path}; saving empty processed file.")
+        df = df.iloc[0:0].copy()
+        dest_filename = os.path.join(dest_data_dir, filename)
+        os.makedirs(dest_data_dir, exist_ok=True)
+        df.to_csv(dest_filename, index=False)
+        print(f"Processed data saved to: {dest_filename}")
+        return
+
+    first_valid_index = valid_indices[0]
+    last_valid_index = valid_indices[-1]
     df = df.iloc[first_valid_index:last_valid_index + 1]
 
     # drop where time is nan
@@ -90,13 +144,26 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
 
     df_to_compare = df.copy()
 
-    # interpolate missing values but only a few points in each direction (limit=30 => max 1s window interpolation)
+    # Interpolate only numeric series to avoid object-dtype interpolation deprecation.
+    interp_excluded = set(["time-rel-seconds", "subject", "recording"] + raw_validity_cols)
     for col in present_cols:
-        if col not in ["time-rel-seconds", "subject", "recording"]:
-            df[col] = df[col].interpolate(method="linear", limit_direction="both", limit=10, limit_area="inside")
-            if "pupil" in col:
-                # don't smooth (x,y) coordinates because we could lose subtle gaze path details
-                df[col] = df[col].rolling(window=3, min_periods=2, center=True).mean() 
+        if col in interp_excluded:
+            continue
+
+        series = df[col].infer_objects(copy=False)
+        if not pd.api.types.is_numeric_dtype(series):
+            continue
+
+        series = pd.to_numeric(series, errors="coerce")
+        df[col] = series.interpolate(
+            method="linear",
+            limit_direction="both",
+            limit=10,
+            limit_area="inside",
+        )
+        if "pupil" in col:
+            # don't smooth (x,y) coordinates because we could lose subtle gaze path details
+            df[col] = df[col].rolling(window=3, min_periods=2, center=True).mean() 
 
     # stime = 1081.11
     # etime = 1081.42
@@ -134,7 +201,7 @@ def preprocess_file(dir_name, filename, file_path, dest_data_dir):
     dest_filename = os.path.join(dest_data_dir, filename)
     os.makedirs(dest_data_dir, exist_ok=True)
     df.to_csv(dest_filename, index=False)
-    print(f"Processed data saved to: {dest_filename}")
+    # print(f"Processed data saved to: {dest_filename}")
 
 
 if __name__ == "__main__":
@@ -149,3 +216,6 @@ if __name__ == "__main__":
         print("\n" + "=" * 50)
         print(f"Processing directory: {dir_name} at {dir_path}")
         preprocess_dir(dir_name, dir_path, os.path.join(DEST_DATA_DIR_ROOT, dir_name))
+        print(f"\nFinished processing directory: {dir_name}")
+        print("Files saved to:", os.path.join(DEST_DATA_DIR_ROOT, dir_name))
+        print("=" * 50 + "\n")
