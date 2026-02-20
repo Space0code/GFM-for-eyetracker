@@ -20,7 +20,7 @@ SOURCE_DATA_DIRS = {
     "hci-tagging/image-tagging-1": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-1/"),
     "hci-tagging/image-tagging-2": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-2/"),
     # "deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
-    # "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
+    "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
 }
 
 SUBJECT_PATTERN = re.compile(r"(P\d+)")
