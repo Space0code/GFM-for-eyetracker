@@ -38,6 +38,7 @@ dataset:
   use_cache: false
   dropping_emotion_threshold: -1  # Drop samples where all emotions <= this value (-1 to disable)
   standardize_features: true  # StandardScaler fitted on train split only
+  target_aggregation: mean  # Use the same aggregation for GNN and baselines
   feature_columns: ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
   dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-sadness", "subject", "recording"]
 

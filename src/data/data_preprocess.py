@@ -1,6 +1,8 @@
 import argparse
 import os
 import re
+from glob import glob
+from pathlib import Path
 
 import pandas as pd
 
@@ -32,6 +34,61 @@ def _extract_subject_id(filename: str) -> str | None:
     if match is None:
         return None
     return match.group(1)
+
+
+def _infer_experiment_type_from_dir(dir_name: str) -> str | None:
+    """Infer HCI experiment type from configured directory key."""
+    if not dir_name.startswith("hci-tagging/"):
+        return None
+    return dir_name.split("/", 1)[1]
+
+
+def _rebuild_hci_emotion_cache(
+    processed_emotion_dir: str,
+    cache_path: str,
+    subset_rows: int = 10_000,
+) -> None:
+    """Rebuild merged HCI emotion cache CSVs from processed per-section files."""
+    files = sorted(glob(os.path.join(processed_emotion_dir, "*.csv")))
+    if not files:
+        print(f"No files found for cache rebuild: {processed_emotion_dir}")
+        return
+
+    cache_file = Path(cache_path)
+    subset_file = cache_file.with_name(f"{cache_file.stem}_subset_10K.csv")
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    if cache_file.exists():
+        cache_file.unlink()
+    if subset_file.exists():
+        subset_file.unlink()
+
+    wrote_header = False
+    subset_written = 0
+
+    for file_path in files:
+        df = pd.read_csv(file_path)
+        if df.empty:
+            continue
+
+        df.to_csv(cache_file, index=False, mode="a", header=not wrote_header)
+        wrote_header = True
+
+        if subset_written < subset_rows:
+            take_n = min(subset_rows - subset_written, len(df))
+            df.iloc[:take_n].to_csv(
+                subset_file,
+                index=False,
+                mode="a",
+                header=subset_written == 0,
+            )
+            subset_written += take_n
+
+    if not wrote_header:
+        print("Cache rebuild skipped: all source files were empty.")
+        return
+
+    print(f"Rebuilt merged cache: {cache_file}")
+    print(f"Rebuilt subset cache: {subset_file}")
 
 
 def preprocess_dir(
@@ -77,8 +134,13 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
     df = pd.read_csv(file_path)
 
     if "hci-tagging" in dir_name:
-        if "recording" in df.columns:
-            df["experiment-type"] = df["recording"]
+        exp_type_from_dir = _infer_experiment_type_from_dir(dir_name)
+        if "experiment-type" not in df.columns:
+            df["experiment-type"] = exp_type_from_dir
+        else:
+            df["experiment-type"] = df["experiment-type"].fillna(exp_type_from_dir)
+            df["experiment-type"] = df["experiment-type"].replace("", exp_type_from_dir)
+
         if "media-file" in df.columns:
             df["recording"] = df["media-file"]
             df = df.drop(columns=["media-file"])
@@ -210,6 +272,11 @@ if __name__ == "__main__":
             source_root_path=dir_path,
             dest_data_root=os.path.join(DEST_DATA_DIR_ROOT, dir_name),
         )
+        if dir_name == "hci-tagging/emotion-elicitation":
+            _rebuild_hci_emotion_cache(
+                processed_emotion_dir=os.path.join(DEST_DATA_DIR_ROOT, dir_name),
+                cache_path=os.path.join(DEST_DATA_DIR_ROOT, "cached_hci_tagging_emotion.csv"),
+            )
         print(f"\nFinished processing directory: {dir_name}")
         print("Files saved to:", os.path.join(DEST_DATA_DIR_ROOT, dir_name))
         print("=" * 50 + "\n")

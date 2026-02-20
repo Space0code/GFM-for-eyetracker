@@ -401,6 +401,7 @@ def train_baselines_fold(
     target_column: str,
     threshold_value: float,
     standardize_features: bool = False,
+    feature_columns: List[str] | None = None,
     verbose: bool = True,
 ):
     """Train baseline models for one fold and save them with predictions."""
@@ -411,14 +412,59 @@ def train_baselines_fold(
     X_val, y_val, val_meta, _, _ = samples_to_xy(samples, val_idx)
     X_test, y_test, test_meta, _, _ = samples_to_xy(samples, test_idx)
 
+    # Keep baseline features aligned with configured signal columns.
+    if feature_columns:
+        selected_feature_cols: List[str] = []
+        for col in feature_columns:
+            if col in X_train.columns:
+                selected_feature_cols.append(col)
+            elif f"{col}_mean" in X_train.columns:
+                selected_feature_cols.append(f"{col}_mean")
+
+        if not selected_feature_cols:
+            raise ValueError(
+                "Configured feature columns were not found in tabular baseline features. "
+                f"Configured: {feature_columns}. Available: {feat_cols[:20]}..."
+            )
+
+        X_train = X_train[selected_feature_cols].copy()
+        X_val = X_val[selected_feature_cols].copy()
+        X_test = X_test[selected_feature_cols].copy()
+
     if target_column not in y_train.columns:
         raise ValueError(f"Target column '{target_column}' is missing in tabular labels.")
 
     y_train_cont = pd.to_numeric(y_train[target_column], errors="coerce")
     y_val_cont = pd.to_numeric(y_val[target_column], errors="coerce")
     y_test_cont = pd.to_numeric(y_test[target_column], errors="coerce")
-    if y_train_cont.isna().any() or y_val_cont.isna().any() or y_test_cont.isna().any():
-        raise ValueError(f"Found NaN/non-numeric target values in '{target_column}'.")
+
+    # Drop rows with NaN in either features or targets per split.
+    train_mask = (~X_train.isna().any(axis=1)) & (~y_train_cont.isna())
+    val_mask = (~X_val.isna().any(axis=1)) & (~y_val_cont.isna())
+    test_mask = (~X_test.isna().any(axis=1)) & (~y_test_cont.isna())
+
+    dropped_train = int((~train_mask).sum())
+    dropped_val = int((~val_mask).sum())
+    dropped_test = int((~test_mask).sum())
+    if dropped_train or dropped_val or dropped_test:
+        print(
+            "Dropped NaN rows for baselines "
+            f"(train={dropped_train}, val={dropped_val}, test={dropped_test})."
+        )
+
+    X_train = X_train.loc[train_mask].reset_index(drop=True)
+    X_val = X_val.loc[val_mask].reset_index(drop=True)
+    X_test = X_test.loc[test_mask].reset_index(drop=True)
+    y_train_cont = y_train_cont.loc[train_mask].reset_index(drop=True)
+    y_val_cont = y_val_cont.loc[val_mask].reset_index(drop=True)
+    y_test_cont = y_test_cont.loc[test_mask].reset_index(drop=True)
+    test_meta = [m for m, keep in zip(test_meta, test_mask.tolist()) if keep]
+
+    if len(X_train) == 0 or len(X_val) == 0 or len(X_test) == 0:
+        raise ValueError(
+            "Baseline split became empty after removing NaN rows. "
+            "Check feature/dropna configuration."
+        )
 
     y_train = (y_train_cont > threshold_value).astype(float).to_frame(name=target_column)
     y_val = (y_val_cont > threshold_value).astype(float).to_frame(name=target_column)
@@ -508,12 +554,19 @@ def main():
     target_column = resolve_target_column(binary_task_cfg)
     threshold_spec = binary_task_cfg.get("threshold", 0.0)
     standardize_features = dataset_cfg.get("standardize_features", False)
+    target_aggregation = dataset_cfg.get("target_aggregation", "mean")
+    if target_aggregation not in {"mean", "last"}:
+        raise ValueError(
+            f"Unsupported dataset.target_aggregation='{target_aggregation}'. "
+            "Use 'mean' or 'last'."
+        )
 
     print("Binary Classification Task:")
     print(f"  Target column: {target_column}")
     print(f"  Threshold spec: {threshold_spec}")
     print("  Labels: <=threshold -> 0, >threshold -> 1")
     print(f"  Standardize features: {standardize_features}")
+    print(f"  Target aggregation: {target_aggregation}")
     
     # Create timestamped run directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -566,6 +619,10 @@ def main():
     allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
     label_quality_column = dataset_cfg.get("label_quality_column")
     allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
+    min_samples_per_window = dataset_cfg.get(
+        "min_samples_per_window",
+        max(dataset_cfg["kt"], dataset_cfg["ks"]) + 1,
+    )
     feature_columns = dataset_cfg.get(
         "feature_columns",
         ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
@@ -597,6 +654,7 @@ def main():
             allowed_experiment_types=allowed_experiment_types,
             label_quality_column=label_quality_column,
             allowed_label_quality_values=allowed_label_quality_values,
+            target_aggregation=target_aggregation,
         )
         print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
@@ -610,9 +668,12 @@ def main():
             filter_recordings=dataset_cfg.get('filter_recordings'),
             file_list=dataset_cfg.get('file_list'),
             window_length=dataset_cfg.get('window_length', 10),
+            window_overlap=dataset_cfg.get("window_overlap", 0.0),
+            min_samples_per_window=min_samples_per_window,
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
             feature_columns=feature_columns,
             target_columns=target_columns,
+            target_aggregation=target_aggregation,
             dropna_columns=dropna_columns,
             experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
             allowed_experiment_types=allowed_experiment_types,
@@ -727,16 +788,16 @@ def main():
             
             print(f"\n{test_name}")
 
-            if run_experiments["baselines"]:
-                train_values = collect_tabular_target_values(
-                    base_tabular_samples,
-                    baseline_train_idx,
-                    target_column,
-                )
-            else:
+            if run_experiments["gnn"]:
                 train_values = collect_graph_target_values(
                     base_gnn_dataset,
                     gnn_train_idx,
+                    target_column,
+                )
+            else:
+                train_values = collect_tabular_target_values(
+                    base_tabular_samples,
+                    baseline_train_idx,
                     target_column,
                 )
             if len(train_values) == 0:
@@ -755,6 +816,7 @@ def main():
                     baseline_test_idx, base_tabular_samples, fold_dir,
                     metric_names, target_column, fold_threshold,
                     standardize_features=standardize_features,
+                    feature_columns=feature_columns,
                     verbose=verbose,
                 )
                 for model_name, metrics in baseline_results.items():

@@ -167,7 +167,8 @@ class SpacioTemporalDataset(Dataset):
             feature_columns: Optional[List[str]] = None, target_columns: Optional[List[str]] = None,
             dropna_columns: Optional[List[str]] = None, experiment_type_column: str = "experiment-type",
             allowed_experiment_types: Optional[List[str]] = None, label_quality_column: Optional[str] = None,
-            allowed_label_quality_values: Optional[List[str]] = None):
+            allowed_label_quality_values: Optional[List[str]] = None,
+            target_aggregation: str = "mean"):
         """
         Load CSV files and convert to graphs.
         
@@ -211,6 +212,7 @@ class SpacioTemporalDataset(Dataset):
             "pupil-size-right-avg",
         ]
         self.target_columns = target_columns
+        self.target_aggregation = target_aggregation
         self.dropna_columns = dropna_columns
         self.experiment_type_column = experiment_type_column
         self.allowed_experiment_types = allowed_experiment_types
@@ -322,6 +324,7 @@ class SpacioTemporalDataset(Dataset):
         config_str += f"_feat={self.feature_columns}_targets={self.target_columns}_dropna={self.dropna_columns}"
         config_str += f"_expcol={self.experiment_type_column}_expvals={self.allowed_experiment_types}"
         config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
+        config_str += f"_tagg={self.target_aggregation}"
         
         # Hash the configuration
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -450,7 +453,16 @@ class SpacioTemporalDataset(Dataset):
         #### Extract graph-level targets
         target_cols = self._resolve_target_columns(df_window)
         if target_cols:
-            y = torch.tensor(df_window[target_cols].mean(axis=0).values, dtype=torch.float32)
+            if self.target_aggregation == "mean":
+                target_values = df_window[target_cols].mean(axis=0).values
+            elif self.target_aggregation == "last":
+                target_values = df_window[target_cols].iloc[-1].values
+            else:
+                raise ValueError(
+                    f"Unsupported target_aggregation='{self.target_aggregation}'. "
+                    "Use 'mean' or 'last'."
+                )
+            y = torch.tensor(target_values, dtype=torch.float32)
         else:
             y = None
         

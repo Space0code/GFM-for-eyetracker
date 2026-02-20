@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from tqdm import tqdm
 
 from emotions.baseline_model import get_baseline_by_name
+from data.data import clean_dataset
 
 
 class TabularWindowSample:
@@ -79,6 +80,7 @@ def parse_subject_recording_from_name(filename: str) -> Tuple[str, str]:
 def aggregate_window(
     window_df: pd.DataFrame,
     target_columns: Optional[List[str]] = None,
+    target_aggregation: str = "last",
 ) -> Dict[str, float]:
     """Aggregate window data into statistical features.
     
@@ -118,7 +120,15 @@ def aggregate_window(
     targets: Dict[str, float] = {}
     for col in target_columns:
         if col in window_df.columns:
-            targets[col] = window_df[col].iloc[-1]
+            if target_aggregation == "mean":
+                targets[col] = float(window_df[col].mean())
+            elif target_aggregation == "last":
+                targets[col] = float(window_df[col].iloc[-1])
+            else:
+                raise ValueError(
+                    f"Unsupported target_aggregation='{target_aggregation}'. "
+                    "Use 'mean' or 'last'."
+                )
     
     return {**feats, **targets}
 
@@ -149,9 +159,12 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                          filter_subjects: list = None, filter_recordings: list = None,
                          file_list: Optional[List[str]] = None, 
                          window_length: int = 10, 
+                         window_overlap: float = 0.0,
+                         min_samples_per_window: int = 11,
                          dropping_emotion_threshold: float = -1,
                          feature_columns: Optional[List[str]] = None,
                          target_columns: Optional[List[str]] = None,
+                         target_aggregation: str = "last",
                          dropna_columns: Optional[List[str]] = None,
                          experiment_type_column: str = "experiment-type",
                          allowed_experiment_types: Optional[List[str]] = None,
@@ -176,6 +189,14 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         raise ValueError("Must provide exactly one of: data_dir or data_filepath")
     
     samples: List[TabularWindowSample] = []
+    if target_aggregation not in {"mean", "last"}:
+        raise ValueError(
+            f"Unsupported target_aggregation='{target_aggregation}'. Use 'mean' or 'last'."
+        )
+    if not (0 <= window_overlap < 1):
+        raise ValueError("window_overlap must be in [0, 1).")
+    if min_samples_per_window <= 0:
+        raise ValueError("min_samples_per_window must be > 0.")
     feature_columns = feature_columns or [
         "x-avg",
         "y-avg",
@@ -183,12 +204,28 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         "pupil-size-right-avg",
     ]
 
-    def _apply_row_filters(df: pd.DataFrame) -> pd.DataFrame:
-        """Apply optional dataset-specific row filters and dropna policy."""
+    def _apply_dataset_filters(df: pd.DataFrame) -> pd.DataFrame:
+        """Apply dataset-level filters that do not depend on grouping."""
         if allowed_experiment_types and experiment_type_column in df.columns:
             df = df[df[experiment_type_column].isin(allowed_experiment_types)]
         if label_quality_column and allowed_label_quality_values and label_quality_column in df.columns:
             df = df[df[label_quality_column].isin(allowed_label_quality_values)]
+        return df.reset_index(drop=True)
+
+    def _clean_and_dropna(df: pd.DataFrame) -> pd.DataFrame:
+        """Apply cleaning/dropna on one logical sequence (group/file)."""
+        if len(df) == 0:
+            return df.reset_index(drop=True)
+
+        df = df.sort_values("time-rel-seconds").reset_index(drop=True)
+        required_clean_cols = ["time-rel-seconds"] + feature_columns
+        missing_required = [col for col in required_clean_cols if col not in df.columns]
+        if not missing_required:
+            df = clean_dataset(
+                df,
+                required_cols=required_clean_cols,
+                interpolation_cols=feature_columns,
+            )
 
         if dropna_columns is None:
             df = df.dropna()
@@ -198,6 +235,25 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 raise ValueError(f"Missing configured dropna columns: {missing}")
             df = df.dropna(subset=dropna_columns)
         return df.reset_index(drop=True)
+
+    def _iter_window_slices(group_df: pd.DataFrame):
+        """Generate time-based slices aligned with graph dataset windowing."""
+        times = group_df["time-rel-seconds"].values
+        if len(times) == 0:
+            return
+
+        start_time = times[0]
+        end_time = times[-1]
+        step_size = window_length * (1 - window_overlap)
+        current_start = start_time
+
+        while current_start < end_time:
+            current_end = min(current_start + window_length, end_time)
+            start_idx = np.searchsorted(times, current_start, side="left")
+            end_idx = np.searchsorted(times, current_end, side="right")
+            if end_idx > start_idx:
+                yield slice(start_idx, end_idx)
+            current_start += step_size
     
     if data_filepath is not None:
         # New behavior: load from single CSV file
@@ -205,7 +261,7 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             raise FileNotFoundError(f"Data file not found: {data_filepath}")
         
         df = pd.read_csv(data_filepath)
-        df = _apply_row_filters(df)
+        df = _apply_dataset_filters(df)
         
         # Check required columns
         if 'subject' not in df.columns or 'recording' not in df.columns:
@@ -223,7 +279,9 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         # Group by (subject, recording) and process each group
         grouped = df.groupby(['subject', 'recording'])
         for (subject, recording), group_df in tqdm(grouped, desc="Loading data groups"):
-            group_df = group_df.reset_index(drop=True)
+            group_df = _clean_and_dropna(group_df)
+            if len(group_df) == 0:
+                continue
 
             missing_features = [col for col in feature_columns if col not in group_df.columns]
             if missing_features:
@@ -238,24 +296,22 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 if len(group_df) == 0:
                     continue
             
-            time_col = 'time-rel-seconds'
-            max_time = group_df[time_col].max()
-            start_time = 0
-            
-            while start_time < max_time:
-                end_time = start_time + window_length
-                window_data = group_df[(group_df[time_col] >= start_time) & (group_df[time_col] < end_time)]
-                
-                if len(window_data) > 10:
-                    agg = aggregate_window(window_data, target_columns=resolved_target_cols)
-                    
-                    # Separate features and targets
-                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
-                    targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
-                    
-                    samples.append(TabularWindowSample(features, targets, subject, recording))
-                
-                start_time += window_length
+            for window_slice in _iter_window_slices(group_df):
+                window_data = group_df.iloc[window_slice]
+                if len(window_data) < min_samples_per_window:
+                    continue
+
+                agg = aggregate_window(
+                    window_data,
+                    target_columns=resolved_target_cols,
+                    target_aggregation=target_aggregation,
+                )
+
+                # Separate features and targets
+                features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
+
+                samples.append(TabularWindowSample(features, targets, subject, recording))
     
     else:
         # Old behavior: load from directory
@@ -264,7 +320,8 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
 
         for fpath in tqdm(files, desc="Loading data files"):
             df = pd.read_csv(fpath)
-            df = _apply_row_filters(df)
+            df = _apply_dataset_filters(df)
+            df = _clean_and_dropna(df)
             if len(df) == 0:
                 continue
             
@@ -282,24 +339,22 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 recording = df["recording"].iloc[0]
             else:
                 subject, recording = parse_subject_recording_from_name(str(fpath))
-            time_col = 'time-rel-seconds'
-            max_time = df[time_col].max()
-            start_time = 0
-            
-            while start_time < max_time:
-                end_time = start_time + window_length
-                window_data = df[(df[time_col] >= start_time) & (df[time_col] < end_time)]
-                
-                if len(window_data) > 10:
-                    agg = aggregate_window(window_data, target_columns=resolved_target_cols)
-                    
-                    # Separate features and targets
-                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
-                    targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
-                    
-                    samples.append(TabularWindowSample(features, targets, subject, recording))
-                
-                start_time += window_length
+            for window_slice in _iter_window_slices(df):
+                window_data = df.iloc[window_slice]
+                if len(window_data) < min_samples_per_window:
+                    continue
+
+                agg = aggregate_window(
+                    window_data,
+                    target_columns=resolved_target_cols,
+                    target_aggregation=target_aggregation,
+                )
+
+                # Separate features and targets
+                features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
+
+                samples.append(TabularWindowSample(features, targets, subject, recording))
 
     return samples
 
