@@ -27,6 +27,17 @@ class TabularWindowSample:
         self.recording = recording
 
 
+def infer_default_target_columns(df: pd.DataFrame) -> List[str]:
+    """Infer numeric emotion target columns from a DataFrame."""
+    targets: List[str] = []
+    for col in df.columns:
+        if not col.startswith("emotion-"):
+            continue
+        if pd.api.types.is_numeric_dtype(df[col]):
+            targets.append(col)
+    return sorted(targets)
+
+
 def parse_subject_recording_from_name(filename: str) -> Tuple[str, str]:
     """Parse subject and recording IDs from filename.
     
@@ -65,7 +76,10 @@ def parse_subject_recording_from_name(filename: str) -> Tuple[str, str]:
     return subject, recording
 
 
-def aggregate_window(window_df: pd.DataFrame) -> Dict[str, float]:
+def aggregate_window(
+    window_df: pd.DataFrame,
+    target_columns: Optional[List[str]] = None,
+) -> Dict[str, float]:
     """Aggregate window data into statistical features.
     
     Mirrors TabularDataset aggregation logic.
@@ -97,10 +111,13 @@ def aggregate_window(window_df: pd.DataFrame) -> Dict[str, float]:
         if col in window_df.columns:
             feats[f'{col}_mean'] = window_df[col].mean()
     
-    # Emotion targets
+    # Target labels
+    if target_columns is None:
+        target_columns = infer_default_target_columns(window_df)
+
     targets: Dict[str, float] = {}
-    for col in window_df.columns:
-        if 'emotion' in col.lower():
+    for col in target_columns:
+        if col in window_df.columns:
             targets[col] = window_df[col].iloc[-1]
     
     return {**feats, **targets}
@@ -132,7 +149,14 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                          filter_subjects: list = None, filter_recordings: list = None,
                          file_list: Optional[List[str]] = None, 
                          window_length: int = 10, 
-                         dropping_emotion_threshold: float = -1) -> List[TabularWindowSample]:
+                         dropping_emotion_threshold: float = -1,
+                         feature_columns: Optional[List[str]] = None,
+                         target_columns: Optional[List[str]] = None,
+                         dropna_columns: Optional[List[str]] = None,
+                         experiment_type_column: str = "experiment-type",
+                         allowed_experiment_types: Optional[List[str]] = None,
+                         label_quality_column: Optional[str] = None,
+                         allowed_label_quality_values: Optional[List[str]] = None) -> List[TabularWindowSample]:
     """Load CSVs and build windowed samples with subject/recording metadata.
     
     Args:
@@ -152,6 +176,28 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         raise ValueError("Must provide exactly one of: data_dir or data_filepath")
     
     samples: List[TabularWindowSample] = []
+    feature_columns = feature_columns or [
+        "x-avg",
+        "y-avg",
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+    ]
+
+    def _apply_row_filters(df: pd.DataFrame) -> pd.DataFrame:
+        """Apply optional dataset-specific row filters and dropna policy."""
+        if allowed_experiment_types and experiment_type_column in df.columns:
+            df = df[df[experiment_type_column].isin(allowed_experiment_types)]
+        if label_quality_column and allowed_label_quality_values and label_quality_column in df.columns:
+            df = df[df[label_quality_column].isin(allowed_label_quality_values)]
+
+        if dropna_columns is None:
+            df = df.dropna()
+        else:
+            missing = [col for col in dropna_columns if col not in df.columns]
+            if missing:
+                raise ValueError(f"Missing configured dropna columns: {missing}")
+            df = df.dropna(subset=dropna_columns)
+        return df.reset_index(drop=True)
     
     if data_filepath is not None:
         # New behavior: load from single CSV file
@@ -159,7 +205,7 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             raise FileNotFoundError(f"Data file not found: {data_filepath}")
         
         df = pd.read_csv(data_filepath)
-        df = df.dropna()
+        df = _apply_row_filters(df)
         
         # Check required columns
         if 'subject' not in df.columns or 'recording' not in df.columns:
@@ -178,12 +224,16 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         grouped = df.groupby(['subject', 'recording'])
         for (subject, recording), group_df in tqdm(grouped, desc="Loading data groups"):
             group_df = group_df.reset_index(drop=True)
+
+            missing_features = [col for col in feature_columns if col not in group_df.columns]
+            if missing_features:
+                raise ValueError(f"Missing feature columns in group {(subject, recording)}: {missing_features}")
             
             # Drop if all emotions below threshold
-            emotion_cols = [c for c in group_df.columns if 'emotion' in c.lower()]
-            if emotion_cols and dropping_emotion_threshold > -np.inf:
+            resolved_target_cols = target_columns or infer_default_target_columns(group_df)
+            if resolved_target_cols and dropping_emotion_threshold > -np.inf:
                 group_df = drop_pairs_with_emotions_below_threshold(
-                    group_df, emotion_cols, dropping_emotion_threshold
+                    group_df, resolved_target_cols, dropping_emotion_threshold
                 )
                 if len(group_df) == 0:
                     continue
@@ -197,11 +247,11 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 window_data = group_df[(group_df[time_col] >= start_time) & (group_df[time_col] < end_time)]
                 
                 if len(window_data) > 10:
-                    agg = aggregate_window(window_data)
+                    agg = aggregate_window(window_data, target_columns=resolved_target_cols)
                     
                     # Separate features and targets
-                    features = {k: v for k, v in agg.items() if 'emotion' not in k.lower()}
-                    targets = {k: v for k, v in agg.items() if 'emotion' in k.lower()}
+                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                    targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
                     
                     samples.append(TabularWindowSample(features, targets, subject, recording))
                 
@@ -214,20 +264,24 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
 
         for fpath in tqdm(files, desc="Loading data files"):
             df = pd.read_csv(fpath)
-            df = df.dropna()
+            df = _apply_row_filters(df)
             if len(df) == 0:
                 continue
             
             # Drop if all emotions below threshold
-            emotion_cols = [c for c in df.columns if 'emotion' in c.lower()]
-            if emotion_cols and dropping_emotion_threshold > -np.inf:
+            resolved_target_cols = target_columns or infer_default_target_columns(df)
+            if resolved_target_cols and dropping_emotion_threshold > -np.inf:
                 df = drop_pairs_with_emotions_below_threshold(
-                    df, emotion_cols, dropping_emotion_threshold
+                    df, resolved_target_cols, dropping_emotion_threshold
                 )
                 if len(df) == 0:
                     continue
             
-            subject, recording = parse_subject_recording_from_name(str(fpath))
+            if "subject" in df.columns and "recording" in df.columns:
+                subject = df["subject"].iloc[0]
+                recording = df["recording"].iloc[0]
+            else:
+                subject, recording = parse_subject_recording_from_name(str(fpath))
             time_col = 'time-rel-seconds'
             max_time = df[time_col].max()
             start_time = 0
@@ -237,11 +291,11 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 window_data = df[(df[time_col] >= start_time) & (df[time_col] < end_time)]
                 
                 if len(window_data) > 10:
-                    agg = aggregate_window(window_data)
+                    agg = aggregate_window(window_data, target_columns=resolved_target_cols)
                     
                     # Separate features and targets
-                    features = {k: v for k, v in agg.items() if 'emotion' not in k.lower()}
-                    targets = {k: v for k, v in agg.items() if 'emotion' in k.lower()}
+                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                    targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
                     
                     samples.append(TabularWindowSample(features, targets, subject, recording))
                 

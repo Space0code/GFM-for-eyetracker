@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.preprocessing import StandardScaler
 # resolve warnings
 torch.set_float32_matmul_precision("high")
 torch._dynamo.config.capture_scalar_outputs = True
@@ -39,10 +40,6 @@ from emotions.utils import (
     save_comparison_csv,
     print_comparison_table
 )
-from emotions.binary.data_binary import (
-    BinarySpacioTemporalDataset,
-    wrap_tabular_samples
-)
 from emotions.binary.model_binary import BinarySpatioTemporalGNN
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
@@ -58,6 +55,124 @@ def parse_args():
         help="Path to binary config YAML file"
     )
     return parser.parse_args()
+
+
+def resolve_target_column(binary_task_cfg: Dict[str, Any]) -> str:
+    """Resolve a single target column with backward-compatible config keys."""
+    target_column = binary_task_cfg.get("target_column", binary_task_cfg.get("target_emotion"))
+    if not target_column:
+        raise ValueError("Binary task requires 'target_column' (or legacy 'target_emotion').")
+    return target_column
+
+
+def resolve_threshold_value(
+    threshold_spec: Any,
+    train_values: List[float],
+) -> float:
+    """Resolve a fold threshold from numeric value or train-based statistic."""
+    if isinstance(threshold_spec, str):
+        mode = threshold_spec.strip().lower()
+        if mode in {"median", "mean"}:
+            series = pd.to_numeric(pd.Series(train_values), errors="coerce").dropna()
+            if series.empty:
+                raise ValueError("Cannot compute threshold from empty train targets.")
+            if mode == "median":
+                return float(series.median())
+            return float(series.mean())
+        try:
+            return float(mode)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid threshold '{threshold_spec}'. Use float, 'median', or 'mean'."
+            ) from exc
+    return float(threshold_spec)
+
+
+def validate_non_empty_train_splits(
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    strategy: str,
+    dataset_label: str,
+) -> None:
+    """Fail fast if a CV strategy produces empty train folds."""
+    bad_folds = [i for i, (train_idx, _, _) in enumerate(splits) if len(train_idx) == 0]
+    if bad_folds:
+        fold_text = ", ".join(str(i) for i in bad_folds)
+        raise ValueError(
+            f"{dataset_label} split(s) {fold_text} from strategy '{strategy}' have empty train sets. "
+            "Adjust `cross_validation.strategies`, reduce `cross_validation.val_size`, "
+            "or include more distinct subjects/recordings."
+        )
+
+
+def collect_graph_target_values(
+    dataset: SpacioTemporalDataset,
+    indices: np.ndarray,
+    target_column: str,
+) -> List[float]:
+    """Collect continuous target values from selected graph samples."""
+    values: List[float] = []
+    for idx in indices:
+        data = dataset[int(idx)]
+        names = getattr(data, "emotion_names", getattr(dataset, "emotion_names", []))
+        if target_column not in names:
+            raise ValueError(f"Target column '{target_column}' not found in graph targets.")
+        target_idx = names.index(target_column)
+        values.append(float(data.y[target_idx].item()))
+    return values
+
+
+def collect_tabular_target_values(
+    samples: List[Any],
+    indices: np.ndarray,
+    target_column: str,
+) -> List[float]:
+    """Collect continuous target values from selected tabular samples."""
+    values: List[float] = []
+    for idx in indices:
+        sample = samples[int(idx)]
+        if target_column not in sample.targets:
+            raise ValueError(f"Target column '{target_column}' missing in tabular sample.")
+        values.append(float(sample.targets[target_column]))
+    return values
+
+
+def fit_graph_feature_scaler(
+    dataset: SpacioTemporalDataset,
+    train_idx: np.ndarray,
+) -> StandardScaler:
+    """Fit StandardScaler on node features from train graphs only."""
+    train_x = []
+    for idx in train_idx:
+        data = dataset[int(idx)]
+        train_x.append(data["node"].x.detach().cpu().numpy())
+    scaler = StandardScaler()
+    scaler.fit(np.vstack(train_x))
+    return scaler
+
+
+def build_binary_graph_subset(
+    dataset: SpacioTemporalDataset,
+    indices: np.ndarray,
+    target_column: str,
+    threshold_value: float,
+    scaler: StandardScaler | None = None,
+) -> List[Any]:
+    """Build a list of graphs with binary targets and optional standardized features."""
+    graphs = []
+    for idx in indices:
+        data = dataset[int(idx)].clone()
+        names = getattr(data, "emotion_names", getattr(dataset, "emotion_names", []))
+        if target_column not in names:
+            raise ValueError(f"Target column '{target_column}' not found in graph targets.")
+        target_idx = names.index(target_column)
+        target_value = float(data.y[target_idx].item())
+        binary_label = 1.0 if target_value > threshold_value else 0.0
+        data.y = torch.tensor([binary_label], dtype=torch.float32)
+        if scaler is not None:
+            x_scaled = scaler.transform(data["node"].x.detach().cpu().numpy())
+            data["node"].x = torch.tensor(x_scaled, dtype=torch.float32)
+        graphs.append(data)
+    return graphs
 
 
 def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
@@ -87,7 +202,7 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     return total_loss / len(loader)
 
 
-def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
+def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
     """Evaluate GNN binary classifier."""
     model.eval()
     total_loss = 0
@@ -112,18 +227,12 @@ def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
             all_outputs.append(prob.cpu())
             all_targets.append(target.cpu())
             
-            # Collect metadata
-            if hasattr(data, 'idx'):
-                batch_indices = data.idx.cpu().numpy().flatten()
-                for graph_idx in batch_indices:
-                    try:
-                        original_graph = loader.dataset[int(graph_idx)]
-                        if hasattr(original_graph, 'subject'):
-                            all_subjects.append(original_graph.subject)
-                        if hasattr(original_graph, 'recording'):
-                            all_recordings.append(original_graph.recording)
-                    except (AttributeError, IndexError):
-                        pass
+            # Collect metadata directly from batch if available
+            batch_subjects = getattr(data, "subject", None)
+            batch_recordings = getattr(data, "recording", None)
+            if isinstance(batch_subjects, (list, tuple)) and isinstance(batch_recordings, (list, tuple)):
+                all_subjects.extend(batch_subjects)
+                all_recordings.extend(batch_recordings)
     
     # Concatenate predictions
     y_pred = torch.cat(all_outputs).numpy()
@@ -142,19 +251,30 @@ def evaluate_gnn(model, loader, device, emotion_name, threshold=0.5):
         y_pred, y_true,
         metadata=metadata,
         emotion_names=[emotion_name],
-        threshold=threshold
+        threshold=decision_threshold
     )
     
     return metrics, total_loss / len(loader), y_pred, y_true
 
 
-def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir, 
-                   test_name, device, verbose: bool = True):
+def train_gnn_fold(
+    config,
+    train_idx,
+    val_idx,
+    test_idx,
+    dataset,
+    fold_dir,
+    test_name,
+    device,
+    target_column: str,
+    threshold_value: float,
+    standardize_features: bool = False,
+    verbose: bool = True,
+):
     """Train GNN for one fold."""
     model_cfg = config['gnn']['model']
     training_cfg = config['gnn']['training']
-    emotion_name = config['binary_task']['target_emotion']
-    threshold = config['binary_task'].get('threshold', 0.0)
+    decision_threshold = config['binary_task'].get('decision_threshold', 0.5)
     
     # Create model
     model = BinarySpatioTemporalGNN(**model_cfg).to(device)
@@ -178,21 +298,36 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
         'persistent_workers': training_cfg.get('persistent_workers', True)
     }
     
-    train_loader = DataLoader(
-        [dataset[i] for i in train_idx],
-        shuffle=True,
-        **loader_kwargs
+    scaler = None
+    if standardize_features:
+        scaler = fit_graph_feature_scaler(dataset, train_idx)
+        joblib.dump(scaler, os.path.join(fold_dir, "gnn_feature_scaler.pkl"))
+
+    train_graphs = build_binary_graph_subset(
+        dataset=dataset,
+        indices=train_idx,
+        target_column=target_column,
+        threshold_value=threshold_value,
+        scaler=scaler,
     )
-    val_loader = DataLoader(
-        [dataset[i] for i in val_idx],
-        shuffle=False,
-        **loader_kwargs
+    val_graphs = build_binary_graph_subset(
+        dataset=dataset,
+        indices=val_idx,
+        target_column=target_column,
+        threshold_value=threshold_value,
+        scaler=scaler,
     )
-    test_loader = DataLoader(
-        [dataset[i] for i in test_idx],
-        shuffle=False,
-        **loader_kwargs
+    test_graphs = build_binary_graph_subset(
+        dataset=dataset,
+        indices=test_idx,
+        target_column=target_column,
+        threshold_value=threshold_value,
+        scaler=scaler,
     )
+
+    train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)
+    val_loader = DataLoader(val_graphs, shuffle=False, **loader_kwargs)
+    test_loader = DataLoader(test_graphs, shuffle=False, **loader_kwargs)
     
     # # Validate edge weights (print once per fold)
     # print("Validating edge weights from first batch...")
@@ -220,7 +355,7 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
         )
         
         val_metrics, val_loss, _, _ = evaluate_gnn(
-            model, val_loader, device, emotion_name, threshold
+            model, val_loader, device, target_column, decision_threshold
         )
         
         if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg['num_epochs'] - 1 or epoch == 0):
@@ -241,7 +376,7 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
     # Load best model and evaluate on test
     model.load_state_dict(torch.load(os.path.join(fold_dir, 'best_model.pt')))
     test_metrics, test_loss, test_pred, test_true = evaluate_gnn(
-        model, test_loader, device, emotion_name, threshold
+        model, test_loader, device, target_column, decision_threshold
     )
     
     # Save predictions and targets
@@ -255,76 +390,105 @@ def train_gnn_fold(config, train_idx, val_idx, test_idx, dataset, fold_dir,
     return test_metrics
 
 
-def train_baselines_fold(baseline_cfg, train_idx, val_idx, test_idx, 
-                         samples, fold_dir, metric_names, emotion_name, verbose: bool = True):
+def train_baselines_fold(
+    baseline_cfg,
+    train_idx,
+    val_idx,
+    test_idx,
+    samples,
+    fold_dir,
+    metric_names,
+    target_column: str,
+    threshold_value: float,
+    standardize_features: bool = False,
+    verbose: bool = True,
+):
     """Train baseline models for one fold and save them with predictions."""
-    baselines_dir = os.path.join(fold_dir, 'baselines')
+    baselines_dir = os.path.join(fold_dir, "baselines")
     os.makedirs(baselines_dir, exist_ok=True)
-    
-    # Convert to X, y
+
     X_train, y_train, train_meta, feat_cols, targ_cols = samples_to_xy(samples, train_idx)
     X_val, y_val, val_meta, _, _ = samples_to_xy(samples, val_idx)
     X_test, y_test, test_meta, _, _ = samples_to_xy(samples, test_idx)
-    
-    # Prepare metadata dicts
-    train_metadata = {
-        'subjects': [m[0] for m in train_meta if m],
-        'recordings': [m[1] for m in train_meta if m]
-    }
+
+    if target_column not in y_train.columns:
+        raise ValueError(f"Target column '{target_column}' is missing in tabular labels.")
+
+    y_train_cont = pd.to_numeric(y_train[target_column], errors="coerce")
+    y_val_cont = pd.to_numeric(y_val[target_column], errors="coerce")
+    y_test_cont = pd.to_numeric(y_test[target_column], errors="coerce")
+    if y_train_cont.isna().any() or y_val_cont.isna().any() or y_test_cont.isna().any():
+        raise ValueError(f"Found NaN/non-numeric target values in '{target_column}'.")
+
+    y_train = (y_train_cont > threshold_value).astype(float).to_frame(name=target_column)
+    y_val = (y_val_cont > threshold_value).astype(float).to_frame(name=target_column)
+    y_test = (y_test_cont > threshold_value).astype(float).to_frame(name=target_column)
+
+    scaler = None
+    if standardize_features:
+        scaler = StandardScaler()
+        X_train = pd.DataFrame(
+            scaler.fit_transform(X_train),
+            columns=X_train.columns,
+            index=X_train.index,
+        )
+        X_val = pd.DataFrame(
+            scaler.transform(X_val),
+            columns=X_val.columns,
+            index=X_val.index,
+        )
+        X_test = pd.DataFrame(
+            scaler.transform(X_test),
+            columns=X_test.columns,
+            index=X_test.index,
+        )
+
     test_metadata = {
-        'subjects': [m[0] for m in test_meta if m],
-        'recordings': [m[1] for m in test_meta if m]
+        "subjects": [m[0] for m in test_meta if m],
+        "recordings": [m[1] for m in test_meta if m],
     }
-    
+
     results = {}
-    
-    for model_name in baseline_cfg['models']:
+    for model_name in baseline_cfg["models"]:
         if verbose:
             print(f"  Training {model_name}...")
-        
-        # Create model-specific directory
+
         model_dir = os.path.join(baselines_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
-        
-        # Get hyperparameters
-        hyperparams = baseline_cfg.get('hyperparameters', {}).get(model_name, {})
-        
-        # Create and train model
+        hyperparams = baseline_cfg.get("hyperparameters", {}).get(model_name, {})
         model = get_binary_baseline_by_name(model_name, **hyperparams)
-        
-        # Suppress ConvergenceWarning from sklearn's neural network models
+
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=UserWarning, 
-                                    message='.*Stochastic Optimizer.*')
+            warnings.filterwarnings(
+                "ignore",
+                category=UserWarning,
+                message=".*Stochastic Optimizer.*",
+            )
             model.fit(X_train, y_train)
-        
-        # Evaluate on test set
+
         test_metrics = model.evaluate(
-            X_test, y_test,
-            emotion_names=[emotion_name],
+            X_test,
+            y_test,
+            emotion_names=[target_column],
             metadata=test_metadata,
-            threshold=0.5
+            threshold=0.5,
         )
-        
-        # Get predictions
+
         test_pred = model.predict_proba(X_test)
-        test_true = y_test.values if hasattr(y_test, 'values') else np.array(y_test)
-        
-        # Save model
-        model_path = os.path.join(model_dir, 'model.pkl')
-        joblib.dump(model, model_path)
-        
-        # Save predictions and targets
-        np.save(os.path.join(model_dir, 'test_predictions.npy'), test_pred)
-        np.save(os.path.join(model_dir, 'test_targets.npy'), test_true)
-        
+        test_true = y_test.values if hasattr(y_test, "values") else np.array(y_test)
+
+        joblib.dump(model, os.path.join(model_dir, "model.pkl"))
+        if scaler is not None:
+            joblib.dump(scaler, os.path.join(model_dir, "feature_scaler.pkl"))
+
+        np.save(os.path.join(model_dir, "test_predictions.npy"), test_pred)
+        np.save(os.path.join(model_dir, "test_targets.npy"), test_true)
         results[model_name] = test_metrics
-        
-        # Log accuracy
-        test_acc = test_metrics['standard']['aggregated']['accuracy']
+
+        test_acc = test_metrics["standard"]["aggregated"]["accuracy"]
         if verbose:
             print(f"    ❗{model_name} - Test Accuracy: {test_acc:.4f}")
-    
+
     return results
 
 
@@ -341,14 +505,15 @@ def main():
     metric_names = config['metrics']
     verbose = logging_cfg.get('verbose', True)
     
-    # Get binary task parameters
-    target_emotion = binary_task_cfg['target_emotion']
-    threshold = binary_task_cfg.get('threshold', 0.0)
-    
-    print(f"Binary Classification Task:")
-    print(f"  Target emotion: {target_emotion}")
-    print(f"  Threshold: {threshold}")
-    print(f"  Labels: <=threshold -> 0, >threshold -> 1")
+    target_column = resolve_target_column(binary_task_cfg)
+    threshold_spec = binary_task_cfg.get("threshold", 0.0)
+    standardize_features = dataset_cfg.get("standardize_features", False)
+
+    print("Binary Classification Task:")
+    print(f"  Target column: {target_column}")
+    print(f"  Threshold spec: {threshold_spec}")
+    print("  Labels: <=threshold -> 0, >threshold -> 1")
+    print(f"  Standardize features: {standardize_features}")
     
     # Create timestamped run directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -386,6 +551,25 @@ def main():
     
     # Load datasets
     print("\nLoading datasets...")
+    target_columns = [target_column]
+    default_dropna_columns = [
+        "time-rel-seconds",
+        "x-avg",
+        "y-avg",
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+        target_column,
+        "subject",
+        "recording",
+    ]
+    dropna_columns = dataset_cfg.get("dropna_columns", default_dropna_columns)
+    allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
+    label_quality_column = dataset_cfg.get("label_quality_column")
+    allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
+    feature_columns = dataset_cfg.get(
+        "feature_columns",
+        ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
+    )
     
     if run_experiments['gnn']:
         print("Loading graph dataset for GNN...")
@@ -406,15 +590,15 @@ def main():
             cache_dir=dataset_cfg.get('cache_dir'),
             use_cache=dataset_cfg.get('use_cache', True),
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
+            feature_columns=feature_columns,
+            target_columns=target_columns,
+            dropna_columns=dropna_columns,
+            experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
+            allowed_experiment_types=allowed_experiment_types,
+            label_quality_column=label_quality_column,
+            allowed_label_quality_values=allowed_label_quality_values,
         )
-        
-        # Wrap with binary dataset
-        gnn_dataset = BinarySpacioTemporalDataset(
-            base_gnn_dataset,
-            target_emotion=target_emotion,
-            threshold=threshold
-        )
-        print(f"Loaded {len(gnn_dataset)} graph samples")
+        print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
     
     if run_experiments['baselines']:
@@ -426,18 +610,26 @@ def main():
             filter_recordings=dataset_cfg.get('filter_recordings'),
             file_list=dataset_cfg.get('file_list'),
             window_length=dataset_cfg.get('window_length', 10),
-            dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1)
+            dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
+            feature_columns=feature_columns,
+            target_columns=target_columns,
+            dropna_columns=dropna_columns,
+            experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
+            allowed_experiment_types=allowed_experiment_types,
+            label_quality_column=label_quality_column,
+            allowed_label_quality_values=allowed_label_quality_values,
         )
-        
-        # Wrap with binary samples
-        tabular_samples = wrap_tabular_samples(
-            base_tabular_samples,
-            target_emotion=target_emotion,
-            threshold=threshold
+        print(f"Loaded {len(base_tabular_samples)} tabular samples")
+        unique_subjects = set(
+            sample.subject
+            for sample in base_tabular_samples
+            if hasattr(sample, "subject") and sample.subject is not None
         )
-        print(f"Loaded {len(tabular_samples)} tabular samples")
-        unique_subjects = set(sample.subject for sample in tabular_samples if hasattr(sample, 'subject') and sample.subject is not None)
-        unique_recordings = set(sample.recording for sample in tabular_samples if hasattr(sample, 'recording') and sample.recording is not None)
+        unique_recordings = set(
+            sample.recording
+            for sample in base_tabular_samples
+            if hasattr(sample, "recording") and sample.recording is not None
+        )
         print(f"Unique subjects in tabular samples: {sorted(unique_subjects)}")
         print(f"Unique recordings in tabular samples: {sorted(unique_recordings)}")
     
@@ -464,7 +656,7 @@ def main():
         if run_experiments['baselines']:
             baseline_splitter = create_splitter(
                 strategy=strategy,
-                samples=tabular_samples,
+                samples=base_tabular_samples,
                 val_size=cv_cfg['val_size'],
                 random_state=cv_cfg.get('random_state')
             )
@@ -472,14 +664,14 @@ def main():
         if run_experiments['gnn']:
             gnn_splitter = create_splitter(
                 strategy=strategy,
-                samples=gnn_dataset,
+                samples=base_gnn_dataset,
                 val_size=cv_cfg['val_size'],
                 random_state=cv_cfg.get('random_state')
             )
         
         # Reference dataset for fold identification
         reference_splitter = gnn_splitter if run_experiments['gnn'] else baseline_splitter
-        reference_dataset = gnn_dataset if run_experiments['gnn'] else tabular_samples
+        reference_dataset = base_gnn_dataset if run_experiments['gnn'] else base_tabular_samples
         
         # Storage for this strategy
         baseline_results_all_folds = {name: {} for name in config['baselines']['models']} if run_experiments['baselines'] else {}
@@ -489,12 +681,16 @@ def main():
         if run_experiments['baselines'] and run_experiments['gnn']:
             baseline_splits = list(baseline_splitter.split())
             gnn_splits = list(gnn_splitter.split())
+            validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+            validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
             num_folds = len(baseline_splits)
         elif run_experiments['baselines']:
             baseline_splits = list(baseline_splitter.split())
+            validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
             num_folds = len(baseline_splits)
         else:
             gnn_splits = list(gnn_splitter.split())
+            validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
             num_folds = len(gnn_splits)
         
         for fold_num in range(num_folds):
@@ -530,14 +726,36 @@ def main():
             os.makedirs(fold_dir, exist_ok=True)
             
             print(f"\n{test_name}")
+
+            if run_experiments["baselines"]:
+                train_values = collect_tabular_target_values(
+                    base_tabular_samples,
+                    baseline_train_idx,
+                    target_column,
+                )
+            else:
+                train_values = collect_graph_target_values(
+                    base_gnn_dataset,
+                    gnn_train_idx,
+                    target_column,
+                )
+            if len(train_values) == 0:
+                raise ValueError(
+                    f"Empty train targets for {test_name} with strategy '{strategy}'. "
+                    "This split cannot compute a train-based threshold."
+                )
+            fold_threshold = resolve_threshold_value(threshold_spec, train_values)
+            print(f"  Fold label threshold ({threshold_spec}): {fold_threshold:.6f}")
             
             # Train baselines
             if run_experiments['baselines']:
                 print("Training baselines...")
                 baseline_results = train_baselines_fold(
                     config['baselines'], baseline_train_idx, baseline_val_idx,
-                    baseline_test_idx, tabular_samples, fold_dir,
-                    metric_names, target_emotion, verbose
+                    baseline_test_idx, base_tabular_samples, fold_dir,
+                    metric_names, target_column, fold_threshold,
+                    standardize_features=standardize_features,
+                    verbose=verbose,
                 )
                 for model_name, metrics in baseline_results.items():
                     baseline_results_all_folds[model_name][test_id] = metrics
@@ -546,7 +764,11 @@ def main():
             if run_experiments['gnn']:
                 gnn_metrics = train_gnn_fold(
                     config, gnn_train_idx, gnn_val_idx, gnn_test_idx,
-                    gnn_dataset, fold_dir, test_name, device, verbose
+                    base_gnn_dataset, fold_dir, test_name, device,
+                    target_column=target_column,
+                    threshold_value=fold_threshold,
+                    standardize_features=standardize_features,
+                    verbose=verbose,
                 )
                 gnn_results_all_folds[test_id] = gnn_metrics
         

@@ -8,7 +8,7 @@ run_experiments:
 
 # Binary classification task configuration
 binary_task:
-  target_column: "emotion-sadness"   # Preferred key (legacy: target_emotion)
+  target_column: "emotion-valence"  # Preferred key (legacy: target_emotion)
   threshold: "median"  # float or one of: median, mean (computed from train split only)
   decision_threshold: 0.5  # Probability threshold used at evaluation time
 
@@ -16,8 +16,8 @@ binary_task:
 dataset:
   # Choose ONE of the following:
   # Option 1: Single CSV file (NEW - recommended)
-  data_filepath: "data/processed/eSEEd_v2_cleaned/eSEEd_pupil_x_y_normalized.csv"
-  filter_subjects: [1, 2, 12, 21, 24, 26, 28] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
+  data_filepath: "data/processed/cached_hci_tagging_emotion.csv"
+  filter_subjects: [P1, P2, P12, P21, P22, P23] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
   # filter_recordings: [1, 2, 3] # Optional: list of recording IDs to include, e.g., [1, 2, 3]
   
   # Option 2: Directory with multiple CSV files (OLD - for backward compatibility)
@@ -39,13 +39,17 @@ dataset:
   dropping_emotion_threshold: -1  # Drop samples where all emotions <= this value (-1 to disable)
   standardize_features: true  # StandardScaler fitted on train split only
   feature_columns: ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
-  dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-sadness", "subject", "recording"]
+  dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-valence", "subject", "recording"]
+  experiment_type_column: "experiment-type"
+  allowed_experiment_types: ["emotion-elicitation"]
+  label_quality_column: "emotion-derivation-status"
+  allowed_label_quality_values: ["ok"]
 
 # Cross-validation configuration (shared)
 cross_validation:
   strategies: 
-    # - subject_loo
-    - recording_loo
+    - subject_loo
+    # - recording_loo
     # - combined_loo
   val_size: 1  # Number of subjects/recordings/pairs for validation
   random_state: 42
@@ -89,8 +93,8 @@ gnn:
     conv_type: GCNConv # GCNConv, GATConv. GATConv does not support edge weights!
   
   training:
-    num_epochs: 120
-    batch_size: 256
+    num_epochs: 35
+    batch_size: 64
     learning_rate: 0.001
     grad_clip_max_norm: 1.0
     device: auto  # 'auto', 'cuda', or 'cpu'

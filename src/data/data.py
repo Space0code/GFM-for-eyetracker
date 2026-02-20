@@ -4,7 +4,7 @@ import glob
 import math
 import hashlib
 import pickle
-from typing import List
+from typing import List, Optional
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import KDTree
@@ -71,23 +71,49 @@ def load_single_csv_file(self, data_filepath, filter_subjects=None, filter_recor
     
     print(f"Loaded data from {data_filepath}: {len(self.files)} subject-recording pairs")
 
-def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
+def infer_default_target_columns(df: pd.DataFrame) -> List[str]:
+    """Infer numeric emotion target columns from a DataFrame."""
+    targets: List[str] = []
+    for col in df.columns:
+        if not col.startswith("emotion-"):
+            continue
+        if pd.api.types.is_numeric_dtype(df[col]):
+            targets.append(col)
+    return sorted(targets)
+
+
+def clean_dataset(
+    df: pd.DataFrame,
+    required_cols: Optional[List[str]] = None,
+    interpolation_cols: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
     Clean the dataset by removing rows with NaN values in required feature columns.
     Drops rows with NaN in: time-rel-seconds, x-avg, y-avg, pupil-size-left-avg, pupil-size-right-avg
     """
 
-    required_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+    if required_cols is None:
+        required_cols = [
+            "time-rel-seconds",
+            "x-avg",
+            "y-avg",
+            "pupil-size-left-avg",
+            "pupil-size-right-avg",
+        ]
     if not set(required_cols).issubset(df.columns):
         raise ValueError(f"The DataFrame must have columns: {', '.join(required_cols)}")
 
     df = df.sort_values("time-rel-seconds").reset_index(drop=True)
-    df = interpolate_missing_data(df)
+    df = interpolate_missing_data(df, interpolation_columns=interpolation_cols)
     df = df.dropna(subset=required_cols).reset_index(drop=True)
 
     return df
 
-def interpolate_missing_data(df: pd.DataFrame, window_size_ms: float = 100.0) -> pd.DataFrame:
+def interpolate_missing_data(
+    df: pd.DataFrame,
+    window_size_ms: float = 100.0,
+    interpolation_columns: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
     Interpolate missing data in the DataFrame using a rolling window approach.
     Missing values in numeric columns are filled using linear interpolation within a time window.
@@ -110,9 +136,16 @@ def interpolate_missing_data(df: pd.DataFrame, window_size_ms: float = 100.0) ->
     # Convert time window to number of samples
     limit_samples = int(np.ceil(window_size_s / avg_sampling_interval_s)) # if rows are missing, this doesn't work as expected, but it's ok for now
     
-    # Interpolate only numeric columns (excluding time column)
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    numeric_cols = [col for col in numeric_cols if col != 'time-rel-seconds']
+    # Interpolate only selected numeric columns (excluding time column)
+    if interpolation_columns is None:
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = [col for col in numeric_cols if col != "time-rel-seconds"]
+    else:
+        numeric_cols = [
+            col
+            for col in interpolation_columns
+            if col in df.columns and col != "time-rel-seconds" and pd.api.types.is_numeric_dtype(df[col])
+        ]
     
     for col in numeric_cols:
         df[col] = df[col].interpolate(method='linear', limit_direction='forward', limit=limit_samples)
@@ -130,7 +163,11 @@ class SpacioTemporalDataset(Dataset):
             recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
             kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05, 
             window_length: int = 60, window_overlap: float = 0, 
-            cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1):
+            cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1,
+            feature_columns: Optional[List[str]] = None, target_columns: Optional[List[str]] = None,
+            dropna_columns: Optional[List[str]] = None, experiment_type_column: str = "experiment-type",
+            allowed_experiment_types: Optional[List[str]] = None, label_quality_column: Optional[str] = None,
+            allowed_label_quality_values: Optional[List[str]] = None):
         """
         Load CSV files and convert to graphs.
         
@@ -167,6 +204,18 @@ class SpacioTemporalDataset(Dataset):
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
         self.dropping_emotion_threshold = dropping_emotion_threshold
+        self.feature_columns = feature_columns or [
+            "x-avg",
+            "y-avg",
+            "pupil-size-left-avg",
+            "pupil-size-right-avg",
+        ]
+        self.target_columns = target_columns
+        self.dropna_columns = dropna_columns
+        self.experiment_type_column = experiment_type_column
+        self.allowed_experiment_types = allowed_experiment_types
+        self.label_quality_column = label_quality_column
+        self.allowed_label_quality_values = allowed_label_quality_values
         self.dataframes = {}  # For single CSV mode
         self.use_single_file = data_filepath is not None
         self.filter_subjects = filter_subjects
@@ -210,17 +259,26 @@ class SpacioTemporalDataset(Dataset):
         for path in self.files:
             df = self._load_df(path)
 
-            # omit files where all emotion values are below or equal to threshold (if threshold < 0, we do not drop any)
-            emotion_cols = [col for col in df.columns if 'emotion' in col.lower()]
-            all_zero = (df[emotion_cols] <= self.dropping_emotion_threshold).all(axis=1)
-            if all_zero.all():
-                print(f"All emotion values below or equal to threshold {self.dropping_emotion_threshold} in file {path}. Skipping file.")
+            if len(df) == 0:
                 continue
+
+            target_cols = self._resolve_target_columns(df)
+            if target_cols and self.dropping_emotion_threshold > -np.inf:
+                all_zero = (df[target_cols] <= self.dropping_emotion_threshold).all(axis=1)
+                if all_zero.all():
+                    print(
+                        f"All target values below or equal to threshold "
+                        f"{self.dropping_emotion_threshold} in file {path}. Skipping file."
+                    )
+                    continue
 
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
                 if (window_slice.stop - window_slice.start) < max(self.kt, self.ks) + 1:
-                    print(f"Window {window_slice} too small for kt={kt} and ks={ks}. [path={path}]. Skipping... ")
+                    print(
+                        f"Window {window_slice} too small for kt={self.kt} and ks={self.ks}. "
+                        f"[path={path}]. Skipping... "
+                    )
                     continue
                 graph = self._load_one(df, window_slice)
                 # Store source file information
@@ -261,6 +319,9 @@ class SpacioTemporalDataset(Dataset):
             config_str += f"_subj={filter_subjects}_rec={filter_recordings}"
         else:
             config_str += f"_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+        config_str += f"_feat={self.feature_columns}_targets={self.target_columns}_dropna={self.dropna_columns}"
+        config_str += f"_expcol={self.experiment_type_column}_expvals={self.allowed_experiment_types}"
+        config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
         
         # Hash the configuration
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -298,8 +359,39 @@ class SpacioTemporalDataset(Dataset):
             df = self.dataframes[path].copy()
         else:
             df = pd.read_csv(path)
-        df = clean_dataset(df)
+
+        if self.allowed_experiment_types and self.experiment_type_column in df.columns:
+            df = df[df[self.experiment_type_column].isin(self.allowed_experiment_types)].reset_index(drop=True)
+
+        if (
+            self.label_quality_column
+            and self.allowed_label_quality_values
+            and self.label_quality_column in df.columns
+        ):
+            df = df[df[self.label_quality_column].isin(self.allowed_label_quality_values)].reset_index(drop=True)
+
+        if len(df) == 0:
+            return df
+
+        required_clean_cols = ["time-rel-seconds"] + self.feature_columns
+        df = clean_dataset(df, required_cols=required_clean_cols, interpolation_cols=self.feature_columns)
+
+        if self.dropna_columns:
+            missing = [col for col in self.dropna_columns if col not in df.columns]
+            if missing:
+                raise ValueError(f"Missing configured dropna columns in {path}: {missing}")
+            df = df.dropna(subset=self.dropna_columns).reset_index(drop=True)
+
         return df
+
+    def _resolve_target_columns(self, df: pd.DataFrame) -> List[str]:
+        """Resolve target columns either from config or inferred numeric emotion columns."""
+        if self.target_columns is not None:
+            missing = [col for col in self.target_columns if col not in df.columns]
+            if missing:
+                raise ValueError(f"Missing configured target columns: {missing}")
+            return self.target_columns
+        return infer_default_target_columns(df)
 
     def _generate_window_slices(self, df: pd.DataFrame):
         """
@@ -347,9 +439,7 @@ class SpacioTemporalDataset(Dataset):
         ks = self.ks
         kt = self.kt
 
-        # Select feature columns
-        # feature_cols = ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
-        feature_cols = ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
+        feature_cols = self.feature_columns
         df_window = df.loc[window_slice, :]
         n = len(df_window)
         t = torch.tensor(df_window["time-rel-seconds"].values, dtype=torch.float32)
@@ -357,12 +447,10 @@ class SpacioTemporalDataset(Dataset):
         #### node features matrix X
         X = torch.tensor(df_window[feature_cols].values, dtype=torch.float32)
         
-        #### Extract emotion labels (graph-level targets)
-        emotion_cols = [col for col in df_window.columns if "emotion" in col.lower()]
-        emotion_cols = sorted(emotion_cols) # ensure consistent order
-        if emotion_cols:
-            # Average emotion values across the window for graph-level prediction
-            y = torch.tensor(df_window[emotion_cols].mean(axis=0).values, dtype=torch.float32)
+        #### Extract graph-level targets
+        target_cols = self._resolve_target_columns(df_window)
+        if target_cols:
+            y = torch.tensor(df_window[target_cols].mean(axis=0).values, dtype=torch.float32)
         else:
             y = None
         
@@ -431,7 +519,7 @@ class SpacioTemporalDataset(Dataset):
             data.recording = recording
         
         # Store emotion column names in data object for later use
-        if emotion_cols:
-            data.emotion_names = emotion_cols
+        if target_cols:
+            data.emotion_names = target_cols
 
         return data
