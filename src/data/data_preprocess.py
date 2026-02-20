@@ -15,12 +15,12 @@ SOURCE_DATA_DIR_ROOT = "data/raw-one-format/"
 DEST_DATA_DIR_ROOT = "data/processed/"
 SOURCE_DATA_DIRS = {
     # "cog-load": os.path.join(SOURCE_DATA_DIR_ROOT, "cog-load/"),
-    "hci-tagging/emotion-elicitation": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/emotion-elicitation/"),
-    "hci-tagging/video-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/video-tagging/"),
-    "hci-tagging/image-tagging-1": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-1/"),
-    "hci-tagging/image-tagging-2": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-2/"),
+    # "hci-tagging/emotion-elicitation": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/emotion-elicitation/"),
+    # "hci-tagging/video-tagging": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/video-tagging/"),
+    # "hci-tagging/image-tagging-1": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-1/"),
+    # "hci-tagging/image-tagging-2": os.path.join(SOURCE_DATA_DIR_ROOT, "hci-tagging/Sessions/image-tagging-2/"),
     # "deep_em": os.path.join(SOURCE_DATA_DIR_ROOT, "deep_em_classifier-data/"),
-    "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
+    # "eSEEd_v2": os.path.join(SOURCE_DATA_DIR_ROOT, "eSEEd_v2/"),
 }
 
 SUBJECT_PATTERN = re.compile(r"(P\d+)")
