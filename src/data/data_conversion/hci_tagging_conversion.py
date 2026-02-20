@@ -21,32 +21,21 @@ FILENAME_PATTERN = re.compile(
     r"(?P<subject>P\d+)-(?P<recording>Rec\d+)-All-Data-.*_Section_(?P<section>\d+)\.tsv$"
 )
 
-EMOTION_KEY_TO_ID = {
-    # Mapping from participant key press in "Emotion keyword" to feltEmo id (manual Table 5).
-    1: 5,   # Sadness
-    2: 4,   # Joy, happiness
-    3: 2,   # Disgust
-    4: 0,   # Neutral
-    5: 11,  # Amusement
-    6: 1,   # Anger
-    7: 3,   # Fear
-    8: 6,   # Surprise
-    9: 12,  # Anxiety
+DEFAULT_EXPERIMENT_TYPE_MAP = {
+    "emotion elicitation": "emotion-elicitation",
+    "video tagging": "video-tagging",
+    "image tagging 1": "image-tagging-1",
+    "image tagging 2": "image-tagging-2",
 }
 
-QUESTION_COLUMNS = {
-    "Emotion keyword": "emotion-id",
-    "Arousal assessment": "emotion-arousal",
-    "Valence assessment": "emotion-valence",
-    "Dominance assessment": "emotion-control",
-    "Predictability assessment": "emotion-predictability",
-}
-
-ALL_OUTPUT_COLUMNS = [
+DEFAULT_SHARED_OUTPUT_COLUMNS = [
     "subject",
     "recording",
     "section",
+    "session-id",
+    "experiment-type",
     "is-stimulus",
+    "media-file",
     "time-rel-seconds",
     "time-abs-seconds",
     "x-left",
@@ -73,16 +62,58 @@ ALL_OUTPUT_COLUMNS = [
     "event",
     "event-type",
     "stimulus-id",
-    "emotion-id",
-    "emotion-arousal",
-    "emotion-valence",
-    "emotion-control",
-    "emotion-predictability",
-    "felt-arousal",
-    "felt-valence",
-    "emotion-source",
-    "emotion-derivation-status",
 ]
+
+DEFAULT_LABEL_COLUMNS_BY_EXPERIMENT_TYPE = {
+    "emotion-elicitation": [
+        "emotion-id",
+        "emotion-arousal",
+        "emotion-valence",
+        "emotion-control",
+        "emotion-predictability",
+        "emotion-source",
+        "emotion-derivation-status",
+    ],
+    "video-tagging": [
+        "tag-valid",
+        "tag-agree",
+        "tag-source",
+        "tag-derivation-status",
+    ],
+    "image-tagging-1": [
+        "tag-valid",
+        "tag-agree",
+        "tag-source",
+        "tag-derivation-status",
+    ],
+    "image-tagging-2": [
+        "tag-valid",
+        "tag-agree",
+        "tag-source",
+        "tag-derivation-status",
+    ],
+}
+
+EMOTION_KEY_TO_ID = {
+    # Mapping from participant key press in "Emotion keyword" to feltEmo id (manual Table 5).
+    1: 5,   # Sadness
+    2: 4,   # Joy, happiness
+    3: 2,   # Disgust
+    4: 0,   # Neutral
+    5: 11,  # Amusement
+    6: 1,   # Anger
+    7: 3,   # Fear
+    8: 6,   # Surprise
+    9: 12,  # Anxiety
+}
+
+QUESTION_COLUMNS = {
+    "Emotion keyword": "emotion-id",
+    "Arousal assessment": "emotion-arousal",
+    "Valence assessment": "emotion-valence",
+    "Dominance assessment": "emotion-control",
+    "Predictability assessment": "emotion-predictability",
+}
 
 
 @dataclass
@@ -100,14 +131,37 @@ class SessionMetadata:
     felt_valence: Optional[int]
     felt_control: Optional[int]
     felt_predictability: Optional[int]
+    tag_valid: Optional[int]
+    tag_agree: Optional[int]
     guide_cut_filename: Optional[str]
 
 
-def load_spec(spec_path: str) -> Dict[str, str]:
-    """Load mapping configuration from YAML spec."""
+def load_spec(spec_path: str) -> Dict[str, Any]:
+    """Load conversion spec and fill default configuration sections."""
     with open(spec_path, "r", encoding="utf-8") as f:
-        spec = yaml.safe_load(f)
-    return spec.get("mappings", {})
+        spec = yaml.safe_load(f) or {}
+
+    mappings = spec.get("mappings", {})
+    experiment_type_map = {
+        str(k).strip().lower(): str(v).strip()
+        for k, v in (spec.get("experiment_type_map") or DEFAULT_EXPERIMENT_TYPE_MAP).items()
+    }
+    shared_output_columns = list(spec.get("shared_output_columns") or DEFAULT_SHARED_OUTPUT_COLUMNS)
+    label_columns_by_experiment_type = {
+        str(k).strip(): list(v)
+        for k, v in (
+            spec.get("label_columns_by_experiment_type") or DEFAULT_LABEL_COLUMNS_BY_EXPERIMENT_TYPE
+        ).items()
+    }
+    label_status_values = spec.get("label_status_values", {})
+
+    return {
+        "mappings": mappings,
+        "experiment_type_map": experiment_type_map,
+        "shared_output_columns": shared_output_columns,
+        "label_columns_by_experiment_type": label_columns_by_experiment_type,
+        "label_status_values": label_status_values,
+    }
 
 
 def _parse_int(value: Any) -> Optional[int]:
@@ -146,6 +200,16 @@ def _parse_bool_from_stim(value: Any) -> Optional[bool]:
     if text == "0":
         return False
     return None
+
+
+def _normalize_experiment_type(
+    raw_experiment_type: Optional[str], experiment_type_map: Dict[str, str]
+) -> Optional[str]:
+    """Map raw experimentType from XML to normalized slug used in folder and column values."""
+    if raw_experiment_type is None:
+        return None
+    key = raw_experiment_type.strip().lower()
+    return experiment_type_map.get(key)
 
 
 def _find_header_row(input_tsv: str, header_prefix: str = "Timestamp\t") -> int:
@@ -188,7 +252,7 @@ def _parse_filename_metadata(input_tsv: str) -> Dict[str, Optional[str]]:
 
 
 def _parse_session_xml(session_xml_path: str) -> Optional[SessionMetadata]:
-    """Parse session.xml metadata required for emotion and stimulus fields."""
+    """Parse session.xml metadata required for conversion and labels."""
     if not os.path.exists(session_xml_path):
         return None
     try:
@@ -220,6 +284,8 @@ def _parse_session_xml(session_xml_path: str) -> Optional[SessionMetadata]:
         felt_valence=_parse_int(root.get("feltVlnc")),
         felt_control=_parse_int(root.get("feltCtrl")),
         felt_predictability=_parse_int(root.get("feltPred")),
+        tag_valid=_parse_int(root.get("tagValid")),
+        tag_agree=_parse_int(root.get("tagAgree")),
         guide_cut_filename=guide_cut_filename,
     )
 
@@ -265,9 +331,7 @@ def _find_guide_segment(
         return None
     end_idx = int(ends.index[0])
 
-    next_start = guide_df[
-        (guide_df.index > end_idx) & (guide_df["Action"] == "MovieStart")
-    ]
+    next_start = guide_df[(guide_df.index > end_idx) & (guide_df["Action"] == "MovieStart")]
     next_start_idx = int(next_start.index[0]) if not next_start.empty else None
 
     if next_start_idx is None:
@@ -378,18 +442,33 @@ def _initialize_emotion_columns(df: pd.DataFrame) -> None:
         df[col] = pd.NA
 
 
-def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
-    """Convert one HCI-tagging TSV export into the common CSV schema.
+def _parse_binary_label(value: Optional[int], label_name: str, input_tsv: str) -> Tuple[Optional[int], bool]:
+    """Validate binary label from XML and keep only 0/1 values."""
+    if value is None:
+        return None, False
+    if value in (0, 1):
+        return value, False
+    print(
+        f"Warning: unexpected {label_name}={value} in {input_tsv}; "
+        "setting label to NaN."
+    )
+    return None, True
 
-    Returns:
-        True if a CSV file was written, False if the file was intentionally skipped.
-    """
+
+def convert_tsv(
+    input_tsv: str,
+    mappings: Dict[str, str],
+    output_csv: str,
+    session_meta: Optional[SessionMetadata],
+    experiment_type_slug: str,
+    shared_output_columns: List[str],
+    label_columns_by_experiment_type: Dict[str, List[str]],
+) -> bool:
+    """Convert one HCI-tagging TSV export into the common CSV schema."""
     print(f"Converting {input_tsv}")
     header_row_idx = _find_header_row(input_tsv)
     preamble = _parse_tsv_preamble(input_tsv, header_row_idx)
     file_meta = _parse_filename_metadata(input_tsv)
-    session_xml_path = os.path.join(os.path.dirname(input_tsv), "session.xml")
-    session_meta = _parse_session_xml(session_xml_path)
 
     bad_line_count = 0
     bad_line_samples: List[str] = []
@@ -418,12 +497,11 @@ def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
             f"{input_tsv}. Sample sizes: {', '.join(bad_line_samples)}"
         )
 
-    rename_map = {old: new for old, new in spec.items() if new}
+    rename_map = {old: new for old, new in mappings.items() if new}
     df = raw_df.rename(columns=rename_map)
     target_cols = [c for c in rename_map.values() if c in df.columns]
     df = df[target_cols].copy()
 
-    # Ensure required fields exist even if they were absent in source or mapping.
     for col in [
         "time-rel-seconds",
         "time-abs-seconds",
@@ -433,11 +511,11 @@ def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
         "fixation-duration",
         "event",
         "event-type",
+        "stimulus-id",
     ]:
         if col not in df.columns:
             df[col] = pd.NA
 
-    # Time conversion: micros -> seconds, with fallback to millisecond timestamp for event rows.
     df["time-rel-seconds"] = pd.to_numeric(df["time-rel-seconds"], errors="coerce") / 1e6
     df["time-abs-seconds"] = pd.to_numeric(df["time-abs-seconds"], errors="coerce") / 1e6
     if "Timestamp" in raw_df.columns:
@@ -449,7 +527,6 @@ def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
         abs_offset = float(offset_series.median())
         df["time-abs-seconds"] = df["time-abs-seconds"].fillna(df["time-rel-seconds"] + abs_offset)
 
-    # Metadata columns.
     subject = file_meta["subject"]
     recording = file_meta["recording"]
     section = file_meta["section"]
@@ -467,9 +544,11 @@ def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
     df["subject"] = subject
     df["recording"] = recording
     df["section"] = section
+    df["session-id"] = session_meta.session_id if session_meta is not None else pd.NA
+    df["experiment-type"] = experiment_type_slug
     df["is-stimulus"] = session_meta.is_stimulus if session_meta is not None else pd.NA
+    df["media-file"] = session_meta.media_file if session_meta is not None else pd.NA
 
-    # Validity aliases and mapping to confidence.
     df["raw-validity-pupil-left"] = df["raw-validity-gaze-left"]
     df["raw-validity-pupil-right"] = df["raw-validity-gaze-right"]
     df["confidence-gaze-left"], _ = _map_validity_to_confidence(
@@ -481,122 +560,166 @@ def convert_tsv(input_tsv: str, spec: Dict[str, str], output_csv: str) -> bool:
     df["confidence-pupil-left"] = df["confidence-gaze-left"]
     df["confidence-pupil-right"] = df["confidence-gaze-right"]
 
-    # Fixation columns.
     fixation_index_numeric = pd.to_numeric(df["fixation-index"], errors="coerce")
     fixation_duration_numeric = pd.to_numeric(df["fixation-duration"], errors="coerce")
     df["fixation"] = (fixation_index_numeric.notna() & (fixation_duration_numeric > 0)).astype("boolean")
 
-    # Emotion columns.
-    _initialize_emotion_columns(df)
-    emotion_source = "none"
-    derivation_status = "not-reported"
+    if experiment_type_slug == "emotion-elicitation":
+        _initialize_emotion_columns(df)
+        emotion_source = "none"
+        derivation_status = "not-reported"
 
-    xml_values = None
-    if session_meta is not None:
-        xml_values = {
-            "emotion-id": session_meta.felt_emo,
-            "emotion-arousal": session_meta.felt_arousal,
-            "emotion-valence": session_meta.felt_valence,
-            "emotion-control": session_meta.felt_control,
-            "emotion-predictability": session_meta.felt_predictability,
-        }
+        xml_values = None
+        if session_meta is not None:
+            xml_values = {
+                "emotion-id": session_meta.felt_emo,
+                "emotion-arousal": session_meta.felt_arousal,
+                "emotion-valence": session_meta.felt_valence,
+                "emotion-control": session_meta.felt_control,
+                "emotion-predictability": session_meta.felt_predictability,
+            }
 
-    should_try_guide = (
-        session_meta is not None
-        and session_meta.experiment_type == "emotion elicitation"
-        and session_meta.is_stimulus is True
-        and xml_values is not None
-        and any(value is None for value in xml_values.values())
-    )
-
-    guide_values = None
-    guide_status = None
-    if should_try_guide:
-        guide_tsv_path = _find_guide_cut_path(os.path.dirname(input_tsv), session_meta)
-        if guide_tsv_path is not None:
-            guide_values, guide_status = _derive_emotion_from_guide(guide_tsv_path, session_meta)
-        else:
-            guide_status = "guide-cut-file-missing"
-
-    # If a stimulus session has no emotion ratings in XML and guide derivation fails, skip file.
-    if (
-        session_meta is not None
-        and session_meta.experiment_type == "emotion elicitation"
-        and session_meta.is_stimulus is True
-        and xml_values is not None
-        and all(value is None for value in xml_values.values())
-        and guide_values is None
-    ):
-        status_text = guide_status or "guide-cut-unavailable"
-        print(
-            "Warning: skipping file due to unrecoverable emotion labels "
-            f"({status_text}): {input_tsv}"
-        )
-        return False
-
-    if xml_values is not None:
-        if all(value is not None for value in xml_values.values()):
+        if xml_values is None:
+            derivation_status = "session-metadata-missing"
+        elif all(value is not None for value in xml_values.values()):
             for col, value in xml_values.items():
                 df[col] = value
             emotion_source = "xml"
             derivation_status = "ok"
         else:
+            guide_values = None
+            guide_status = None
+            should_try_guide = (
+                session_meta is not None
+                and session_meta.is_stimulus is True
+                and any(value is None for value in xml_values.values())
+            )
+            if should_try_guide:
+                guide_tsv_path = _find_guide_cut_path(os.path.dirname(input_tsv), session_meta)
+                if guide_tsv_path is not None:
+                    guide_values, guide_status = _derive_emotion_from_guide(guide_tsv_path, session_meta)
+                else:
+                    guide_status = "guide-cut-file-missing"
+
             filled_values = dict(xml_values)
             if guide_values is not None:
                 for col in filled_values:
                     if filled_values[col] is None:
                         filled_values[col] = guide_values[col]
-                emotion_source = "xml+guide-cut" if any(v is not None for v in xml_values.values()) else "guide-cut"
+                emotion_source = (
+                    "xml+guide-cut"
+                    if any(v is not None for v in xml_values.values())
+                    else "guide-cut"
+                )
+            elif any(v is not None for v in xml_values.values()):
+                emotion_source = "xml"
+
+            for col, value in filled_values.items():
+                df[col] = value
+
+            if all(value is not None for value in filled_values.values()):
                 derivation_status = "ok"
             else:
                 derivation_status = guide_status or "not-reported"
-                if session_meta.experiment_type != "emotion elicitation":
-                    derivation_status = "not-emotion-elicitation"
-            for col, value in filled_values.items():
-                df[col] = value
-    elif session_meta is not None and session_meta.experiment_type != "emotion elicitation":
-        derivation_status = "not-emotion-elicitation"
-    elif session_meta is None:
-        derivation_status = "session-metadata-missing"
 
-    df["felt-arousal"] = df["emotion-arousal"]
-    df["felt-valence"] = df["emotion-valence"]
-    df["emotion-source"] = emotion_source
-    df["emotion-derivation-status"] = derivation_status
+        df["emotion-source"] = emotion_source
+        df["emotion-derivation-status"] = derivation_status
 
-    # Keep columns in stable order and include only expected output fields.
-    for col in ALL_OUTPUT_COLUMNS:
+    if experiment_type_slug in {"video-tagging", "image-tagging-1", "image-tagging-2"}:
+        tag_valid_value = None
+        tag_agree_value = None
+        invalid_values_found = False
+        tag_source = "none"
+        tag_status = "not-reported"
+
+        if session_meta is None:
+            tag_status = "session-metadata-missing"
+        else:
+            tag_source = "xml"
+            tag_valid_value, invalid_valid = _parse_binary_label(
+                session_meta.tag_valid, "tagValid", input_tsv
+            )
+            tag_agree_value, invalid_agree = _parse_binary_label(
+                session_meta.tag_agree, "tagAgree", input_tsv
+            )
+            invalid_values_found = invalid_valid or invalid_agree
+
+            if invalid_values_found:
+                tag_status = "invalid-tag-values"
+            elif tag_valid_value is not None and tag_agree_value is not None:
+                tag_status = "ok"
+            elif tag_valid_value is None and tag_agree_value is None:
+                tag_status = "not-reported"
+            else:
+                tag_status = "partial"
+
+        df["tag-valid"] = pd.Series([tag_valid_value] * len(df), dtype="Int8")
+        df["tag-agree"] = pd.Series([tag_agree_value] * len(df), dtype="Int8")
+        df["tag-source"] = tag_source
+        df["tag-derivation-status"] = tag_status
+
+    label_columns = label_columns_by_experiment_type.get(experiment_type_slug, [])
+    output_columns = list(dict.fromkeys(shared_output_columns + label_columns))
+    for col in output_columns:
         if col not in df.columns:
             df[col] = pd.NA
-    df = df[ALL_OUTPUT_COLUMNS]
+    df = df[output_columns]
 
     df.to_csv(output_csv, index=False)
-    # print(f"Converted {input_tsv} -> {output_csv} with {len(df.columns)} columns.")
     return True
 
 
-def process_folder(input_root: str, output_root: str, spec: Dict[str, str]) -> None:
+def process_folder(input_root: str, output_root: str, spec: Dict[str, Any]) -> None:
     """Traverse input directory and convert all matching HCI TSV files."""
+    mappings: Dict[str, str] = spec["mappings"]
+    experiment_type_map: Dict[str, str] = spec["experiment_type_map"]
+    shared_output_columns: List[str] = spec["shared_output_columns"]
+    label_columns_by_experiment_type: Dict[str, List[str]] = spec["label_columns_by_experiment_type"]
+
     converted_count = 0
     skipped_count = 0
+
     for dirpath, _, filenames in os.walk(input_root):
-        rel_dir = os.path.relpath(dirpath, input_root)
-        out_dir = os.path.join(output_root, rel_dir)
-        os.makedirs(out_dir, exist_ok=True)
+        session_meta = _parse_session_xml(os.path.join(dirpath, "session.xml"))
+        experiment_type_slug = _normalize_experiment_type(
+            session_meta.experiment_type if session_meta else None,
+            experiment_type_map,
+        )
+
         for fname in filenames:
             if not PATTERN.match(fname):
                 continue
             if not fname.endswith(".tsv"):
                 print(f"Skipping {fname}, not a TSV file.")
                 continue
+            if experiment_type_slug is None:
+                print(
+                    "Warning: skipping file due to missing/unknown experiment type "
+                    f"in session metadata: {os.path.join(dirpath, fname)}"
+                )
+                skipped_count += 1
+                continue
+
             in_path = os.path.join(dirpath, fname)
             out_fname = os.path.splitext(fname)[0] + ".csv"
+            out_dir = os.path.join(output_root, "Sessions", experiment_type_slug)
+            os.makedirs(out_dir, exist_ok=True)
             out_path = os.path.join(out_dir, out_fname)
-            was_converted = convert_tsv(in_path, spec, out_path)
+
+            was_converted = convert_tsv(
+                input_tsv=in_path,
+                mappings=mappings,
+                output_csv=out_path,
+                session_meta=session_meta,
+                experiment_type_slug=experiment_type_slug,
+                shared_output_columns=shared_output_columns,
+                label_columns_by_experiment_type=label_columns_by_experiment_type,
+            )
             if was_converted:
                 converted_count += 1
             else:
                 skipped_count += 1
+
     print(
         f"Done. Converted files: {converted_count}. "
         f"Skipped files: {skipped_count}."
@@ -611,5 +734,6 @@ if __name__ == "__main__":
     parser.add_argument("--input", required=True, help="Path to input folder")
     parser.add_argument("--output", required=True, help="Path to output folder")
     args = parser.parse_args()
-    mappings = load_spec(args.spec)
-    process_folder(args.input, args.output, mappings)
+
+    spec = load_spec(args.spec)
+    process_folder(args.input, args.output, spec)

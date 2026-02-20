@@ -101,3 +101,32 @@ confidence-blink: float | null   # confidence in the blink detection (0 to 1, th
 stimuli: bool | null          # whether a stimulus was present
 stimulus-id: str | null       # identifier for the stimulus
 stimulus-type: str | null     # type of the stimulus (e.g., image, video)
+
+# HCI-tagging shared metadata
+section: str | null            # section id parsed from source filename/session metadata
+session-id: str | null         # session id from session.xml
+experiment-type: str | null    # normalized experiment type slug:
+                               # emotion-elicitation | video-tagging | image-tagging-1 | image-tagging-2
+is-stimulus: bool | null       # whether stimulus was present (from session.xml isStim)
+media-file: str | null         # media filename from session.xml
+
+# HCI-tagging raw validity flags
+raw-validity-gaze-left: int | null
+raw-validity-gaze-right: int | null
+raw-validity-pupil-left: int | null
+raw-validity-pupil-right: int | null
+
+# HCI-tagging emotion labels (task-specific; emotion-elicitation only)
+emotion-id: int | null
+emotion-arousal: int | null
+emotion-valence: int | null
+emotion-control: int | null
+emotion-predictability: int | null
+emotion-source: str | null               # xml | guide-cut | xml+guide-cut | none
+emotion-derivation-status: str | null    # ok | not-reported | ... (see hci_to_GFM_spec.yaml)
+
+# HCI-tagging tagging labels (task-specific; image/video tagging only)
+tag-valid: int | null                    # 0 when shown tag is meant to apply, 1 otherwise
+tag-agree: int | null                    # 0 participant disagreed, 1 participant agreed
+tag-source: str | null                   # xml | none
+tag-derivation-status: str | null        # ok | partial | not-reported | invalid-tag-values | session-metadata-missing

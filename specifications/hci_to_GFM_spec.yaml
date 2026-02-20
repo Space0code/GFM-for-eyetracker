@@ -1,11 +1,11 @@
 # Mapping from Tobii TSV columns to GFM schema fields.
 mappings:
-  "Timestamp": ""                          
+  "Timestamp": ""
   "MicroSecondTimestamp": "time-rel-seconds"              # relative timestamp (µs)
   "AbsoluteMicroSecondTimestamp": "time-abs-seconds"      # absolute timestamp in µs
-  "DateTimeStamp": ""                          # drop or parse separately
-  "DateTimeStampStartOffset": ""               # drop
-  "Number": ""                                 # drop (row number)
+  "DateTimeStamp": ""                                     # drop or parse separately
+  "DateTimeStampStartOffset": ""                          # drop
+  "Number": ""                                            # drop (row number)
 
   # Gaze coordinates
   "GazePointXLeft": "x-left"
@@ -14,9 +14,9 @@ mappings:
   "GazePointYRight": "y-right"
   "GazePointX": "x-avg"
   "GazePointY": "y-avg"
-  "MappedGazeDataPointX": ""                   # drop or custom mapping
+  "MappedGazeDataPointX": ""                              # drop or custom mapping
   "MappedGazeDataPointY": ""
-  "CamXLeft": ""                               # drop camera coords
+  "CamXLeft": ""                                          # drop camera coords
   "CamYLeft": ""
   "CamXRight": ""
   "CamYRight": ""
@@ -60,4 +60,91 @@ mappings:
   "WebGroupImage": ""
 
   # Additional identifiers
-  "AudioSampleNumber": ""                      # drop if unused
+  "AudioSampleNumber": ""                                 # drop if unused
+
+# Normalize session.xml experimentType into canonical folder/column values.
+experiment_type_map:
+  "emotion elicitation": "emotion-elicitation"
+  "video tagging": "video-tagging"
+  "image tagging 1": "image-tagging-1"
+  "image tagging 2": "image-tagging-2"
+
+# Shared output columns guaranteed across all HCI experiment types.
+shared_output_columns:
+  - subject
+  - recording
+  - section
+  - session-id
+  - experiment-type
+  - is-stimulus
+  - media-file
+  - time-rel-seconds
+  - time-abs-seconds
+  - x-left
+  - y-left
+  - x-right
+  - y-right
+  - x-avg
+  - y-avg
+  - distance-left
+  - distance-right
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  - fixation-index
+  - fixation-duration
+  - fixation
+  - raw-validity-gaze-left
+  - raw-validity-gaze-right
+  - raw-validity-pupil-left
+  - raw-validity-pupil-right
+  - confidence-gaze-left
+  - confidence-gaze-right
+  - confidence-pupil-left
+  - confidence-pupil-right
+  - event
+  - event-type
+  - stimulus-id
+
+# Task-specific label columns.
+label_columns_by_experiment_type:
+  emotion-elicitation:
+    - emotion-id
+    - emotion-arousal
+    - emotion-valence
+    - emotion-control
+    - emotion-predictability
+    - emotion-source
+    - emotion-derivation-status
+  video-tagging:
+    - tag-valid
+    - tag-agree
+    - tag-source
+    - tag-derivation-status
+  image-tagging-1:
+    - tag-valid
+    - tag-agree
+    - tag-source
+    - tag-derivation-status
+  image-tagging-2:
+    - tag-valid
+    - tag-agree
+    - tag-source
+    - tag-derivation-status
+
+# Informational status values used by converter.
+label_status_values:
+  emotion:
+    - ok
+    - not-reported
+    - session-metadata-missing
+    - guide-cut-missing-session-metadata
+    - guide-cut-match-failed
+    - guide-cut-missing-questions
+    - guide-cut-invalid-emotion-key
+    - guide-cut-file-missing
+  tagging:
+    - ok
+    - not-reported
+    - partial
+    - invalid-tag-values
+    - session-metadata-missing
