@@ -1,0 +1,16 @@
+column,nan_pct
+emotion-valence,15.357905173991648
+emotion-arousal,15.357905173991648
+emotion-predictability,15.357905173991648
+emotion-control,15.357905173991648
+emotion-id,15.357905173991648
+y-avg,5.567574756430126
+x-avg,5.567574756430126
+confidence-gaze-left,5.567574756430126
+confidence-gaze-right,5.567574756430126
+pupil-size-left-avg,5.56262369425611
+pupil-size-right-avg,5.56262369425611
+raw-validity-gaze-left,0.23309495373522088
+raw-validity-gaze-right,0.23309495373522088
+emotion-source,0.0
+emotion-derivation-status,0.0
