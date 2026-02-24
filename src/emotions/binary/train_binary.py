@@ -187,8 +187,8 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
         data = data.to(device)
         optimizer.zero_grad(set_to_none=True)
         
-        out = model(data).squeeze()  # [batch_size] - raw logits
-        target = data.y.squeeze()    # [batch_size]
+        out = model(data).reshape(-1)   # [batch_size] logits; safe when batch_size==1
+        target = data.y.reshape(-1)     # [batch_size]
         
         # Binary cross-entropy with logits (includes sigmoid internally)
         loss = F.binary_cross_entropy_with_logits(out, target)
@@ -215,8 +215,8 @@ def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
-            out = model(data).squeeze()  # [batch_size] - raw logits
-            target = data.y.squeeze()
+            out = model(data).reshape(-1)   # [batch_size] logits; safe when batch_size==1
+            target = data.y.reshape(-1)     # [batch_size]
             
             # Loss uses logits directly
             loss = F.binary_cross_entropy_with_logits(out, target)
@@ -230,9 +230,14 @@ def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
             # Collect metadata directly from batch if available
             batch_subjects = getattr(data, "subject", None)
             batch_recordings = getattr(data, "recording", None)
-            if isinstance(batch_subjects, (list, tuple)) and isinstance(batch_recordings, (list, tuple)):
+            if isinstance(batch_subjects, (list, tuple)):
                 all_subjects.extend(batch_subjects)
+            elif batch_subjects is not None:
+                all_subjects.append(batch_subjects)
+            if isinstance(batch_recordings, (list, tuple)):
                 all_recordings.extend(batch_recordings)
+            elif batch_recordings is not None:
+                all_recordings.append(batch_recordings)
     
     # Concatenate predictions
     y_pred = torch.cat(all_outputs).numpy()
