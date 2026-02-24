@@ -50,8 +50,8 @@ dataset:
 # Cross-validation configuration (shared)
 cross_validation:
   strategies: 
-    - subject_loo
-    # - recording_loo
+    # - subject_loo
+    - recording_loo
     # - combined_loo
   val_size: 1  # Number of subjects/recordings/pairs for validation
   random_state: 42

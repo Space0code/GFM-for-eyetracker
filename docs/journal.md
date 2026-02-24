@@ -456,3 +456,24 @@ First, we will test the dataset with simple binary classification problems.
 - Binary: predict tagValid (valid vs invalid)
 - Binary: predict high vs low valence (feltVlnc)
 - Binary: predict high vs low arousal (feltArsl)
+
+#### Binary: predict high vs low valence
+Looks like something finally works! :D
+All the models perform similarly well, all beating the majority classifier, meaning some patterns can be learned. The GNN does not collapse, which is good. Confusion matrices "look OK" now. The numbers match between models and the diagonals are relatively strong.
+
+| Model   | Accuracy | Precision | Recall | F1    | AUC   | Strategy    |
+|---------|----------|-----------|--------|-------|-------|-------------|
+| Mean    | 0.533    | 0.533     | 1.000  | 0.691 | 0.500 | subject_loo |
+| SVM     | 0.640    | 0.662     | 0.767  | 0.674 | 0.694 | subject_loo |
+| LightGBM| 0.628    | 0.652     | 0.729  | 0.658 | 0.702 | subject_loo |
+| MLP     | 0.609    | 0.618     | 0.699  | 0.636 | 0.670 | subject_loo |
+| GNN     | 0.643    | 0.702     | 0.695  | 0.646 | 0.738 | subject_loo |
+||||||||
+| Mean     | 0.405    | 0.397     | 0.750  | 0.462 | 0.400 | recording_loo  |
+| SVM      | 0.592    | 0.548     | 0.581  | 0.521 | 0.435 | recording_loo  |
+| LightGBM | 0.599    | 0.551     | 0.575  | 0.520 | 0.443 | recording_loo  |
+| MLP      | 0.592    | 0.550     | 0.562  | 0.514 | 0.425 | recording_loo  |
+| GNN      | 0.598    | 0.552     | 0.582  | 0.530 | 0.430 | recording_loo  |
+
+
+
