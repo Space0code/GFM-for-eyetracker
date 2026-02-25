@@ -74,7 +74,7 @@ baselines:
       hidden_layer_size: 64
       max_iter: 200
       random_state: 42
-      early_stopping: false
+      early_stopping: true
 
 # GNN model configuration
 gnn:
