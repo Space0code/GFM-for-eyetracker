@@ -43,6 +43,7 @@ from emotions.utils import (
 from emotions.binary.model_binary import BinarySpatioTemporalGNN
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
+from emotions.binary.results_plotting import generate_and_save_binary_results_plots
 
 
 
@@ -852,6 +853,24 @@ def main():
         print_comparison_table(combined_results, metric_names, strategy)
         csv_path = os.path.join(strategy_dir, 'summary.csv')
         save_comparison_csv(combined_results, metric_names, csv_path)
+
+    print("\nGenerating result plots...")
+    models_for_cm: List[str] = []
+    if run_experiments['gnn']:
+        models_for_cm.append('GNN')
+    if run_experiments['baselines']:
+        models_for_cm.extend(config['baselines']['models'])
+    models_for_cm = list(dict.fromkeys(models_for_cm))
+    try:
+        saved_plots = generate_and_save_binary_results_plots(
+            run_dir=Path(run_dir),
+            decision_threshold=float(binary_task_cfg.get('decision_threshold', 0.5)),
+            models_for_cm=models_for_cm if models_for_cm else None,
+        )
+        for plot_path in saved_plots:
+            print(f"Saved plot: {plot_path}")
+    except Exception as exc:
+        print(f"Warning: failed to generate result plots: {exc}")
     
     print(f"\n{'='*100}")
     print("Training complete!")
