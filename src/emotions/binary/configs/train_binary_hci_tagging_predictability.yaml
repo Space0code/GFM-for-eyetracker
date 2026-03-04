@@ -8,7 +8,7 @@ run_experiments:
 
 # Binary classification task configuration
 binary_task:
-  target_column: "emotion-valence"  # Preferred key (legacy: target_emotion)
+  target_column: "emotion-predictability"  # Preferred key (legacy: target_emotion)
   threshold: "mean"  # float or one of: median, mean (computed from train split only)
   decision_threshold: 0.5  # Probability threshold used at evaluation time
 
@@ -17,7 +17,7 @@ dataset:
   # Choose ONE of the following:
   # Option 1: Single CSV file (NEW - recommended)
   data_filepath: "data/processed/cached_hci_tagging_emotion.csv"
-  # filter_subjects: [P1, P8, P5] #, P4, P28, P2, P27] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
+  filter_subjects: [P1, P8, P5, P4, P28, P2, P27] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
   # filter_recordings: [1, 2, 3] # Optional: list of recording IDs to include, e.g., [1, 2, 3]
   
   # Option 2: Directory with multiple CSV files (OLD - for backward compatibility)
@@ -41,7 +41,7 @@ dataset:
   standardize_features: true  # StandardScaler fitted on train split only
   target_aggregation: mean  # Use the same aggregation for GNN and baselines
   feature_columns: ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
-  dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-valence", "subject", "recording"]
+  dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-predictability", "subject", "recording"]
   experiment_type_column: "experiment-type"
   allowed_experiment_types: ["emotion-elicitation"]
   label_quality_column: "emotion-derivation-status"
