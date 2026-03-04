@@ -452,10 +452,10 @@ More references for this dataset than for eSEEd_v2 - more hope :)
 
 ### Binary classifications
 First, we will test the dataset with simple binary classification problems.
-- Binary: predict tagAgree (agree vs disagree)
-- Binary: predict tagValid (valid vs invalid)
-- Binary: predict high vs low valence (feltVlnc)
-- Binary: predict high vs low arousal (feltArsl)
+    [x] Binary: predict high vs low valence (emotion-valence)
+    [x] Binary: predict high vs low arousal (emotion-arousaly)
+    [x] Binary: emotion-predictability
+    [x] Binary: emotion-control
 
 #### Binary: predict high vs low valence
 Looks like something finally works! :D
@@ -475,5 +475,16 @@ All the models perform similarly well, all beating the majority classifier, mean
 | MLP      | 0.592    | 0.550     | 0.562  | 0.514 | 0.425 | recording_loo  |
 | GNN      | 0.598    | 0.552     | 0.582  | 0.530 | 0.430 | recording_loo  |
 
+#### Comparison of binary classifications 
+We compared the aforementioned binary classifications: high vs low valence/arousal/predictability/control.
+We experimented with a subset of data - only participants [P1, P8, P5, P4, P28, P2, P27].
+We conducted only recording LOO.
+
+Results (confusion matrices) show that control is the easiest to infer.
+
+See results in `RETAIN_2026-03-04_13-42-52`, `RETAIN_2026-03-04_13-42-57`, `RETAIN_2026-03-04_13-46-09`, `RETAIN_2026-03-04_13-46-24`.
+
+**Edge weights don't make a difference?**
+We compared GNNs with and without edge weights on the valence and arousal binary classifications. There is no difference in confusion matrices between GNNs with and without edge weights. See results `RETAIN_2026-03-04_13-23-58` vs `RETAIN_2026-03-04_13-42-52` and `RETAIN_2026-03-04_13-30-17` vs `RETAIN_2026-03-04_13-42-57`.
 
 
