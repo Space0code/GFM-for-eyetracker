@@ -1,4 +1,4 @@
-# Binary Classification for Emotion Recognition
+# Binary Classification for Emotion Recognition on eSEEd_v2 dataset
 
 This module extends the emotion recognition framework to support binary classification tasks.
 
