@@ -1,8 +1,14 @@
-"""
-GNN-specific training functions for emotion prediction.
+"""Legacy GNN training utilities used by ``src/emotions/train.py``.
 
-This module contains training, evaluation, and fold-level logic for
-SpatioTemporalHeteroGNN models. Use train.py as the main script.
+Use this module for the legacy unified regression workflow:
+  python src/emotions/train.py --config src/emotions/configs/train.yaml
+
+Watch outs:
+- ``gnn.model.in_channels`` must match graph node feature width.
+- ``gnn.model.out_channels`` must match graph target dimension.
+- For HCI suite and task-specific runs, prefer
+  ``src/emotions/suite/run_hci_experiment_suite.py`` and
+  ``src/emotions/{binary,multiclass,regression}/train_*.py``.
 """
 
 import torch
@@ -13,6 +19,49 @@ import os
 
 from emotions.model import SpatioTemporalHeteroGNN
 from emotions.metrics import compute_metrics
+
+
+def _reshape_targets_like_output(target: torch.Tensor, output: torch.Tensor) -> torch.Tensor:
+    """Reshape batched graph targets to match model output shape safely."""
+    if target.numel() != output.numel():
+        raise ValueError(
+            "Target/output size mismatch in legacy GNN training. "
+            f"target_shape={tuple(target.shape)}, output_shape={tuple(output.shape)}. "
+            "Ensure dataset target columns and gnn.model.out_channels are aligned."
+        )
+    return target.view_as(output)
+
+
+def _validate_legacy_dimensions(model_cfg: dict, sample_graph, emotion_names=None) -> None:
+    """Validate legacy config dimensions against one graph sample."""
+    expected_in = int(model_cfg["in_channels"])
+    observed_in = int(sample_graph["node"].x.shape[1])
+    if observed_in != expected_in:
+        raise ValueError(
+            "Input feature dimension mismatch in legacy GNN training. "
+            f"model.in_channels={expected_in}, graph_node_features={observed_in}. "
+            "Update gnn.model.in_channels or dataset feature columns."
+        )
+
+    if not hasattr(sample_graph, "y"):
+        raise ValueError("Sample graph has no target 'y'; legacy GNN training requires targets.")
+
+    expected_out = int(model_cfg["out_channels"])
+    observed_out = int(sample_graph.y.numel())
+    if observed_out != expected_out:
+        raise ValueError(
+            "Target dimension mismatch in legacy GNN training. "
+            f"model.out_channels={expected_out}, graph_target_dim={observed_out}. "
+            "Update gnn.model.out_channels or dataset target columns."
+        )
+
+    if emotion_names:
+        observed_names = len(emotion_names)
+        if observed_names != expected_out:
+            raise ValueError(
+                "Emotion name count mismatch in legacy GNN training. "
+                f"len(dataset.emotion_names)={observed_names}, model.out_channels={expected_out}."
+            )
 
 
 def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
@@ -36,7 +85,7 @@ def train_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
         optimizer.zero_grad()
         
         out = model(data)
-        target = data.y.view(-1, 4)
+        target = _reshape_targets_like_output(data.y, out)
         
         loss = F.mse_loss(out, target)
         loss.backward()
@@ -76,7 +125,7 @@ def evaluate(model, loader, device, emotion_names=None, save_outputs=False,
         for data in loader:
             data = data.to(device)
             out = model(data)
-            target = data.y.view(-1, 4)
+            target = _reshape_targets_like_output(data.y, out)
 
             loss = F.mse_loss(out, target)
             total_loss += loss.item()
@@ -163,8 +212,16 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
     train_dataset = [dataset[i] for i in train_idx]
     val_dataset = [dataset[i] for i in val_idx]
     test_dataset = [dataset[i] for i in test_idx]
+
+    if len(train_dataset) == 0:
+        raise ValueError("Legacy GNN training received an empty training split.")
     
     emotion_names = dataset.emotion_names if hasattr(dataset, 'emotion_names') else None
+    _validate_legacy_dimensions(
+        model_cfg=model_cfg,
+        sample_graph=train_dataset[0],
+        emotion_names=emotion_names,
+    )
     
     train_loader = DataLoader(train_dataset, batch_size=training_cfg['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)

@@ -1,8 +1,17 @@
-"""
-Unified training script for GNN and baseline models with cross-validation.
+"""Legacy unified training entrypoint for baselines + GNN regression.
 
 Usage:
   python src/emotions/train.py --config src/emotions/configs/train.yaml
+
+When to use:
+- Use this script for the legacy multi-target regression setup.
+
+Watch outs:
+- ``gnn.model.in_channels`` must match graph node feature width.
+- ``gnn.model.out_channels`` must match graph target dimension.
+- For HCI suite and task-specific workflows, use
+  ``src/emotions/suite/run_hci_experiment_suite.py`` or
+  ``src/emotions/{binary,multiclass,regression}/train_*.py``.
 """
 
 import os
