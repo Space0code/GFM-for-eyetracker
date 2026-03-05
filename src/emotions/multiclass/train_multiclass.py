@@ -42,6 +42,10 @@ from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN
 from emotions.multiclass.results_plotting_multiclass import (
     generate_and_save_multiclass_results_plots,
 )
+from emotions.label_names import (
+    build_encoded_class_name_mapping,
+    resolve_multiclass_label_name_mapping,
+)
 from emotions.train_baseline import build_tabular_samples, samples_to_xy
 from emotions.utils import (
     Logger,
@@ -109,16 +113,24 @@ def _fit_graph_feature_scaler(
     return scaler
 
 
-def _resolve_task_definition(multiclass_task_cfg: Dict[str, Any]) -> Dict[str, Any]:
+def _resolve_task_definition(
+    multiclass_task_cfg: Dict[str, Any],
+    dataset_cfg: Dict[str, Any],
+) -> Dict[str, Any]:
     task_name = str(multiclass_task_cfg.get("task_name", "emotion-id")).strip().lower().replace("_", "-")
 
     if task_name in {"emotion-id", "feltemo"}:
         target_column = multiclass_task_cfg.get("target_column", "emotion-id")
+        raw_label_names = resolve_multiclass_label_name_mapping(
+            multiclass_task_cfg=multiclass_task_cfg,
+            dataset_cfg=dataset_cfg,
+        )
         return {
             "mode": "emotion-id",
             "task_name": "emotion-id",
             "target_columns": [target_column],
             "target_column": target_column,
+            "raw_label_names": raw_label_names,
         }
 
     if task_name in {"va-quadrant", "va-quadrants", "va-quadrant-4", "va-quadrant4"}:
@@ -130,6 +142,10 @@ def _resolve_task_definition(multiclass_task_cfg: Dict[str, Any]) -> Dict[str, A
         if not isinstance(thresholds, dict):
             raise ValueError("multiclass_task.thresholds must be a dictionary.")
 
+        raw_label_names = resolve_multiclass_label_name_mapping(
+            multiclass_task_cfg=multiclass_task_cfg,
+            dataset_cfg=dataset_cfg,
+        )
         return {
             "mode": "va-quadrant",
             "task_name": "va_quadrant",
@@ -138,7 +154,7 @@ def _resolve_task_definition(multiclass_task_cfg: Dict[str, Any]) -> Dict[str, A
                 "valence": thresholds.get("valence", multiclass_task_cfg.get("threshold", "mean")),
                 "arousal": thresholds.get("arousal", multiclass_task_cfg.get("threshold", "mean")),
             },
-            "label_names": {0: "LL", 1: "LH", 2: "HL", 3: "HH"},
+            "raw_label_names": raw_label_names,
         }
 
     raise ValueError(
@@ -643,7 +659,7 @@ def run_training_from_config(config_path: str) -> str:
     metric_names = config["metrics"]
     verbose = bool(logging_cfg.get("verbose", True))
 
-    task_def = _resolve_task_definition(multiclass_task_cfg)
+    task_def = _resolve_task_definition(multiclass_task_cfg, dataset_cfg=dataset_cfg)
     standardize_features = bool(dataset_cfg.get("standardize_features", False))
     target_aggregation = dataset_cfg.get("target_aggregation", "mean")
     if target_aggregation not in {"mean", "last"}:
@@ -789,8 +805,27 @@ def run_training_from_config(config_path: str) -> str:
 
         class_to_index = {int(label): idx for idx, label in enumerate(unique_labels)}
         class_labels = list(range(len(unique_labels)))
+        class_display_names = build_encoded_class_name_mapping(
+            unique_raw_labels=unique_labels,
+            raw_label_name_mapping=task_def.get("raw_label_names", {}),
+        )
 
         print(f"Class mapping raw->index: {class_to_index}")
+        if class_display_names:
+            print(f"Class mapping index->name: {class_display_names}")
+
+        class_metadata = {
+            "task_name": task_def["task_name"],
+            "target_columns": task_def["target_columns"],
+            "class_to_index": {int(raw): int(index) for raw, index in class_to_index.items()},
+            "index_to_raw_label": {int(index): int(raw) for raw, index in class_to_index.items()},
+            "index_to_name": {int(index): str(name) for index, name in class_display_names.items()},
+            "raw_label_names": {
+                int(raw): str(name) for raw, name in task_def.get("raw_label_names", {}).items()
+            },
+        }
+        with open(os.path.join(run_dir, "class_metadata.yaml"), "w", encoding="utf-8") as handle:
+            yaml.safe_dump(class_metadata, handle, sort_keys=True)
 
         strategies = cv_cfg["strategies"]
         if isinstance(strategies, str):
@@ -965,6 +1000,7 @@ def run_training_from_config(config_path: str) -> str:
             saved = generate_and_save_multiclass_results_plots(
                 run_dir=Path(run_dir),
                 models_for_cm=models_for_cm if models_for_cm else None,
+                class_display_names=class_display_names,
             )
             for path in saved:
                 print(f"Saved plot: {path}")

@@ -42,6 +42,7 @@ from emotions.suite.data_snapshot import (
 from emotions.suite.eda_summary import build_eda_summary
 from emotions.suite.wrapper_config_schema import load_and_normalize_wrapper_config
 from emotions.train_baseline import build_tabular_samples
+from emotions.label_names import resolve_multiclass_label_name_mapping
 from emotions.utils import load_config
 
 
@@ -170,6 +171,9 @@ def _apply_task_to_trainer_config(
             trainer_config["multiclass_task"]["thresholds"] = experiment_cfg["thresholds"]
         if "threshold" in experiment_cfg:
             trainer_config["multiclass_task"]["threshold"] = experiment_cfg["threshold"]
+        for key in ["class_name_mapping", "class_name_spec_path", "class_name_spec_key"]:
+            if key in experiment_cfg:
+                trainer_config["multiclass_task"][key] = experiment_cfg[key]
         return
 
     if task_type == "regression":
@@ -242,6 +246,20 @@ def _compute_window_counts(
         recording_counts[recording] = recording_counts.get(recording, 0) + 1
 
     return subject_counts, recording_counts
+
+
+def _resolve_eda_label_name_mapping(
+    task_type: str,
+    experiment_cfg: Dict[str, Any],
+    dataset_cfg: Dict[str, Any],
+) -> Dict[int, str]:
+    """Resolve label-name mapping for EDA summary display."""
+    if task_type != "multiclass":
+        return {}
+    return resolve_multiclass_label_name_mapping(
+        multiclass_task_cfg=experiment_cfg,
+        dataset_cfg=dataset_cfg,
+    )
 
 
 def run_suite(wrapper_config_path: str) -> str:
@@ -356,6 +374,11 @@ def run_suite(wrapper_config_path: str) -> str:
                     snapshot_df=snapshot_result.dataframe,
                     task_type=task_type,
                     experiment_cfg=experiment_cfg,
+                    label_name_mapping=_resolve_eda_label_name_mapping(
+                        task_type=task_type,
+                        experiment_cfg=experiment_cfg,
+                        dataset_cfg=dataset_cfg,
+                    ),
                     window_subject_counts=subject_counts,
                     window_recording_counts=recording_counts,
                     snapshot_manifest=snapshot_result.manifest,

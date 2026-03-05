@@ -15,6 +15,7 @@ multiclass_task:
 # Dataset configuration shared by GNN and baselines.
 dataset:
   data_filepath: "data/processed/cached_hci_tagging_emotion.csv"
+  label_mapping_spec_path: "specifications/hci_to_GFM_spec.yaml"
   # filter_subjects: [P1, P8, P5, P4, P28, P2, P27]
   recursive: true
   ignore_dirs: []

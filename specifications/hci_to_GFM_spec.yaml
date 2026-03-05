@@ -148,3 +148,20 @@ label_status_values:
     - partial
     - invalid-tag-values
     - session-metadata-missing
+
+# Canonical MAHNOB-HCI feltEmo id names.
+# Consumers (EDA/plots/training) can load this mapping instead of hardcoding.
+emotion_id_to_name:
+  0: Neutral
+  1: Anger
+  2: Disgust
+  3: Fear
+  4: Joy/Happiness
+  5: Sadness
+  6: Surprise
+  7: Scream # not in the actual dataset, but appears in the emotion keys and guide cuts, so we include it here for completeness.
+  8: Bored # not in the actual dataset, but appears in the emotion keys and guide cuts, so we include it here for completeness.
+  9: Sleepy # not in the actual dataset, but appears in the emotion keys and guide cuts, so we include it here for completeness.
+  10: Unknown # not in the actual dataset, but appears in the emotion keys and guide cuts, so we include it here for completeness.
+  11: Amusement
+  12: Anxiety

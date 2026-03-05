@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 import numpy as np
 import pandas as pd
@@ -78,7 +78,24 @@ def _compute_label_entropy(labels: pd.Series) -> float:
     return float(entropy)
 
 
-def _classification_distribution_text(labels: pd.Series) -> Tuple[List[str], float, float]:
+def _format_class_distribution_label(value: Any, label_name_mapping: Mapping[int, str] | None) -> str:
+    """Format class value with optional human-readable class name."""
+    if label_name_mapping:
+        try:
+            as_float = float(value)
+            if as_float.is_integer():
+                class_name = label_name_mapping.get(int(as_float))
+                if class_name:
+                    return f"class={value} ({class_name})"
+        except (TypeError, ValueError):
+            pass
+    return f"class={value}"
+
+
+def _classification_distribution_text(
+    labels: pd.Series,
+    label_name_mapping: Mapping[int, str] | None = None,
+) -> Tuple[List[str], float, float]:
     counts = labels.value_counts(dropna=False).sort_index()
     total = float(counts.sum()) if len(counts) > 0 else 0.0
     lines = []
@@ -88,7 +105,11 @@ def _classification_distribution_text(labels: pd.Series) -> Tuple[List[str], flo
         minority_ratio = float(counts.min() / total)
         for value, count in counts.items():
             proportion = float(count) / total
-            lines.append(f"- class={value}: count={int(count)}, proportion={proportion:.4f}")
+            class_label = _format_class_distribution_label(
+                value=value,
+                label_name_mapping=label_name_mapping,
+            )
+            lines.append(f"- {class_label}: count={int(count)}, proportion={proportion:.4f}")
 
     return lines, _compute_label_entropy(labels), minority_ratio
 
@@ -234,6 +255,7 @@ def build_eda_summary(
     snapshot_df: pd.DataFrame,
     task_type: str,
     experiment_cfg: Dict[str, Any],
+    label_name_mapping: Mapping[int, str] | None = None,
     window_subject_counts: Dict[str, int] | None = None,
     window_recording_counts: Dict[str, int] | None = None,
     snapshot_manifest: Dict[str, Any] | None = None,
@@ -295,7 +317,10 @@ def build_eda_summary(
         lines.extend(_regression_distribution_text(final_labels))
         label_entropy = float("nan")
     else:
-        class_lines, label_entropy, minority_ratio = _classification_distribution_text(final_labels)
+        class_lines, label_entropy, minority_ratio = _classification_distribution_text(
+            final_labels,
+            label_name_mapping=label_name_mapping,
+        )
         if class_lines:
             lines.extend(class_lines)
         else:
