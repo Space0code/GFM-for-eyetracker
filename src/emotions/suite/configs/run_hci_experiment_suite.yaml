@@ -23,7 +23,7 @@ global_overrides:
     random_state: 42
   dataset:
     # If true, trainer graph-cache and suite snapshot-cache are both enabled.
-    use_cache: false
+    use_cache: true
     filter_subjects: null
     filter_recordings: null
     target_aggregation: mean
