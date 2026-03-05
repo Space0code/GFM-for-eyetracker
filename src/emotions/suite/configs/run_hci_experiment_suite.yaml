@@ -6,7 +6,7 @@ suite:
   # Inside each suite run:
   # - experiments/<experiment_id_scope>/ contains snapshot + resolved config + EDA summary
   # - <experiment_id_scope>_<timestamp>/ contains trainer outputs
-  results_dir: "results/suite"
+  results_dir: "results/suite_FULL"
   snapshot_cache_dir: "results/_snapshot_cache"
   seed: 42
   source_data_root: "data/processed/hci-tagging"
@@ -24,7 +24,7 @@ global_overrides:
   dataset:
     # If true, trainer graph-cache and suite snapshot-cache are both enabled.
     use_cache: false
-    filter_subjects: [P1, P8, P5, P4, P28, P2, P27]
+    filter_subjects: null
     filter_recordings: null
     target_aggregation: mean
     signal_outlier_filter:
