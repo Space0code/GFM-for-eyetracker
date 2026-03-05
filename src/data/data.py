@@ -493,8 +493,18 @@ class SpacioTemporalDataset(Dataset):
             w_temporal = torch.exp(-df_temporal / self.tau)  # shape [E]
 
         #### creating SPATIAL edge_index matrix
-        tree = KDTree(X[:, 1:3].numpy())  # use (x, y) for spatial neighbors
-        dist, idx = tree.query(X[:, 1:3].numpy(), k=ks + 1)  # +1 to exclude self, idx shape: [N, k+1], idx[i, 0] == i (self)
+        # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
+        if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
+            raise ValueError(
+                "Spatial kNN graph construction requires 'x-avg' and 'y-avg' in feature_columns. "
+                f"Got feature_columns={feature_cols}"
+            )
+        x_idx = feature_cols.index("x-avg")
+        y_idx = feature_cols.index("y-avg")
+        xy = X[:, [x_idx, y_idx]].cpu().numpy()
+
+        tree = KDTree(xy)  # use (x, y) for spatial neighbors
+        _, idx = tree.query(xy, k=ks + 1)  # +1 to include self at idx[:, 0], then drop it
         neighbors = idx[:, 1:].reshape(-1)          # drop self, flatten
         src = np.repeat(np.arange(n), ks)            # each node repeated k times
 
