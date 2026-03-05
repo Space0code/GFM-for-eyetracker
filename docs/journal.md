@@ -487,4 +487,24 @@ See results in `RETAIN_2026-03-04_13-42-52`, `RETAIN_2026-03-04_13-42-57`, `RETA
 **Edge weights don't make a difference?**
 We compared GNNs with and without edge weights on the valence and arousal binary classifications. There is no difference in confusion matrices between GNNs with and without edge weights. See results `RETAIN_2026-03-04_13-23-58` vs `RETAIN_2026-03-04_13-42-52` and `RETAIN_2026-03-04_13-30-17` vs `RETAIN_2026-03-04_13-42-57`.
 
+### HCI-experiment suite
+`src/emotions/suite/` is a wrapper around our existing trainers. One run builds a clean snapshot, runs quick EDA, launches multiple task configs (binary/multiclass/regression across emotion-elicitation and tagging scopes), and then creates a unified comparison report.
+
+For run `results/suite/RETAIN_2026-03-05_13-04-55/suite_classification_gnn_comparison.md`:
+- Regression is currently not useful (best run only around `CCC=0.093`, `Spearman=0.117`).
+- Best GNN binary result on emotion tasks is `emotion-control` (`balanced_accuracy=0.681`); `valence` is modest (`0.550`), while `arousal` (`0.496`) and `predictability` (`0.489`) are near chance.
+- Tagging binaries are stronger overall for GNN (`balanced_accuracy` mostly `~0.68-0.80` where reported).
+- Multiclass remains weak (`emotion-id balanced_accuracy=0.180`, `VA-quadrant=0.287`).
+- GNN is competitive but not consistently best: in several tasks, LightGBM/MLP slightly beats it on balanced accuracy.
+
+### GNN ablation suite (on top of HCI suite)
+We then ran focused one-factor-at-a-time GNN ablations in `src/emotions/gnn_improvement_experiments/` (fixed small subset, only binary valence/arousal, 3-fold recording split), summarized in `results/gnn_improvement_experiments/gnn_improvement_summary.md`.
+
+Key findings:
+- Baseline (`baseline_default`): valence `0.5139`, arousal `0.5223` (balanced accuracy).
+- Best valence: `num_layers_10` -> `0.5574` (`+4.35 pp` vs baseline).
+- Best arousal: `early_stopping_on` -> `0.5424` (`+2.01 pp`), but with valence drop to `0.5007`.
+- `kt/ks` grid had very small effects; edge weights and target aggregation (`mean` vs `last`) were effectively no-change in this setup.
+- Depth is sensitive: 3-10 layers helped valence in some runs; 5 layers (and especially 50 for valence) could degrade performance noticeably.
+
 
