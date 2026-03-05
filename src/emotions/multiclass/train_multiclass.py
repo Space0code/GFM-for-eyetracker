@@ -378,6 +378,8 @@ def _train_gnn_fold(
         dropout_head=model_cfg.get("dropout_head", 0.1),
         aggr=model_cfg.get("aggr", "mean"),
         conv_type=model_cfg.get("conv_type", "GCNConv"),
+        num_layers=model_cfg.get("num_layers", 2),
+        pooling=model_cfg.get("pooling", "mean"),
     ).to(device)
 
     use_compile = training_cfg.get("use_torch_compile", True)
@@ -814,6 +816,7 @@ def run_training_from_config(config_path: str) -> str:
                     samples=base_tabular_samples,
                     val_size=int(cv_cfg["val_size"]),
                     random_state=cv_cfg.get("random_state"),
+                    n_splits=int(cv_cfg.get("n_splits", 3)),
                 )
             if run_experiments["gnn"] and base_gnn_dataset is not None:
                 gnn_splitter = create_splitter(
@@ -821,6 +824,7 @@ def run_training_from_config(config_path: str) -> str:
                     samples=base_gnn_dataset,
                     val_size=int(cv_cfg["val_size"]),
                     random_state=cv_cfg.get("random_state"),
+                    n_splits=int(cv_cfg.get("n_splits", 3)),
                 )
 
             reference_splitter = gnn_splitter if gnn_splitter is not None else baseline_splitter
@@ -866,6 +870,11 @@ def run_training_from_config(config_path: str) -> str:
                     test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
                     test_id = f"r_{'_'.join(map(str, test_recordings))}"
                     test_name = f"Recordings {', '.join(map(str, test_recordings))}"
+                elif strategy == "recording_kfold":
+                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
+                    safe_recordings = [str(r).replace("/", "_") for r in test_recordings]
+                    test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
+                    test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(map(str, test_recordings))}"
                 elif strategy == "combined_loo":
                     test_pairs = sorted(
                         set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx)

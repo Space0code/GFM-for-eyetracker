@@ -158,7 +158,8 @@ def main():
                 strategy=strategy,
                 samples=tabular_samples,
                 val_size=cv_cfg['val_size'],
-                random_state=cv_cfg.get('random_state')
+                random_state=cv_cfg.get('random_state'),
+                n_splits=cv_cfg.get('n_splits', 3),
             )
         
         if run_experiments['gnn']:
@@ -166,7 +167,8 @@ def main():
                 strategy=strategy,
                 samples=gnn_dataset,
                 val_size=cv_cfg['val_size'],
-                random_state=cv_cfg.get('random_state')
+                random_state=cv_cfg.get('random_state'),
+                n_splits=cv_cfg.get('n_splits', 3),
             )
         
         # Use one splitter for fold identification (prefer GNN if available)
@@ -227,6 +229,11 @@ def main():
                 test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
                 test_id = f"r_{'_'.join(map(str, test_recordings))}"
                 test_name = f"Recordings {', '.join(map(str, test_recordings))}"
+            elif strategy == "recording_kfold":
+                test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
+                safe_recordings = [str(r).replace("/", "_") for r in test_recordings]
+                test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
+                test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(map(str, test_recordings))}"
             elif strategy == 'combined_loo':
                 test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
                 test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"

@@ -1,0 +1,169 @@
+# Wrapper config for running the full HCI experiment suite.
+
+suite:
+  # Suite-level metadata/comparison outputs and all experiment artifacts are stored under:
+  # results/suite/<timestamp>/
+  # Inside each suite run:
+  # - experiments/<experiment_id_scope>/ contains snapshot + resolved config + EDA summary
+  # - <experiment_id_scope>_<timestamp>/ contains trainer outputs
+  results_dir: "results/gnn_improvement_experiments"
+  snapshot_cache_dir: "results/_snapshot_cache"
+  seed: 42
+  source_data_root: "data/processed/hci-tagging"
+  base_configs:
+    binary: "src/emotions/binary/configs/train_binary_hci_tagging.yaml"
+    multiclass: "src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml"
+    regression: "src/emotions/regression/configs/train_regression_hci_tagging.yaml"
+
+global_overrides:
+  cross_validation:
+    strategies: 
+      - "recording_kfold"
+    n_splits: 3
+    val_size: 1
+    random_state: 42
+  run_experiments:
+    baselines: false
+    gnn: true
+  gnn:
+    model:
+      pooling: mean
+      num_layers: 2
+      conv_type: GCNConv
+    training:
+      num_epochs: 20
+      num_workers: 0
+      persistent_workers: false
+      use_torch_compile: false
+      early_stopping_enabled: false
+      early_stopping_patience: 7
+      early_stopping_min_delta: 0.0
+      early_stopping_restore_best: true
+  dataset:
+    # If true, trainer graph-cache and suite snapshot-cache are both enabled.
+    use_cache: true
+    kt: 2
+    ks: 2
+    use_edge_weights: false
+    filter_subjects: ["P1", "P8", "P5", "P4", "P28", "P2", "P27"]
+    filter_recordings:
+      - "69.avi"
+      - "55.avi"
+      - "58.avi"
+      - "earworm_f.avi"
+      - "53.avi"
+      - "80.avi"
+      - "79.avi"
+      - "73.avi"
+      - "107.avi"
+      - "146.avi"
+      - "30.avi"
+      - "138.avi"
+      - "detroit_f.avi"
+      - "dallas_f.avi"
+    target_aggregation: mean
+    signal_outlier_filter:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+      columns: [x-avg, y-avg, pupil-size-left-avg, pupil-size-right-avg]
+
+experiments:
+  binary_emotion_valence:
+    enabled: true
+    task_type: binary
+    experiment_group: emotion
+    scope: emotion-elicitation
+    target_column: emotion-valence
+    threshold: mean
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  binary_emotion_arousal:
+    enabled: true
+    task_type: binary
+    experiment_group: emotion
+    scope: emotion-elicitation
+    target_column: emotion-arousal
+    threshold: mean
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  binary_emotion_control:
+    enabled: false
+    task_type: binary
+    experiment_group: emotion
+    scope: emotion-elicitation
+    target_column: emotion-control
+    threshold: mean
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  binary_emotion_predictability:
+    enabled: false
+    task_type: binary
+    experiment_group: emotion
+    scope: emotion-elicitation
+    target_column: emotion-predictability
+    threshold: mean
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  binary_tag_agree:
+    enabled: false
+    task_type: binary
+    experiment_group: tagging
+    scopes: [image-tagging-1, image-tagging-2, video-tagging, pooled-tagging]
+    target_column: tag-agree
+    threshold: 0.5
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  binary_tag_valid:
+    enabled: false
+    task_type: binary
+    experiment_group: tagging
+    scopes: [image-tagging-1, image-tagging-2, video-tagging, pooled-tagging]
+    target_column: tag-valid
+    threshold: 0.5
+    decision_threshold: 0.5
+    overrides:
+      metrics: [accuracy, balanced_accuracy, f1, precision, recall, auc]
+
+  multiclass_emotion_id:
+    enabled: false
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: emotion-id
+    target_column: emotion-id
+
+  multiclass_va_quadrant:
+    enabled: false
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: va-quadrant
+    target_columns: [emotion-valence, emotion-arousal]
+    thresholds:
+      valence: mean
+      arousal: mean
+
+  regression_emotion_valence:
+    enabled: false
+    task_type: regression
+    experiment_group: regression
+    scope: emotion-elicitation
+    target_column: emotion-valence
+
+  regression_emotion_arousal:
+    enabled: false
+    task_type: regression
+    experiment_group: regression
+    scope: emotion-elicitation
+    target_column: emotion-arousal

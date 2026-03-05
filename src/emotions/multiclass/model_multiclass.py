@@ -20,6 +20,8 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
         dropout_head: float = 0.1,
         aggr: str = "mean",
         conv_type: str = "GCNConv",
+        num_layers: int = 2,
+        pooling: str = "mean",
     ) -> None:
         super().__init__(
             in_channels=in_channels,
@@ -33,4 +35,6 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
             dropout_head=dropout_head,
             aggr=aggr,
             conv_type=conv_type,
+            num_layers=num_layers,
+            pooling=pooling,
         )

@@ -11,7 +11,12 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Any, Optional
 
-from emotions.splits import SubjectLOOSplitter, RecordingLOOSplitter, CombinedLOOSplitter
+from emotions.splits import (
+    CombinedLOOSplitter,
+    RecordingKFoldSplitter,
+    RecordingLOOSplitter,
+    SubjectLOOSplitter,
+)
 
 
 class Logger:
@@ -93,7 +98,7 @@ def validate_config(config: Dict[str, Any]):
     if isinstance(strategies, str):
         strategies = [strategies]
     
-    valid_strategies = ['subject_loo', 'recording_loo', 'combined_loo']
+    valid_strategies = ['subject_loo', 'recording_loo', 'combined_loo', 'recording_kfold']
     for strategy in strategies:
         if strategy not in valid_strategies:
             raise ValueError(
@@ -125,15 +130,21 @@ def validate_config(config: Dict[str, Any]):
     #         )
 
 
-def create_splitter(strategy: str, samples, val_size: int = 1, 
-                   random_state: Optional[int] = None):
+def create_splitter(
+    strategy: str,
+    samples,
+    val_size: int = 1,
+    random_state: Optional[int] = None,
+    n_splits: int = 3,
+):
     """Create cross-validation splitter.
     
     Args:
-        strategy: CV strategy ('subject_loo', 'recording_loo', 'combined_loo')
+        strategy: CV strategy ('subject_loo', 'recording_loo', 'combined_loo', 'recording_kfold')
         samples: Dataset or list of samples with .subject and .recording attributes
         val_size: Number of subjects/recordings for validation
         random_state: Random seed
+        n_splits: Number of folds for k-fold strategies
         
     Returns:
         Splitter instance
@@ -147,10 +158,18 @@ def create_splitter(strategy: str, samples, val_size: int = 1,
         return RecordingLOOSplitter(samples, val_size, random_state)
     elif strategy == 'combined_loo':
         return CombinedLOOSplitter(samples, val_size, random_state)
+    elif strategy == "recording_kfold":
+        return RecordingKFoldSplitter(
+            samples,
+            n_splits=n_splits,
+            val_size=val_size,
+            shuffle=True,
+            random_state=random_state,
+        )
     else:
         raise ValueError(
             f"Unknown CV strategy: {strategy}. "
-            f"Valid options: subject_loo, recording_loo, combined_loo"
+            f"Valid options: subject_loo, recording_loo, combined_loo, recording_kfold"
         )
 
 

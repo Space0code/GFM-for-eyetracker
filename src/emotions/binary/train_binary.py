@@ -351,7 +351,16 @@ def train_gnn_fold(
     # Training loop
     best_val_loss = float('inf')
     best_epoch = 0
+    no_improve_epochs = 0
+    early_stopped = False
     start_time = time.time()
+    early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
+    early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
+    early_stopping_min_delta = float(training_cfg.get("early_stopping_min_delta", 0.0))
+    early_stopping_restore_best = bool(training_cfg.get("early_stopping_restore_best", True))
+
+    if early_stopping_enabled and early_stopping_patience < 1:
+        raise ValueError("gnn.training.early_stopping_patience must be >= 1 when early stopping is enabled.")
     
     print(f"Training GNN for {test_name}...")
     for epoch in range(training_cfg['num_epochs']):
@@ -371,12 +380,31 @@ def train_gnn_fold(
                   f"val_acc={val_acc:.4f}")
         
         # Save best model
-        if val_loss < best_val_loss:
+        if val_loss < (best_val_loss - early_stopping_min_delta):
             best_val_loss = val_loss
             best_epoch = epoch
+            no_improve_epochs = 0
             torch.save(model.state_dict(), os.path.join(fold_dir, 'best_model.pt'))
+        else:
+            no_improve_epochs += 1
+
+        if early_stopping_enabled and no_improve_epochs >= early_stopping_patience:
+            early_stopped = True
+            if verbose:
+                print(
+                    f"  Early stopping at epoch {epoch+1}: "
+                    f"no val_loss improvement for {early_stopping_patience} epoch(s)."
+                )
+            break
     
     print(f"  Best model at epoch {best_epoch+1}")
+    if early_stopped:
+        print("  Early stopping triggered.")
+    if not early_stopping_restore_best and verbose:
+        print(
+            "  NOTE: early_stopping_restore_best=false requested, "
+            "but evaluation still uses the best checkpoint for comparability."
+        )
     print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
     
     # Load best model and evaluate on test
@@ -737,7 +765,8 @@ def run_training_from_config(config_path: str) -> str:
                     strategy=strategy,
                     samples=base_tabular_samples,
                     val_size=cv_cfg['val_size'],
-                    random_state=cv_cfg.get('random_state')
+                    random_state=cv_cfg.get('random_state'),
+                    n_splits=cv_cfg.get('n_splits', 3),
                 )
             
             if run_experiments['gnn']:
@@ -745,7 +774,8 @@ def run_training_from_config(config_path: str) -> str:
                     strategy=strategy,
                     samples=base_gnn_dataset,
                     val_size=cv_cfg['val_size'],
-                    random_state=cv_cfg.get('random_state')
+                    random_state=cv_cfg.get('random_state'),
+                    n_splits=cv_cfg.get('n_splits', 3),
                 )
             
             # Reference dataset for fold identification
@@ -793,6 +823,11 @@ def run_training_from_config(config_path: str) -> str:
                     test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
                     test_id = f"r_{'_'.join(map(str, test_recordings))}"
                     test_name = f"Recordings {', '.join(map(str, test_recordings))}"
+                elif strategy == "recording_kfold":
+                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
+                    safe_recordings = [str(r).replace("/", "_") for r in test_recordings]
+                    test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
+                    test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(map(str, test_recordings))}"
                 elif strategy == 'combined_loo':
                     test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
                     test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"

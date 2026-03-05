@@ -1,7 +1,8 @@
-# model.py 
+"""Spatio-temporal heterogenous GNN building block for emotion tasks."""
+
+import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, GATConv, HeteroConv, global_mean_pool
+from torch_geometric.nn import GATConv, GCNConv, HeteroConv, global_max_pool, global_mean_pool
 
 class SpatioTemporalHeteroGNN(nn.Module):
     def __init__(
@@ -9,8 +10,15 @@ class SpatioTemporalHeteroGNN(nn.Module):
             output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
+            num_layers: int = 2, pooling: str = "mean",
             ):
         super().__init__()
+        if num_layers < 1:
+            raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
+        if pooling not in {"mean", "mean_max"}:
+            raise ValueError(
+                f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'."
+            )
 
         # Preprocessing MLP 
         self.use_preprocess_mlp = use_preprocess_mlp
@@ -40,39 +48,41 @@ class SpatioTemporalHeteroGNN(nn.Module):
         else:
             raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
-        # 1st hetero GCN layer (temporal + spatial)
-        self.conv1 = HeteroConv(
-            {
-                ("node", "temporal", "node"): ConvLayer(conv1_in_channels, hidden_channels, **conv_kwargs),
-                ("node", "spatial", "node"): ConvLayer(conv1_in_channels, hidden_channels, **conv_kwargs),
-            },
-            aggr=aggr,  # how to combine temporal + spatial messages
-        )
+        self.num_layers = num_layers
+        self.pooling = pooling
 
-        # 2nd hetero GCN layer
-        self.conv2 = HeteroConv(
-            {
-                ("node", "temporal", "node"): ConvLayer(hidden_channels, hidden_channels, **conv_kwargs),
-                ("node", "spatial", "node"): ConvLayer(hidden_channels, hidden_channels, **conv_kwargs),
-            },
-            aggr=aggr,
-        )
-        
-        # Anti-oversmoothing: Layer normalization for residual connections
-        self.ln1 = nn.LayerNorm(hidden_channels)
-        self.ln2 = nn.LayerNorm(hidden_channels)
-        
-        # Projection for residual connection from input to conv1
-        self.proj_x0 = nn.Linear(conv1_in_channels, hidden_channels)
+        # Per-layer hetero conv blocks with residual + layer norm.
+        self.convs = nn.ModuleList()
+        self.layer_norms = nn.ModuleList()
+        for layer_idx in range(num_layers):
+            layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
+            conv = HeteroConv(
+                {
+                    ("node", "temporal", "node"): ConvLayer(
+                        layer_in_channels, hidden_channels, **conv_kwargs
+                    ),
+                    ("node", "spatial", "node"): ConvLayer(
+                        layer_in_channels, hidden_channels, **conv_kwargs
+                    ),
+                },
+                aggr=aggr,
+            )
+            self.convs.append(conv)
+            self.layer_norms.append(nn.LayerNorm(hidden_channels))
+
+        # Projection for first residual connection from layer-0 input.
+        self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
         
         # Activation and dropout for GNN layers
         self.gnn_activation = nn.GELU()
         self.gnn_dropout = nn.Dropout(p=dropout_gnn)
 
+        head_in_channels = hidden_channels if pooling == "mean" else (2 * hidden_channels)
+
         # Final MLP for graph-level output
         # Output is bounded to [0, 10] for emotion scores
         self.head = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels),
+            nn.Linear(head_in_channels, hidden_channels),
             nn.GELU(),
             nn.Dropout(p=dropout_head),
             nn.Linear(hidden_channels, out_channels),
@@ -93,37 +103,36 @@ class SpatioTemporalHeteroGNN(nn.Module):
         if self.use_preprocess_mlp:
             x_dict["node"] = self.preprocess_mlp(x_dict["node"])
 
-        # Store input for residual connection
-        x_input = x_dict.copy()
-        
-        # 1st layer with residual + layer norm
-        # x1 = LN(GELU(conv1(x0)) + proj_x0(x0))
-        if self.use_edge_weights and edge_weight_dict:
-            x_dict = self.conv1(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
-        else:
-            x_dict = self.conv1(x_dict, edge_index_dict)    
-        x_dict = {k: self.gnn_activation(v) for k, v in x_dict.items()}
-        x_dict["node"] = self.ln1(x_dict["node"] + self.proj_x0(x_input["node"]))
-        x_dict = {k: self.gnn_dropout(v) for k, v in x_dict.items()}
-        
-        # Store for next residual connection
-        x_prev = x_dict
+        x0_node = x_dict["node"]
 
-        # 2nd layer with residual + layer norm
-        # x2 = LN(GELU(conv2(x1)) + x1)
-        if self.use_edge_weights and edge_weight_dict:
-            x_dict = self.conv2(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
-        else:
-            x_dict = self.conv2(x_dict, edge_index_dict)
-        x_dict = {k: self.gnn_activation(v) for k, v in x_dict.items()}
-        x_dict["node"] = self.ln2(x_dict["node"] + x_prev["node"])
-        x_dict = {k: self.gnn_dropout(v) for k, v in x_dict.items()}
+        for layer_idx, conv in enumerate(self.convs):
+            if self.use_edge_weights and edge_weight_dict:
+                layer_out = conv(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
+            else:
+                layer_out = conv(x_dict, edge_index_dict)
+
+            layer_out = {k: self.gnn_activation(v) for k, v in layer_out.items()}
+
+            if layer_idx == 0:
+                residual = self.input_residual_proj(x0_node)
+            else:
+                residual = x_dict["node"]
+
+            layer_out["node"] = self.layer_norms[layer_idx](layer_out["node"] + residual)
+            layer_out = {k: self.gnn_dropout(v) for k, v in layer_out.items()}
+            x_dict = layer_out
         
         # we have only one node type "node"
         x_node = x_dict["node"]              # [num_nodes, hidden]
         batch = data["node"].batch           # [num_nodes] (set by PyG DataLoader)
 
-        graph_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
-        out = self.head(graph_emb)                    # [num_graphs, out_channels] in [0, 1]
+        if self.pooling == "mean":
+            graph_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
+        else:
+            mean_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
+            max_emb = global_max_pool(x_node, batch)    # [num_graphs, hidden]
+            graph_emb = torch.cat([mean_emb, max_emb], dim=1)  # [num_graphs, 2*hidden]
+
+        out = self.head(graph_emb)                    # [num_graphs, out_channels]
         out = out * self.output_scale                 # Scale to [0, 10], for binary, output scale is 1.0 so no scaling
         return out

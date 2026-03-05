@@ -1,13 +1,5 @@
-"""
-Binary classification GNN model for emotion recognition.
+"""Binary classification GNN model for emotion recognition."""
 
-Extends the base SpatioTemporalHeteroGNN for binary classification by:
-- Setting out_channels=1 for single probability output
-- Removing output scaling (keeps sigmoid output in [0, 1])
-"""
-
-import torch.nn as nn
-from torch_geometric.nn import global_mean_pool
 from emotions.model import SpatioTemporalHeteroGNN
 
 
@@ -29,6 +21,8 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         dropout_head: float = 0.1,
         aggr: str = "mean",
         conv_type: str = "GCNConv",
+        num_layers: int = 2,
+        pooling: str = "mean",
     ):
         """
         Initialize binary classification GNN.
@@ -43,6 +37,8 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             dropout_head: Dropout rate for prediction head
             aggr: Aggregation method for hetero edges
             conv_type: Type of convolutional layer (GCNConv or GATConv)
+            num_layers: Number of GNN message-passing layers
+            pooling: Graph pooling type ('mean' or 'mean_max')
         """
         # Initialize parent with out_channels=1 and output_scale=1.0 (no scaling)
         super().__init__(
@@ -57,6 +53,8 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             dropout_head=dropout_head,
             aggr=aggr,
             conv_type=conv_type,
+            num_layers=num_layers,
+            pooling=pooling,
         )
     
     def forward(self, data):
@@ -67,8 +65,8 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             data: HeteroData graph batch
             
         Returns:
-            Tensor of shape [batch_size, 1] with probabilities in [0, 1]
+            Tensor of shape [batch_size, 1] with logits
         """
-        # Use parent forward, which applies sigmoid and scaling
-        # Since we set output_scale=1.0, output is already in [0, 1]
+        # Parent returns raw regression-style head outputs; binary trainer
+        # applies BCE-with-logits and sigmoid for metrics.
         return super().forward(data)
