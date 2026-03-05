@@ -10,6 +10,7 @@ import yaml
 
 
 _VALID_TASK_TYPES = {"binary", "multiclass", "regression"}
+_DEPRECATED_RESULTS_DIR = "results/hci-experiment-suite"
 
 
 class WrapperConfigError(ValueError):
@@ -20,6 +21,18 @@ def _ensure_dict(value: Any, name: str) -> Dict[str, Any]:
     if not isinstance(value, dict):
         raise WrapperConfigError(f"'{name}' must be a dictionary.")
     return value
+
+
+def _remap_deprecated_results_path(path_value: str) -> str:
+    """Remap deprecated suite results root to the canonical results root."""
+    normalized = Path(path_value).as_posix().rstrip("/")
+    deprecated = Path(_DEPRECATED_RESULTS_DIR).as_posix()
+    if normalized == deprecated:
+        return "results/suite"
+    if normalized.startswith(f"{deprecated}/"):
+        suffix = normalized[len(deprecated) + 1 :]
+        return str(Path("results/suite") / suffix)
+    return path_value
 
 
 def _default_experiment_group(experiment_id: str, task_type: str) -> str:
@@ -129,16 +142,19 @@ def load_and_normalize_wrapper_config(config_path: str) -> Dict[str, Any]:
             f"Missing suite.base_configs entries: {missing_base}"
         )
 
+    suite_results_dir = _remap_deprecated_results_path(
+        str(suite.get("results_dir", "results/suite"))
+    )
+    snapshot_cache_default = str(Path(suite_results_dir) / "_snapshot_cache")
+    snapshot_cache_dir = _remap_deprecated_results_path(
+        str(suite.get("snapshot_cache_dir", snapshot_cache_default))
+    )
+
     normalized_suite = {
-        "results_dir": str(suite.get("results_dir", "results/hci-experiment-suite")),
+        "results_dir": suite_results_dir,
         "seed": int(suite.get("seed", 42)),
         "source_data_root": str(suite.get("source_data_root", "data/processed/hci-tagging")),
-        "snapshot_cache_dir": str(
-            suite.get(
-                "snapshot_cache_dir",
-                Path(str(suite.get("results_dir", "results/hci-experiment-suite"))) / "_snapshot_cache",
-            )
-        ),
+        "snapshot_cache_dir": snapshot_cache_dir,
         "base_configs": {
             "binary": str(base_configs["binary"]),
             "multiclass": str(base_configs["multiclass"]),

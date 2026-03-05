@@ -1,11 +1,13 @@
 # Wrapper config for running the full HCI experiment suite.
 
 suite:
-  # Suite-level metadata/comparison outputs.
-  # Per-task experiment artifacts and training runs are stored under:
-  # results/<task_type>/suite_<timestamp>/
-  results_dir: "results/hci-experiment-suite"
-  snapshot_cache_dir: "results/hci-experiment-suite/_snapshot_cache"
+  # Suite-level metadata/comparison outputs and all experiment artifacts are stored under:
+  # results/suite/<timestamp>/
+  # Inside each suite run:
+  # - experiments/<experiment_id_scope>/ contains snapshot + resolved config + EDA summary
+  # - <experiment_id_scope>_<timestamp>/ contains trainer outputs
+  results_dir: "results/suite"
+  snapshot_cache_dir: "results/_snapshot_cache"
   seed: 42
   source_data_root: "data/processed/hci-tagging"
   base_configs:

@@ -196,9 +196,9 @@ def _sanitize_run_name_token(value: str) -> str:
     return sanitized.strip("._-") or "experiment"
 
 
-def _task_suite_root(task_type: str, suite_results_group: str) -> Path:
-    """Return per-task suite root where all task artifacts are stored."""
-    return Path("results") / task_type / suite_results_group
+def _build_suite_experiment_id(experiment_id: str, scope: str) -> str:
+    """Return stable experiment token used for folder names and registry IDs."""
+    return _sanitize_run_name_token(f"{experiment_id}_{scope}")
 
 
 def _compute_window_counts(
@@ -257,9 +257,10 @@ def run_suite(wrapper_config_path: str) -> str:
     np.random.seed(int(suite_cfg["seed"]))
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    suite_results_group = f"suite_{timestamp}"
     suite_run_dir = Path(suite_cfg["results_dir"]) / timestamp
     suite_run_dir.mkdir(parents=True, exist_ok=True)
+    experiments_dir = suite_run_dir / "experiments"
+    experiments_dir.mkdir(parents=True, exist_ok=True)
 
     with (suite_run_dir / "wrapper_config_resolved.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(wrapper_config, handle, sort_keys=False)
@@ -274,12 +275,10 @@ def run_suite(wrapper_config_path: str) -> str:
         experiment_id = str(experiment_cfg["id"])
         experiment_group = str(experiment_cfg.get("experiment_group", "unknown"))
         base_config_path = str(suite_cfg["base_configs"][task_type])
-        task_suite_root = _task_suite_root(task_type=task_type, suite_results_group=suite_results_group)
-        task_suite_root.mkdir(parents=True, exist_ok=True)
 
         for scope in experiment_cfg["scopes"]:
-            suite_experiment_id = f"{experiment_id}__{scope}"
-            experiment_dir = task_suite_root / "experiments" / suite_experiment_id
+            suite_experiment_id = _build_suite_experiment_id(experiment_id=experiment_id, scope=scope)
+            experiment_dir = experiments_dir / suite_experiment_id
             experiment_dir.mkdir(parents=True, exist_ok=True)
 
             row: Dict[str, Any] = {
@@ -288,7 +287,7 @@ def run_suite(wrapper_config_path: str) -> str:
                 "scope": scope,
                 "task_type": task_type,
                 "experiment_group": experiment_group,
-                "task_suite_root": str(task_suite_root),
+                "task_suite_root": str(suite_run_dir),
                 "status": "pending",
                 "error": "",
                 "trainer_run_dir": "",
@@ -376,7 +375,7 @@ def run_suite(wrapper_config_path: str) -> str:
                 if not isinstance(logging_cfg, dict):
                     raise ValueError("Resolved trainer config logging section must be a dictionary.")
 
-                trainer_results_root = task_suite_root
+                trainer_results_root = suite_run_dir
                 logging_cfg["results_dir"] = str(trainer_results_root)
                 logging_cfg["run_name_prefix"] = _sanitize_run_name_token(suite_experiment_id)
 
@@ -391,6 +390,7 @@ def run_suite(wrapper_config_path: str) -> str:
                 row["error"] = f"{exc}\n{traceback.format_exc()}"
 
             registry_rows.append(row)
+            suite_run_dir.mkdir(parents=True, exist_ok=True)
             pd.DataFrame(registry_rows).to_csv(
                 suite_run_dir / "suite_experiment_registry.csv",
                 index=False,
