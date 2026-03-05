@@ -154,8 +154,56 @@ def create_splitter(strategy: str, samples, val_size: int = 1,
         )
 
 
-def save_comparison_csv(results: Dict[str, Dict[str, Any]], 
-                       metric_names: List[str], 
+def _resolve_approach_block(
+    fold_result: Dict[str, Any],
+    approach: str,
+) -> Optional[Dict[str, Any]]:
+    """Resolve metric block for one fold with backward-compatible key aliases."""
+    if approach in fold_result and fold_result[approach] is not None:
+        return fold_result[approach]
+
+    aliases = {
+        "per_pair_aggregated": ["pair_aggregated"],
+        "pair_aggregated": ["per_pair_aggregated"],
+    }
+    for alias in aliases.get(approach, []):
+        if alias in fold_result and fold_result[alias] is not None:
+            return fold_result[alias]
+    return None
+
+
+def _collect_metric_values(
+    model_results: Dict[str, Any],
+    approach: str,
+    metric_name: str,
+) -> List[float]:
+    """Collect one metric across folds with missing-key tolerance."""
+    values: List[float] = []
+    for fold_result in model_results.values():
+        block = _resolve_approach_block(fold_result, approach)
+        if block is None:
+            continue
+        aggregated = block.get("aggregated", {})
+        values.append(float(aggregated.get(metric_name, np.nan)))
+    return values
+
+
+def _safe_nanmean(values: List[float]) -> float:
+    """Compute mean over finite values only, returning NaN when undefined.
+
+    Avoids RuntimeWarning spam from np.nanmean on all-NaN slices.
+    """
+    if not values:
+        return float("nan")
+    arr = np.asarray(values, dtype=float)
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return float("nan")
+    return float(np.mean(finite))
+
+
+def save_comparison_csv(results: Dict[str, Dict[str, Any]],
+                       metric_names: List[str],
                        output_path: str,
                        approach: str = 'standard'):
     """Save cross-validation comparison results to CSV.
@@ -169,36 +217,45 @@ def save_comparison_csv(results: Dict[str, Dict[str, Any]],
     rows = []
     
     for model_name, model_results in results.items():
-        # Aggregated metrics
-        avg_agg = {
-            m: np.nanmean([
-                model_results[fold][approach]['aggregated'][m] 
-                for fold in model_results
-            ])
-            for m in metric_names
-        }
-        
-        row = {'model': model_name, 'metric_type': 'aggregated', **avg_agg}
-        rows.append(row)
-        
+        avg_agg = {}
+        for metric in metric_names:
+            values = _collect_metric_values(model_results, approach, metric)
+            avg_agg[metric] = _safe_nanmean(values)
+
+        rows.append({'model': model_name, 'metric_type': 'aggregated', **avg_agg})
+
         # Per-emotion metrics (if available)
-        first_fold = next(iter(model_results.values()))
-        if 'per_emotion' in first_fold[approach] and first_fold[approach]['per_emotion']:
-            for emo_name in first_fold[approach]['per_emotion'].keys():
-                avg_emo = {
-                    m: np.nanmean([
-                        model_results[fold][approach]['per_emotion'][emo_name][m]
-                        for fold in model_results
-                        if emo_name in model_results[fold][approach]['per_emotion']
-                    ])
-                    for m in metric_names
-                }
-                row = {
-                    'model': model_name,
-                    'metric_type': f'emotion_{emo_name}',
-                    **avg_emo
-                }
-                rows.append(row)
+        first_block = None
+        for fold_result in model_results.values():
+            first_block = _resolve_approach_block(fold_result, approach)
+            if first_block is not None:
+                break
+
+        if not first_block:
+            continue
+
+        per_emotion = first_block.get("per_emotion") or {}
+        for emo_name in per_emotion.keys():
+            avg_emo = {}
+            for metric in metric_names:
+                values = []
+                for fold_result in model_results.values():
+                    block = _resolve_approach_block(fold_result, approach)
+                    if block is None:
+                        continue
+                    metric_value = (
+                        block.get("per_emotion", {})
+                        .get(emo_name, {})
+                        .get(metric, np.nan)
+                    )
+                    values.append(float(metric_value))
+                avg_emo[metric] = _safe_nanmean(values)
+
+            rows.append({
+                'model': model_name,
+                'metric_type': f'emotion_{emo_name}',
+                **avg_emo
+            })
     
     df = pd.DataFrame(rows)
     df.to_csv(output_path, index=False)
@@ -219,13 +276,14 @@ def print_comparison_table(results: Dict[str, Dict[str, Any]],
     print(title)
     print("="*100)
     
-    # Check if we have per_pair_aggregated metrics
-    first_model = next(iter(results.values()))
-    first_fold = next(iter(first_model.values()))
-    has_pair_metrics = (
-        'per_pair_aggregated' in first_fold and 
-        first_fold['per_pair_aggregated'] is not None
-    )
+    has_pair_metrics = False
+    for model_results in results.values():
+        for fold_result in model_results.values():
+            if _resolve_approach_block(fold_result, "per_pair_aggregated") is not None:
+                has_pair_metrics = True
+                break
+        if has_pair_metrics:
+            break
     
     # Standard metrics
     print("\n[STANDARD: Concatenate predictions, then compute]")
@@ -233,13 +291,10 @@ def print_comparison_table(results: Dict[str, Dict[str, Any]],
     print("-"*100)
     
     for model_name, model_results in results.items():
-        avg_metrics = {
-            m: np.nanmean([
-                model_results[fold]['standard']['aggregated'][m] 
-                for fold in model_results
-            ])
-            for m in metric_names
-        }
+        avg_metrics = {}
+        for metric in metric_names:
+            values = _collect_metric_values(model_results, "standard", metric)
+            avg_metrics[metric] = _safe_nanmean(values)
         metric_str = " | ".join([f"{avg_metrics[m]:<10.4f}" for m in metric_names])
         print(f"{model_name:<20} | {metric_str}")
     
@@ -250,13 +305,9 @@ def print_comparison_table(results: Dict[str, Dict[str, Any]],
         print("-"*100)
         
         for model_name, model_results in results.items():
-            avg_metrics = {
-                m: np.nanmean([
-                    model_results[fold]['per_pair_aggregated']['aggregated'][m]
-                    for fold in model_results
-                    if model_results[fold]['per_pair_aggregated'] is not None
-                ])
-                for m in metric_names
-            }
+            avg_metrics = {}
+            for metric in metric_names:
+                values = _collect_metric_values(model_results, "per_pair_aggregated", metric)
+                avg_metrics[metric] = _safe_nanmean(values)
             metric_str = " | ".join([f"{avg_metrics[m]:<10.4f}" for m in metric_names])
             print(f"{model_name:<20} | {metric_str}")

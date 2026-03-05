@@ -63,7 +63,7 @@ def main():
     sys.stdout = logger
     sys.stderr = logger
     
-    print(f"Training started at: {datetime.now()}")
+    print(f"\n{'#'*50} \nTraining started at: {datetime.now()}")
     print(f"Results will be saved to: {run_dir}")
     print(f"Run baselines: {run_experiments['baselines']}")
     print(f"Run GNN: {run_experiments['gnn']}")

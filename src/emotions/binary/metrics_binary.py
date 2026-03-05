@@ -1,12 +1,14 @@
 """
 Binary classification metrics for emotion recognition.
 
-Provides standard classification metrics: accuracy, precision, recall, F1, AUC-ROC.
+Provides standard classification metrics: accuracy, balanced_accuracy, precision,
+recall, F1, AUC-ROC.
 """
 
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     precision_score,
     recall_score,
     f1_score,
@@ -53,8 +55,13 @@ def compute_binary_metrics(
     
     metrics = {}
     
-    # Accuracy
+    # Accuracy metrics
     metrics['accuracy'] = accuracy_score(y_true_binary, y_pred_binary)
+    metrics['balanced_accuracy'] = (
+        balanced_accuracy_score(y_true_binary, y_pred_binary)
+        if len(np.unique(y_true_binary)) > 1
+        else float("nan")
+    )
     
     # Precision, Recall, F1
     # Handle cases where a class might not be present
@@ -79,13 +86,13 @@ def compute_binary_metrics(
     
     # AUC-ROC (requires probabilities, not binary predictions)
     try:
-        # Check if we have both classes in ground truth
+        # AUC is undefined when only one class is present in y_true.
         if len(np.unique(y_true_binary)) > 1:
             metrics['auc'] = roc_auc_score(y_true_binary, y_pred)
         else:
-            metrics['auc'] = 0.0
+            metrics['auc'] = float("nan")
     except (ValueError, IndexError):
-        metrics['auc'] = 0.0
+        metrics['auc'] = float("nan")
     
     # Confusion matrix components
     # Specify labels=[0, 1] to ensure proper shape even if one class is missing
@@ -163,37 +170,25 @@ def evaluate_binary_classification(
             pairs[key]['y_pred'].append(y_pred[i])
             pairs[key]['y_true'].append(y_true[i])
         
-        # Compute metrics for each pair, then aggregate
-        pair_metrics = []
-        for key, data in pairs.items():
-            pred_agg = pair_aggregation_fn(data['y_pred'])
-            true_agg = pair_aggregation_fn(data['y_true'])
-            
-            # Single-sample metrics for this pair
-            pair_metric = compute_binary_metrics(
-                np.array([pred_agg]),
-                np.array([true_agg]),
-                threshold=threshold
-            )
-            pair_metrics.append(pair_metric)
-        
-        # Aggregate across pairs
-        aggregated = {}
-        for metric_name in pair_metrics[0].keys():
-            if metric_name not in ['true_negatives', 'false_positives', 
-                                    'false_negatives', 'true_positives']:
-                values = [pm[metric_name] for pm in pair_metrics]
-                aggregated[metric_name] = float(np.mean(values))
-            else:
-                # Sum confusion matrix components
-                values = [pm[metric_name] for pm in pair_metrics]
-                aggregated[metric_name] = int(np.sum(values))
-        
-        result['pair_aggregated'] = {
-            'aggregated': aggregated,
+        pair_pred = []
+        pair_true = []
+        for _, data in pairs.items():
+            pair_pred.append(float(pair_aggregation_fn(data['y_pred'])))
+            pair_true.append(float(pair_aggregation_fn(data['y_true'])))
+
+        pair_metrics = compute_binary_metrics(
+            np.array(pair_pred, dtype=float),
+            np.array(pair_true, dtype=float),
+            threshold=threshold,
+        )
+
+        pair_block = {
+            'aggregated': pair_metrics,
             'per_emotion': {
-                emotion_names[0] if emotion_names else 'emotion_0': aggregated
+                emotion_names[0] if emotion_names else 'emotion_0': pair_metrics
             }
         }
-    
+        result['pair_aggregated'] = pair_block
+        result['per_pair_aggregated'] = pair_block
+
     return result

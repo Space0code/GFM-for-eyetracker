@@ -544,9 +544,16 @@ def train_baselines_fold(
     return results
 
 
-def main():
-    args = parse_args()
-    config = load_config(args.config)
+def run_training_from_config(config_path: str) -> str:
+    """Run full binary training pipeline from one YAML config path.
+
+    Args:
+        config_path: Path to binary training configuration file.
+
+    Returns:
+        Absolute/relative run directory where artifacts were saved.
+    """
+    config = load_config(config_path)
     
     # Extract config sections
     run_experiments = config['run_experiments']
@@ -574,312 +581,323 @@ def main():
     print(f"  Standardize features: {standardize_features}")
     print(f"  Target aggregation: {target_aggregation}")
     
-    # Create timestamped run directory
+    # Create timestamped run directory; optional prefix supports suite orchestration.
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_dir = os.path.join(logging_cfg['results_dir'], timestamp)
+    run_name_prefix = str(logging_cfg.get("run_name_prefix", "")).strip()
+    run_name = f"{run_name_prefix}_{timestamp}" if run_name_prefix else timestamp
+    run_dir = os.path.join(logging_cfg['results_dir'], run_name)
     os.makedirs(run_dir, exist_ok=True)
     
     # Set up logging
     log_file = os.path.join(run_dir, 'training_log.txt')
     logger = Logger(log_file)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
     sys.stdout = logger
     sys.stderr = logger
-    
-    print(f"\nTraining started at: {datetime.now()}")
-    print(f"Results will be saved to: {run_dir}")
-    print(f"Run baselines: {run_experiments['baselines']}")
-    print(f"Run GNN: {run_experiments['gnn']}")
-    
-    # Save config
-    with open(os.path.join(run_dir, 'config.yaml'), 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
-    
-    # Set device for GNN
-    if run_experiments['gnn']:
-        training_cfg = config['gnn']['training']
-        if training_cfg['device'] == 'auto':
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            device = torch.device(training_cfg['device'])
-        print(f"Using device: {device}")
-        
-        # Set random seed
-        if training_cfg.get('random_seed') is not None:
-            torch.manual_seed(training_cfg['random_seed'])
-            np.random.seed(training_cfg['random_seed'])
-    
-    # Load datasets
-    print("\nLoading datasets...")
-    target_columns = [target_column]
-    default_dropna_columns = [
-        "time-rel-seconds",
-        "x-avg",
-        "y-avg",
-        "pupil-size-left-avg",
-        "pupil-size-right-avg",
-        target_column,
-        "subject",
-        "recording",
-    ]
-    dropna_columns = dataset_cfg.get("dropna_columns", default_dropna_columns)
-    allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
-    label_quality_column = dataset_cfg.get("label_quality_column")
-    allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
-    min_samples_per_window = dataset_cfg.get(
-        "min_samples_per_window",
-        max(dataset_cfg["kt"], dataset_cfg["ks"]) + 1,
-    )
-    feature_columns = dataset_cfg.get(
-        "feature_columns",
-        ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
-    )
-    
-    if run_experiments['gnn']:
-        print("Loading graph dataset for GNN...")
-        base_gnn_dataset = SpacioTemporalDataset(
-            root_dir=dataset_cfg.get('data_dir'),
-            data_filepath=dataset_cfg.get('data_filepath'),
-            filter_subjects=dataset_cfg.get('filter_subjects'),
-            filter_recordings=dataset_cfg.get('filter_recordings'),
-            file_list=dataset_cfg.get('file_list'),
-            recursive=dataset_cfg['recursive'],
-            ignore_dirs=dataset_cfg.get('ignore_dirs', []),
-            window_length=dataset_cfg['window_length'],
-            window_overlap=dataset_cfg['window_overlap'],
-            kt=dataset_cfg['kt'],
-            ks=dataset_cfg['ks'],
-            use_edge_weights=dataset_cfg['use_edge_weights'],
-            tau=dataset_cfg['tau'],
-            cache_dir=dataset_cfg.get('cache_dir'),
-            use_cache=dataset_cfg.get('use_cache', True),
-            dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
-            feature_columns=feature_columns,
-            target_columns=target_columns,
-            dropna_columns=dropna_columns,
-            experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-            allowed_experiment_types=allowed_experiment_types,
-            label_quality_column=label_quality_column,
-            allowed_label_quality_values=allowed_label_quality_values,
-            target_aggregation=target_aggregation,
-        )
-        print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
-    
-    if run_experiments['baselines']:
-        print("Loading tabular samples for baselines...")
-        base_tabular_samples = build_tabular_samples(
-            data_dir=dataset_cfg.get('data_dir'),
-            data_filepath=dataset_cfg.get('data_filepath'),
-            filter_subjects=dataset_cfg.get('filter_subjects'),
-            filter_recordings=dataset_cfg.get('filter_recordings'),
-            file_list=dataset_cfg.get('file_list'),
-            window_length=dataset_cfg.get('window_length', 10),
-            window_overlap=dataset_cfg.get("window_overlap", 0.0),
-            min_samples_per_window=min_samples_per_window,
-            dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
-            feature_columns=feature_columns,
-            target_columns=target_columns,
-            target_aggregation=target_aggregation,
-            dropna_columns=dropna_columns,
-            experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-            allowed_experiment_types=allowed_experiment_types,
-            label_quality_column=label_quality_column,
-            allowed_label_quality_values=allowed_label_quality_values,
-        )
-        print(f"Loaded {len(base_tabular_samples)} tabular samples")
-        unique_subjects = set(
-            sample.subject
-            for sample in base_tabular_samples
-            if hasattr(sample, "subject") and sample.subject is not None
-        )
-        unique_recordings = set(
-            sample.recording
-            for sample in base_tabular_samples
-            if hasattr(sample, "recording") and sample.recording is not None
-        )
-        print(f"Unique subjects in tabular samples: {sorted(unique_subjects)}")
-        print(f"Unique recordings in tabular samples: {sorted(unique_recordings)}")
-    
-    # Get CV strategies
-    strategies = cv_cfg['strategies']
-    if isinstance(strategies, str):
-        strategies = [strategies]
-    
-    print(f"\nWill run experiments with {len(strategies)} strategy(ies): {', '.join(strategies)}")
-    
-    # Storage for all results
-    all_strategies_results = {}
-    
-    # Run experiments for each strategy
-    for strategy in strategies:
-        print("\n" + "="*100)
-        print(f"Starting cross-validation with strategy: {strategy.upper()}")
-        print("="*100)
-        
-        strategy_dir = os.path.join(run_dir, strategy)
-        os.makedirs(strategy_dir, exist_ok=True)
-        
-        # Create splitters
-        if run_experiments['baselines']:
-            baseline_splitter = create_splitter(
-                strategy=strategy,
-                samples=base_tabular_samples,
-                val_size=cv_cfg['val_size'],
-                random_state=cv_cfg.get('random_state')
-            )
-        
-        if run_experiments['gnn']:
-            gnn_splitter = create_splitter(
-                strategy=strategy,
-                samples=base_gnn_dataset,
-                val_size=cv_cfg['val_size'],
-                random_state=cv_cfg.get('random_state')
-            )
-        
-        # Reference dataset for fold identification
-        reference_splitter = gnn_splitter if run_experiments['gnn'] else baseline_splitter
-        reference_dataset = base_gnn_dataset if run_experiments['gnn'] else base_tabular_samples
-        
-        # Storage for this strategy
-        baseline_results_all_folds = {name: {} for name in config['baselines']['models']} if run_experiments['baselines'] else {}
-        gnn_results_all_folds = {}
-        
-        # Get splits
-        if run_experiments['baselines'] and run_experiments['gnn']:
-            baseline_splits = list(baseline_splitter.split())
-            gnn_splits = list(gnn_splitter.split())
-            validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
-            validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
-            num_folds = len(baseline_splits)
-        elif run_experiments['baselines']:
-            baseline_splits = list(baseline_splitter.split())
-            validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
-            num_folds = len(baseline_splits)
-        else:
-            gnn_splits = list(gnn_splitter.split())
-            validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
-            num_folds = len(gnn_splits)
-        
-        for fold_num in range(num_folds):
-            # Get indices
-            if run_experiments['baselines']:
-                baseline_train_idx, baseline_val_idx, baseline_test_idx = baseline_splits[fold_num]
-            if run_experiments['gnn']:
-                gnn_train_idx, gnn_val_idx, gnn_test_idx = gnn_splits[fold_num]
-            
-            # Identify test fold
-            if run_experiments['gnn']:
-                ref_test_idx = gnn_test_idx
-            else:
-                ref_test_idx = baseline_test_idx
-            
-            if strategy == 'subject_loo':
-                test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
-                test_id = f"s_{'_'.join(map(str, test_subjects))}"
-                test_name = f"Subjects {', '.join(map(str, test_subjects))}"
-            elif strategy == 'recording_loo':
-                test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
-                test_id = f"r_{'_'.join(map(str, test_recordings))}"
-                test_name = f"Recordings {', '.join(map(str, test_recordings))}"
-            elif strategy == 'combined_loo':
-                test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
-                test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
-                test_name = f"Pairs {', '.join([f'({s}, {r})' for s, r in test_pairs])}"
-            else:
-                test_id = f"fold_{fold_num}"
-                test_name = f"Fold {fold_num}"
-            
-            fold_dir = os.path.join(strategy_dir, test_id)
-            os.makedirs(fold_dir, exist_ok=True)
-            
-            print(f"\n{test_name}")
-
-            if run_experiments["gnn"]:
-                train_values = collect_graph_target_values(
-                    base_gnn_dataset,
-                    gnn_train_idx,
-                    target_column,
-                )
-            else:
-                train_values = collect_tabular_target_values(
-                    base_tabular_samples,
-                    baseline_train_idx,
-                    target_column,
-                )
-            if len(train_values) == 0:
-                raise ValueError(
-                    f"Empty train targets for {test_name} with strategy '{strategy}'. "
-                    "This split cannot compute a train-based threshold."
-                )
-            fold_threshold = resolve_threshold_value(threshold_spec, train_values)
-            print(f"  Fold label threshold ({threshold_spec}): {fold_threshold:.6f}")
-            
-            # Train baselines
-            if run_experiments['baselines']:
-                print("Training baselines...")
-                baseline_results = train_baselines_fold(
-                    config['baselines'], baseline_train_idx, baseline_val_idx,
-                    baseline_test_idx, base_tabular_samples, fold_dir,
-                    metric_names, target_column, fold_threshold,
-                    standardize_features=standardize_features,
-                    feature_columns=feature_columns,
-                    verbose=verbose,
-                )
-                for model_name, metrics in baseline_results.items():
-                    baseline_results_all_folds[model_name][test_id] = metrics
-            
-            # Train GNN
-            if run_experiments['gnn']:
-                gnn_metrics = train_gnn_fold(
-                    config, gnn_train_idx, gnn_val_idx, gnn_test_idx,
-                    base_gnn_dataset, fold_dir, test_name, device,
-                    target_column=target_column,
-                    threshold_value=fold_threshold,
-                    standardize_features=standardize_features,
-                    verbose=verbose,
-                )
-                gnn_results_all_folds[test_id] = gnn_metrics
-        
-        # Combine results
-        combined_results = {}
-        if run_experiments['baselines']:
-            combined_results.update(baseline_results_all_folds)
-        if run_experiments['gnn']:
-            combined_results['GNN'] = gnn_results_all_folds
-        
-        all_strategies_results[strategy] = combined_results
-        
-        # Print and save comparison
-        print_comparison_table(combined_results, metric_names, strategy)
-        csv_path = os.path.join(strategy_dir, 'summary.csv')
-        save_comparison_csv(combined_results, metric_names, csv_path)
-
-    print("\nGenerating result plots...")
-    models_for_cm: List[str] = []
-    if run_experiments['gnn']:
-        models_for_cm.append('GNN')
-    if run_experiments['baselines']:
-        models_for_cm.extend(config['baselines']['models'])
-    models_for_cm = list(dict.fromkeys(models_for_cm))
     try:
-        saved_plots = generate_and_save_binary_results_plots(
-            run_dir=Path(run_dir),
-            decision_threshold=float(binary_task_cfg.get('decision_threshold', 0.5)),
-            models_for_cm=models_for_cm if models_for_cm else None,
+        print(f"\n{'#'*50} \nTraining started at: {datetime.now()}")
+        print(f"Results will be saved to: {run_dir}")
+        print(f"Run baselines: {run_experiments['baselines']}")
+        print(f"Run GNN: {run_experiments['gnn']}")
+        
+        # Save config
+        with open(os.path.join(run_dir, 'config.yaml'), 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        
+        # Set device for GNN
+        if run_experiments['gnn']:
+            training_cfg = config['gnn']['training']
+            if training_cfg['device'] == 'auto':
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            else:
+                device = torch.device(training_cfg['device'])
+            print(f"Using device: {device}")
+            
+            # Set random seed
+            if training_cfg.get('random_seed') is not None:
+                torch.manual_seed(training_cfg['random_seed'])
+                np.random.seed(training_cfg['random_seed'])
+        
+        # Load datasets
+        print("\nLoading datasets...")
+        target_columns = [target_column]
+        default_dropna_columns = [
+            "time-rel-seconds",
+            "x-avg",
+            "y-avg",
+            "pupil-size-left-avg",
+            "pupil-size-right-avg",
+            target_column,
+            "subject",
+            "recording",
+        ]
+        dropna_columns = dataset_cfg.get("dropna_columns", default_dropna_columns)
+        allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
+        label_quality_column = dataset_cfg.get("label_quality_column")
+        allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
+        min_samples_per_window = dataset_cfg.get(
+            "min_samples_per_window",
+            max(dataset_cfg["kt"], dataset_cfg["ks"]) + 1,
         )
-        for plot_path in saved_plots:
-            print(f"Saved plot: {plot_path}")
-    except Exception as exc:
-        print(f"Warning: failed to generate result plots: {exc}")
-    
-    print(f"\n{'='*100}")
-    print("Training complete!")
-    print(f"All results saved to: {run_dir}")
-    
-    # Restore stdout
-    sys.stdout = logger.terminal
-    sys.stderr = sys.__stderr__
-    logger.close()
+        feature_columns = dataset_cfg.get(
+            "feature_columns",
+            ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
+        )
+        
+        if run_experiments['gnn']:
+            print("Loading graph dataset for GNN...")
+            base_gnn_dataset = SpacioTemporalDataset(
+                root_dir=dataset_cfg.get('data_dir'),
+                data_filepath=dataset_cfg.get('data_filepath'),
+                filter_subjects=dataset_cfg.get('filter_subjects'),
+                filter_recordings=dataset_cfg.get('filter_recordings'),
+                file_list=dataset_cfg.get('file_list'),
+                recursive=dataset_cfg['recursive'],
+                ignore_dirs=dataset_cfg.get('ignore_dirs', []),
+                window_length=dataset_cfg['window_length'],
+                window_overlap=dataset_cfg['window_overlap'],
+                kt=dataset_cfg['kt'],
+                ks=dataset_cfg['ks'],
+                use_edge_weights=dataset_cfg['use_edge_weights'],
+                tau=dataset_cfg['tau'],
+                cache_dir=dataset_cfg.get('cache_dir'),
+                use_cache=dataset_cfg.get('use_cache', True),
+                dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
+                feature_columns=feature_columns,
+                target_columns=target_columns,
+                dropna_columns=dropna_columns,
+                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
+                allowed_experiment_types=allowed_experiment_types,
+                label_quality_column=label_quality_column,
+                allowed_label_quality_values=allowed_label_quality_values,
+                target_aggregation=target_aggregation,
+            )
+            print(f"Loaded {len(base_gnn_dataset)} graph samples")
+
+        
+        if run_experiments['baselines']:
+            print("Loading tabular samples for baselines...")
+            base_tabular_samples = build_tabular_samples(
+                data_dir=dataset_cfg.get('data_dir'),
+                data_filepath=dataset_cfg.get('data_filepath'),
+                filter_subjects=dataset_cfg.get('filter_subjects'),
+                filter_recordings=dataset_cfg.get('filter_recordings'),
+                file_list=dataset_cfg.get('file_list'),
+                window_length=dataset_cfg.get('window_length', 10),
+                window_overlap=dataset_cfg.get("window_overlap", 0.0),
+                min_samples_per_window=min_samples_per_window,
+                dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
+                feature_columns=feature_columns,
+                target_columns=target_columns,
+                target_aggregation=target_aggregation,
+                dropna_columns=dropna_columns,
+                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
+                allowed_experiment_types=allowed_experiment_types,
+                label_quality_column=label_quality_column,
+                allowed_label_quality_values=allowed_label_quality_values,
+            )
+            print(f"Loaded {len(base_tabular_samples)} tabular samples")
+            unique_subjects = set(
+                sample.subject
+                for sample in base_tabular_samples
+                if hasattr(sample, "subject") and sample.subject is not None
+            )
+            unique_recordings = set(
+                sample.recording
+                for sample in base_tabular_samples
+                if hasattr(sample, "recording") and sample.recording is not None
+            )
+            print(f"Unique subjects in tabular samples: {sorted(unique_subjects)}")
+            print(f"Unique recordings in tabular samples: {sorted(unique_recordings)}")
+        
+        # Get CV strategies
+        strategies = cv_cfg['strategies']
+        if isinstance(strategies, str):
+            strategies = [strategies]
+        
+        print(f"\nWill run experiments with {len(strategies)} strategy(ies): {', '.join(strategies)}")
+        
+        # Storage for all results
+        all_strategies_results = {}
+        
+        # Run experiments for each strategy
+        for strategy in strategies:
+            print("\n" + "="*100)
+            print(f"Starting cross-validation with strategy: {strategy.upper()}")
+            print("="*100)
+            
+            strategy_dir = os.path.join(run_dir, strategy)
+            os.makedirs(strategy_dir, exist_ok=True)
+            
+            # Create splitters
+            if run_experiments['baselines']:
+                baseline_splitter = create_splitter(
+                    strategy=strategy,
+                    samples=base_tabular_samples,
+                    val_size=cv_cfg['val_size'],
+                    random_state=cv_cfg.get('random_state')
+                )
+            
+            if run_experiments['gnn']:
+                gnn_splitter = create_splitter(
+                    strategy=strategy,
+                    samples=base_gnn_dataset,
+                    val_size=cv_cfg['val_size'],
+                    random_state=cv_cfg.get('random_state')
+                )
+            
+            # Reference dataset for fold identification
+            reference_splitter = gnn_splitter if run_experiments['gnn'] else baseline_splitter
+            reference_dataset = base_gnn_dataset if run_experiments['gnn'] else base_tabular_samples
+            
+            # Storage for this strategy
+            baseline_results_all_folds = {name: {} for name in config['baselines']['models']} if run_experiments['baselines'] else {}
+            gnn_results_all_folds = {}
+            
+            # Get splits
+            if run_experiments['baselines'] and run_experiments['gnn']:
+                baseline_splits = list(baseline_splitter.split())
+                gnn_splits = list(gnn_splitter.split())
+                validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+                validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                num_folds = len(baseline_splits)
+            elif run_experiments['baselines']:
+                baseline_splits = list(baseline_splitter.split())
+                validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+                num_folds = len(baseline_splits)
+            else:
+                gnn_splits = list(gnn_splitter.split())
+                validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                num_folds = len(gnn_splits)
+            
+            for fold_num in range(num_folds):
+                # Get indices
+                if run_experiments['baselines']:
+                    baseline_train_idx, baseline_val_idx, baseline_test_idx = baseline_splits[fold_num]
+                if run_experiments['gnn']:
+                    gnn_train_idx, gnn_val_idx, gnn_test_idx = gnn_splits[fold_num]
+                
+                # Identify test fold
+                if run_experiments['gnn']:
+                    ref_test_idx = gnn_test_idx
+                else:
+                    ref_test_idx = baseline_test_idx
+                
+                if strategy == 'subject_loo':
+                    test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
+                    test_id = f"s_{'_'.join(map(str, test_subjects))}"
+                    test_name = f"Subjects {', '.join(map(str, test_subjects))}"
+                elif strategy == 'recording_loo':
+                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
+                    test_id = f"r_{'_'.join(map(str, test_recordings))}"
+                    test_name = f"Recordings {', '.join(map(str, test_recordings))}"
+                elif strategy == 'combined_loo':
+                    test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
+                    test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
+                    test_name = f"Pairs {', '.join([f'({s}, {r})' for s, r in test_pairs])}"
+                else:
+                    test_id = f"fold_{fold_num}"
+                    test_name = f"Fold {fold_num}"
+                
+                fold_dir = os.path.join(strategy_dir, test_id)
+                os.makedirs(fold_dir, exist_ok=True)
+                
+                print(f"\n{test_name}")
+
+                if run_experiments["gnn"]:
+                    train_values = collect_graph_target_values(
+                        base_gnn_dataset,
+                        gnn_train_idx,
+                        target_column,
+                    )
+                else:
+                    train_values = collect_tabular_target_values(
+                        base_tabular_samples,
+                        baseline_train_idx,
+                        target_column,
+                    )
+                if len(train_values) == 0:
+                    raise ValueError(
+                        f"Empty train targets for {test_name} with strategy '{strategy}'. "
+                        "This split cannot compute a train-based threshold."
+                    )
+                fold_threshold = resolve_threshold_value(threshold_spec, train_values)
+                print(f"  Fold label threshold ({threshold_spec}): {fold_threshold:.6f}")
+                
+                # Train baselines
+                if run_experiments['baselines']:
+                    print("Training baselines...")
+                    baseline_results = train_baselines_fold(
+                        config['baselines'], baseline_train_idx, baseline_val_idx,
+                        baseline_test_idx, base_tabular_samples, fold_dir,
+                        metric_names, target_column, fold_threshold,
+                        standardize_features=standardize_features,
+                        feature_columns=feature_columns,
+                        verbose=verbose,
+                    )
+                    for model_name, metrics in baseline_results.items():
+                        baseline_results_all_folds[model_name][test_id] = metrics
+                
+                # Train GNN
+                if run_experiments['gnn']:
+                    gnn_metrics = train_gnn_fold(
+                        config, gnn_train_idx, gnn_val_idx, gnn_test_idx,
+                        base_gnn_dataset, fold_dir, test_name, device,
+                        target_column=target_column,
+                        threshold_value=fold_threshold,
+                        standardize_features=standardize_features,
+                        verbose=verbose,
+                    )
+                    gnn_results_all_folds[test_id] = gnn_metrics
+            
+            # Combine results
+            combined_results = {}
+            if run_experiments['baselines']:
+                combined_results.update(baseline_results_all_folds)
+            if run_experiments['gnn']:
+                combined_results['GNN'] = gnn_results_all_folds
+            
+            all_strategies_results[strategy] = combined_results
+            
+            # Print and save comparison
+            print_comparison_table(combined_results, metric_names, strategy)
+            csv_path = os.path.join(strategy_dir, 'summary.csv')
+            save_comparison_csv(combined_results, metric_names, csv_path)
+
+        print("\nGenerating result plots...")
+        models_for_cm: List[str] = []
+        if run_experiments['gnn']:
+            models_for_cm.append('GNN')
+        if run_experiments['baselines']:
+            models_for_cm.extend(config['baselines']['models'])
+        models_for_cm = list(dict.fromkeys(models_for_cm))
+        try:
+            saved_plots = generate_and_save_binary_results_plots(
+                run_dir=Path(run_dir),
+                decision_threshold=float(binary_task_cfg.get('decision_threshold', 0.5)),
+                models_for_cm=models_for_cm if models_for_cm else None,
+            )
+            for plot_path in saved_plots:
+                print(f"Saved plot: {plot_path}")
+        except Exception as exc:
+            print(f"Warning: failed to generate result plots: {exc}")
+        
+        print(f"\n{'='*100}")
+        print("Training complete!")
+        print(f"All results saved to: {run_dir}")
+        return run_dir
+    finally:
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        logger.close()
+
+
+def main() -> None:
+    args = parse_args()
+    run_dir = run_training_from_config(args.config)
+    print(f"Binary run directory: {run_dir}")
 
 
 if __name__ == "__main__":
