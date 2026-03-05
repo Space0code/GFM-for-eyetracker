@@ -21,7 +21,7 @@
 - When plotting confusion matrices, we should normalize each row to show per-class percentages (values between 0.0 and 1.0) and fix the color scale to the [0, 1] range.
 - When creating a new python file, write a concise but informative docstring in the very beginning of the file, describing what the script/module is meant to do and how it is meant to be used.
 - When creating new python scripts that are meant to be run from terminal, explain and provide an example on how to run the script and what are the running options in the docstring at the very beginning of the file. 
-
+- Cleanup after yourself. When you are testing something and, as a result, new files and/or folders are created, carefuly delete the test-files and test-folders when not needed anymore. 
 
 ## Conda environment
 - We always use conda environments.
