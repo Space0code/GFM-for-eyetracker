@@ -1,0 +1,184 @@
+suite:
+  results_dir: results/suite
+  seed: 42
+  source_data_root: data/processed/hci-tagging
+  snapshot_cache_dir: results/_snapshot_cache
+  base_configs:
+    binary: src/emotions/binary/configs/train_binary_hci_tagging.yaml
+    multiclass: src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml
+    regression: src/emotions/regression/configs/train_regression_hci_tagging.yaml
+global_overrides:
+  cross_validation:
+    strategies:
+    - recording_loo
+    val_size: 1
+    random_state: 42
+  dataset:
+    use_cache: false
+    filter_subjects:
+    - P1
+    - P8
+    - P5
+    - P4
+    - P28
+    - P2
+    - P27
+    filter_recordings: null
+    target_aggregation: mean
+    signal_outlier_filter:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+      columns:
+      - x-avg
+      - y-avg
+      - pupil-size-left-avg
+      - pupil-size-right-avg
+experiments:
+- id: binary_emotion_valence
+  enabled: true
+  task_type: binary
+  experiment_group: emotion
+  scopes:
+  - emotion-elicitation
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: emotion-valence
+  threshold: mean
+  decision_threshold: 0.5
+- id: binary_emotion_arousal
+  enabled: true
+  task_type: binary
+  experiment_group: emotion
+  scopes:
+  - emotion-elicitation
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: emotion-arousal
+  threshold: mean
+  decision_threshold: 0.5
+- id: binary_emotion_control
+  enabled: true
+  task_type: binary
+  experiment_group: emotion
+  scopes:
+  - emotion-elicitation
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: emotion-control
+  threshold: mean
+  decision_threshold: 0.5
+- id: binary_emotion_predictability
+  enabled: true
+  task_type: binary
+  experiment_group: emotion
+  scopes:
+  - emotion-elicitation
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: emotion-predictability
+  threshold: mean
+  decision_threshold: 0.5
+- id: binary_tag_agree
+  enabled: true
+  task_type: binary
+  experiment_group: tagging
+  scopes:
+  - image-tagging-1
+  - image-tagging-2
+  - video-tagging
+  - pooled-tagging
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: tag-agree
+  threshold: 0.5
+  decision_threshold: 0.5
+- id: binary_tag_valid
+  enabled: true
+  task_type: binary
+  experiment_group: tagging
+  scopes:
+  - image-tagging-1
+  - image-tagging-2
+  - video-tagging
+  - pooled-tagging
+  overrides:
+    metrics:
+    - accuracy
+    - balanced_accuracy
+    - f1
+    - precision
+    - recall
+    - auc
+  target_column: tag-valid
+  threshold: 0.5
+  decision_threshold: 0.5
+- id: multiclass_emotion_id
+  enabled: true
+  task_type: multiclass
+  experiment_group: multiclass
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  task_name: emotion-id
+  target_column: emotion-id
+- id: multiclass_va_quadrant
+  enabled: true
+  task_type: multiclass
+  experiment_group: multiclass
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  task_name: va-quadrant
+  target_columns:
+  - emotion-valence
+  - emotion-arousal
+  thresholds:
+    valence: mean
+    arousal: mean
+- id: regression_emotion_valence
+  enabled: true
+  task_type: regression
+  experiment_group: regression
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  target_column: emotion-valence
+- id: regression_emotion_arousal
+  enabled: true
+  task_type: regression
+  experiment_group: regression
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  target_column: emotion-arousal
