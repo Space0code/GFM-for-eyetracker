@@ -67,13 +67,12 @@ m_i^{(r)} = \sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
 \frac{1}{\sqrt{\hat{d}_{i,r}\hat{d}_{j,r}}}\, W_r h_j^{(l)}
 $$
 
-Equivalently, the relation-local next embedding can be written as:
+Equivalently, the relation-local pre-activation output can be written as:
 
 $$
-h_{i,r}^{(l+1)} = \sigma\!\left(
+h_{i,r}^{(l+1,\mathrm{pre})} =
 \sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
 \frac{1}{\sqrt{\hat{d}_{i,r}\hat{d}_{j,r}}}\, W_r h_j^{(l)}
-\right)
 $$
 
 where:
@@ -109,13 +108,12 @@ What changes is the per-relation message function:
 - `GCNConv`: fixed degree-based normalization weights
 - `GATConv`: learned attention weights $\alpha_{ij}^{(r)}$ on edges (optionally multi-head), so relation updates become attention-weighted neighbor sums instead of degree-normalized sums
 
-For `GATConv`, the relation-local update is:
+For `GATConv`, the relation-local pre-activation output is:
 
 $$
-h_{i,r}^{(l+1)} = \sigma\!\left(
+h_{i,r}^{(l+1,\mathrm{pre})} =
 \sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
 \alpha_{ij}^{(r)}\, W_r h_j^{(l)}
-\right)
 $$
 
 with $\sum_{j \in \mathcal{N}_r(i) \cup \{i\}} \alpha_{ij}^{(r)} = 1$ for each target node $i$ (per attention head).
