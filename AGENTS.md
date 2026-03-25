@@ -22,6 +22,12 @@
 - When creating a new python file, write a concise but informative docstring in the very beginning of the file, describing what the script/module is meant to do and how it is meant to be used.
 - When creating new python scripts that are meant to be run from terminal, explain and provide an example on how to run the script and what are the running options in the docstring at the very beginning of the file. 
 - Cleanup after yourself. When you are testing something and, as a result, new files and/or folders are created, carefuly delete the test-files and test-folders when not needed anymore. 
+- When writing code for creating heatmaps, use color scheme "Blues".
+- Ask questions regularly, except requested to implement something right away.
+- The cli command that runs a script should be simple. User should be able to simply run python <script_name>.py For every argument, there should be a sensible default (unless stated otherwise or unless I removed it). Log the final arguments at the beginning of the script run for transparency.
+- For presenting comparisons in your answer prefer tables.
+- You are always allowed to run terminal commands that remove files you created from /tmp. E.g., you are allowed to run rm 
+rf /tmp/matplotlib-* and similar. Don’t ask me about this. 
 
 ## Conda environment
 - We always use conda environments.
