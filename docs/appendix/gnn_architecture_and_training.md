@@ -9,22 +9,22 @@ Primary model: `SpatioTemporalHeteroGNN` in `src/emotions/model.py`.
 ### 1.1 Forward graph
 
 ```mermaid
-flowchart LR
-    A[Node features: x,y,pupilL,pupilR] --> B{use_preprocess_mlp}
-    B -->|yes| C[Linear -> GELU -> LN -> Dropout -> Linear -> LN]
-    B -->|no| D[Raw node features]
-    C --> E[HeteroConv layer 1]
+flowchart TD
+    A["Node features: x, y, pupilL, pupilR"] --> B{"use preprocess mlp"}
+    B -->|yes| C["Linear then GELU then LN then Dropout then Linear then LN"]
+    B -->|no| D["Raw node features"]
+    C --> E["HeteroConv layer 1"]
     D --> E
-    E --> F[GELU]
-    F --> G[Residual add]
-    G --> H[LayerNorm + Dropout]
-    H --> I[HeteroConv layers 2..N, same pattern]
-    I --> J{Pooling}
-    J -->|mean| K[global_mean_pool]
-    J -->|mean_max| L[concat(global_mean_pool, global_max_pool)]
-    K --> M[Head MLP]
+    E --> F["GELU"]
+    F --> G["Residual add"]
+    G --> H["LayerNorm and Dropout"]
+    H --> I["HeteroConv layers 2 to N with same pattern"]
+    I --> J{"Pooling"}
+    J -->|mean| K["global mean pool"]
+    J -->|mean max| L["concat global mean pool and global max pool"]
+    K --> M["Head MLP"]
     L --> M
-    M --> N[Output logits/value]
+    M --> N["Output logits or value"]
 ```
 
 ### 1.2 Per-layer internals

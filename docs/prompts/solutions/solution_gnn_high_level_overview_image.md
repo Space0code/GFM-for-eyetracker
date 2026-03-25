@@ -2,7 +2,7 @@
 
 ## VARIANT_A_TECHNICAL
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph input["Input"]
     win["Eye-tracking window<br/>(time samples)"]
     feat["Node features<br/>x-avg, y-avg, pupil L/R"]
@@ -54,7 +54,7 @@ flowchart LR
 
 ## VARIANT_B_EXECUTIVE
 ```mermaid
-flowchart LR
+flowchart TB
   A["Eye-tracking window"]
   B["Build graph<br/>(samples + relationships)"]
   C["GNN encoder<br/>(mixes time + space)"]

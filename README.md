@@ -75,20 +75,20 @@ Model selection:
 
 ```mermaid
 flowchart TD
-    A[Windowed samples] --> B[Node features X]
-    B --> C{Preprocess MLP?}
-    C -->|yes| D[MLP + LayerNorm]
-    C -->|no| E[Raw node features]
-    D --> F[HeteroConv Layer 1\nTemporal + Spatial]
+    A["Windowed samples"] --> B["Node features X"]
+    B --> C{"Preprocess MLP"}
+    C -->|yes| D["MLP plus LayerNorm"]
+    C -->|no| E["Raw node features"]
+    D --> F["HeteroConv Layer 1\nTemporal plus Spatial"]
     E --> F
-    F --> G[Residual + LayerNorm + Dropout]
-    G --> H[HeteroConv Layers 2..N\nResidual + LayerNorm + Dropout]
-    H --> I{Pooling}
-    I -->|mean| J[Global Mean Pool]
-    I -->|mean_max| K[Mean Pool + Max Pool concat]
-    J --> L[Head MLP]
+    F --> G["Residual plus LayerNorm plus Dropout"]
+    G --> H["HeteroConv Layers 2 to N\nResidual plus LayerNorm plus Dropout"]
+    H --> I{"Pooling"}
+    I -->|mean| J["Global Mean Pool"]
+    I -->|mean max| K["Mean Pool plus Max Pool concat"]
+    J --> L["Head MLP"]
     K --> L
-    L --> M[Task output\n(binary/multiclass/regression)]
+    L --> M["Task output\nbinary multiclass regression"]
 ```
 
 ---
@@ -210,21 +210,24 @@ Reference: `results/suite/RETAIN_2026-03-05_13-04-55`
 ## 5. Detailed GNN Data Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Raw dataset files] --> B[Conversion to common schema]
     B --> C[Processed CSVs with confidence filtering]
-    C --> D[Optional suite snapshot + outlier filtering]
-    D --> E[Windowing by time-rel-seconds]
+    C --> D[Optional suite snapshot plus outlier filtering]
+    D --> E[Windowing by time rel seconds]
     E --> F[Graph build per window]
-    F --> F1[Nodes: x,y,pupilL,pupilR]
+    F --> F1[Nodes: x, y, pupil left, pupil right]
     F --> F2[Temporal edges kt]
     F --> F3[Spatial kNN edges ks]
-    F --> F4[Graph target y from mean/last]
-    F --> G[PyG DataLoader batches]
+    F --> F4[Graph target y from mean or last]
+    F1 --> G[PyG DataLoader batches]
+    F2 --> G
+    F3 --> G
+    F4 --> G
     G --> H[SpatioTemporalHeteroGNN]
     H --> I[Logits or regression output]
-    I --> J[Task loss + fold metrics]
-    J --> K[Per-fold artifacts + suite comparison CSV/plots]
+    I --> J[Task loss plus fold metrics]
+    J --> K[Per fold artifacts plus suite comparison CSV and plots]
 ```
 
 Shape trace (typical binary HCI window):
