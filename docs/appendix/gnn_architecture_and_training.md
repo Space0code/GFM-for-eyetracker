@@ -67,6 +67,15 @@ m_i^{(r)} = \sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
 \frac{1}{\sqrt{\hat{d}_{i,r}\hat{d}_{j,r}}}\, W_r h_j^{(l)}
 $$
 
+Equivalently, the relation-local next embedding can be written as:
+
+$$
+h_{i,r}^{(l+1)} = \sigma\!\left(
+\sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
+\frac{1}{\sqrt{\hat{d}_{i,r}\hat{d}_{j,r}}}\, W_r h_j^{(l)}
+\right)
+$$
+
 where:
 - $\mathcal{N}_r(i)$ is the neighbors of node $i$ under relation $r$
 - $\hat{d}_{i,r}$ is the degree (including self-loop) under relation $r$
@@ -99,6 +108,17 @@ What changes is the per-relation message function:
 
 - `GCNConv`: fixed degree-based normalization weights
 - `GATConv`: learned attention weights $\alpha_{ij}^{(r)}$ on edges (optionally multi-head), so relation updates become attention-weighted neighbor sums instead of degree-normalized sums
+
+For `GATConv`, the relation-local update is:
+
+$$
+h_{i,r}^{(l+1)} = \sigma\!\left(
+\sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
+\alpha_{ij}^{(r)}\, W_r h_j^{(l)}
+\right)
+$$
+
+with $\sum_{j \in \mathcal{N}_r(i) \cup \{i\}} \alpha_{ij}^{(r)} = 1$ for each target node $i$ (per attention head).
 
 In short, `HeteroConv` still merges temporal and spatial relation outputs in the same way; only the relation-local operator changes from normalized graph convolution (`GCNConv`) to attention-based graph convolution (`GATConv`).
 
