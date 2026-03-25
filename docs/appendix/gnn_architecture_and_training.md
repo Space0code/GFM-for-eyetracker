@@ -13,12 +13,8 @@ flowchart TD
     A["Node features: x, y, pupilL, pupilR"] --> B{"use preprocess mlp"}
     B -->|yes| C["Linear -> GELU -> LN -> Dropout -> Linear -> LN"]
     B -->|no| D["Raw node features"]
-    C --> E["HeteroConv layer 1"]
-    D --> E
-    E --> F["GELU"]
-    F --> G["Residual add"]
-    G --> H["LayerNorm and Dropout"]
-    H --> I["HeteroConv layers 2 to N with same pattern"]
+    C --> I["GNN"]
+    D --> I["GNN"]
     I --> J{"Pooling"}
     J -->|mean| K["global mean pool"]
     J -->|mean max| L["concat global mean pool and global max pool"]
@@ -42,6 +38,69 @@ flowchart TD
 - Norm/regularization:
   - `LayerNorm` after residual add
   - dropout after each layer
+
+### 1.3 Unpacking one `GNN` block (default: `GCNConv`)
+
+In this section, we assume the default convolution is `GCNConv` (this is the default in retained suite configurations).
+
+```mermaid
+flowchart TB
+    X["Input node embeddings h^(l)"] --> T["Temporal relation conv: GCNConv on (node, temporal, node)"]
+    X --> S["Spatial relation conv: GCNConv on (node, spatial, node)"]
+    subgraph REL["HeteroConv"]
+        direction LR
+        T --> A["Relation aggregation (sum/mean): HeteroConv aggr"]
+        S --> A
+    end
+
+    A --> G["GELU"]
+    G --> R["Residual add"]
+    R --> N["LayerNorm + Dropout"]
+    N --> O["Output h^(l+1)"]
+```
+
+Let $h_i^{(l)}$ be node $i$ features at layer $l$.  
+For each relation $r \in \{\text{temporal}, \text{spatial}\}$, the `GCNConv` update is:
+
+$$
+m_i^{(r)} = \sum_{j \in \mathcal{N}_r(i) \cup \{i\}}
+\frac{1}{\sqrt{\hat{d}_{i,r}\hat{d}_{j,r}}}\, W_r h_j^{(l)}
+$$
+
+where:
+- $\mathcal{N}_r(i)$ is the neighbors of node $i$ under relation $r$
+- $\hat{d}_{i,r}$ is the degree (including self-loop) under relation $r$
+- $W_r$ is a learnable weight matrix for relation $r$
+
+`HeteroConv` then aggregates relation-specific outputs:
+
+$$
+m_i = \mathrm{AGGR}\left(\left\{m_i^{(\text{temporal})},\, m_i^{(\text{spatial})}\right\}\right)
+$$
+
+with $\mathrm{AGGR}$ typically `sum` or `mean` in this project. The block output is:
+
+$$
+\tilde{h}_i^{(l+1)} = \mathrm{GELU}(m_i)
+$$
+
+$$
+h_i^{(l+1)} = \mathrm{LayerNorm}\!\left(\tilde{h}_i^{(l+1)} + \mathrm{res}_i^{(l)}\right)
+$$
+
+followed by dropout, where:
+- at layer 1, $\mathrm{res}_i^{(l)}$ comes from `input_residual_proj(h_i^{(l)})`
+- at deeper layers, $\mathrm{res}_i^{(l)} = h_i^{(l)}$
+
+### 1.4 If we switch to `GATConv` instead
+
+The overall block structure is unchanged (same two relations, same `HeteroConv` aggregation, same residual/norm/dropout).  
+What changes is the per-relation message function:
+
+- `GCNConv`: fixed degree-based normalization weights
+- `GATConv`: learned attention weights $\alpha_{ij}^{(r)}$ on edges (optionally multi-head), so relation updates become attention-weighted neighbor sums instead of degree-normalized sums
+
+In short, `HeteroConv` still merges temporal and spatial relation outputs in the same way; only the relation-local operator changes from normalized graph convolution (`GCNConv`) to attention-based graph convolution (`GATConv`).
 
 ## 2. Task-specific wrappers
 
