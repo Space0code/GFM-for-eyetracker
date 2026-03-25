@@ -12,7 +12,7 @@ import yaml
 import warnings
 import time
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from pathlib import Path
 
 import numpy as np
@@ -135,6 +135,113 @@ def collect_tabular_target_values(
             raise ValueError(f"Target column '{target_column}' missing in tabular sample.")
         values.append(float(sample.targets[target_column]))
     return values
+
+
+def split_group_tokens(
+    strategy: str,
+    dataset: List[Any],
+    indices: np.ndarray,
+) -> Tuple[str, ...]:
+    """Return canonical group tokens for one split partition.
+
+    Tokens are strategy-dependent and used to verify that baseline/GNN use
+    identical train/val/test group assignments.
+    """
+    if strategy == "subject_loo":
+        return tuple(sorted({str(dataset[int(i)].subject) for i in indices}))
+    if strategy in {"recording_loo", "recording_kfold"}:
+        return tuple(sorted({str(dataset[int(i)].recording) for i in indices}))
+    if strategy == "combined_loo":
+        return tuple(
+            sorted({f"{dataset[int(i)].subject}|{dataset[int(i)].recording}" for i in indices})
+        )
+    raise ValueError(
+        f"Unsupported strategy '{strategy}' for strict split comparability."
+    )
+
+
+def describe_fold(
+    strategy: str,
+    dataset: List[Any],
+    test_idx: np.ndarray,
+    fold_num: int,
+) -> Tuple[str, str, Tuple[str, Tuple[str, ...]]]:
+    """Build human-readable fold identifiers and a stable fold key.
+
+    The fold key is used to align baseline and GNN folds when their splitters
+    produce different counts (for example due to dataset-specific filtering).
+    """
+    if strategy == "subject_loo":
+        subjects = tuple(sorted({str(dataset[int(i)].subject) for i in test_idx}))
+        test_id = f"s_{'_'.join(subjects)}"
+        test_name = f"Subjects {', '.join(subjects)}"
+        fold_key = ("subject_loo", subjects)
+        return test_id, test_name, fold_key
+
+    if strategy == "recording_loo":
+        recordings = tuple(sorted({str(dataset[int(i)].recording) for i in test_idx}))
+        test_id = f"r_{'_'.join(recordings)}"
+        test_name = f"Recordings {', '.join(recordings)}"
+        fold_key = ("recording_loo", recordings)
+        return test_id, test_name, fold_key
+
+    if strategy == "recording_kfold":
+        recordings = tuple(sorted({str(dataset[int(i)].recording) for i in test_idx}))
+        safe_recordings = [recording.replace("/", "_") for recording in recordings]
+        test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
+        test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(recordings)}"
+        fold_key = ("recording_kfold", recordings)
+        return test_id, test_name, fold_key
+
+    if strategy == "combined_loo":
+        pair_tokens = tuple(
+            sorted({f"{dataset[int(i)].subject}|{dataset[int(i)].recording}" for i in test_idx})
+        )
+        test_id = f"sr_{'_'.join(pair_tokens)}"
+        pretty_pairs = ", ".join(f"({token.replace('|', ', ')})" for token in pair_tokens)
+        test_name = f"Pairs {pretty_pairs}"
+        fold_key = ("combined_loo", pair_tokens)
+        return test_id, test_name, fold_key
+
+    # Fallback for unknown/custom strategies
+    test_id = f"fold_{fold_num}"
+    test_name = f"Fold {fold_num}"
+    fold_key = (str(strategy), (str(fold_num),))
+    return test_id, test_name, fold_key
+
+
+def build_split_entries(
+    strategy: str,
+    dataset: List[Any],
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> List[Dict[str, Any]]:
+    """Materialize split tuples with aligned IDs/keys for downstream training."""
+    entries: List[Dict[str, Any]] = []
+    for fold_num, (train_idx, val_idx, test_idx) in enumerate(splits):
+        test_id, test_name, fold_key = describe_fold(
+            strategy=strategy,
+            dataset=dataset,
+            test_idx=test_idx,
+            fold_num=fold_num,
+        )
+        split_signature = (
+            split_group_tokens(strategy=strategy, dataset=dataset, indices=train_idx),
+            split_group_tokens(strategy=strategy, dataset=dataset, indices=val_idx),
+            split_group_tokens(strategy=strategy, dataset=dataset, indices=test_idx),
+        )
+        entries.append(
+            {
+                "fold_num": fold_num,
+                "train_idx": train_idx,
+                "val_idx": val_idx,
+                "test_idx": test_idx,
+                "test_id": test_id,
+                "test_name": test_name,
+                "fold_key": fold_key,
+                "split_signature": split_signature,
+            }
+        )
+    return entries
 
 
 def fit_graph_feature_scaler(
@@ -281,28 +388,35 @@ def train_gnn_fold(
     model_cfg = config['gnn']['model']
     training_cfg = config['gnn']['training']
     decision_threshold = config['binary_task'].get('decision_threshold', 0.5)
-    
-    # Create model
-    model = BinarySpatioTemporalGNN(**model_cfg).to(device)
-    
-    # Apply torch.compile for JIT optimization (PyTorch 2.0+)
-    # Expected 10-30% speedup on forward/backward passes
     use_compile = training_cfg.get('use_torch_compile', True)
-    if use_compile and hasattr(torch, 'compile'):
-        model = torch.compile(model, mode='default')
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
-    
-    # Create data loaders with optimizations:
-    # - num_workers: parallel data loading (2-3x faster)
-    # - pin_memory: faster CPU->GPU transfer
-    # - persistent_workers: avoid respawning workers each epoch
-    loader_kwargs = {
-        'batch_size': training_cfg['batch_size'],
-        'num_workers': training_cfg.get('num_workers', 4),
-        'pin_memory': training_cfg.get('pin_memory', True) if device.type == 'cuda' else False,
-        'persistent_workers': training_cfg.get('persistent_workers', True)
-    }
+
+    def _build_loader_kwargs(*, safe_mode: bool) -> Dict[str, Any]:
+        """Build DataLoader kwargs; safe_mode disables multiprocessing/pin-memory."""
+        if safe_mode:
+            return {
+                "batch_size": training_cfg["batch_size"],
+                "num_workers": 0,
+                "pin_memory": False,
+                "persistent_workers": False,
+            }
+
+        num_workers = int(training_cfg.get("num_workers", 4))
+        pin_memory = bool(training_cfg.get("pin_memory", True)) if device.type == "cuda" else False
+        persistent_workers = bool(training_cfg.get("persistent_workers", True)) and num_workers > 0
+        return {
+            "batch_size": training_cfg["batch_size"],
+            "num_workers": num_workers,
+            "pin_memory": pin_memory,
+            "persistent_workers": persistent_workers,
+        }
+
+    def _is_loader_thread_error(exc: RuntimeError) -> bool:
+        """Return True for known DataLoader pin-memory/IPC worker failures."""
+        message = str(exc)
+        return (
+            "Pin memory thread exited unexpectedly" in message
+            or "received 0 items of ancdata" in message
+        )
     
     scaler = None
     if standardize_features:
@@ -331,97 +445,110 @@ def train_gnn_fold(
         scaler=scaler,
     )
 
-    train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)
-    val_loader = DataLoader(val_graphs, shuffle=False, **loader_kwargs)
-    test_loader = DataLoader(test_graphs, shuffle=False, **loader_kwargs)
-    
-    # # Validate edge weights (print once per fold)
-    # print("Validating edge weights from first batch...")
-    # first_batch = next(iter(train_loader))
-    # first_batch = first_batch.to(device)
-    
-    # if hasattr(first_batch[("node", "temporal", "node")], "edge_attr"):
-    #     w_temporal = first_batch[("node", "temporal", "node")].edge_attr
-    #     print(f"  w_temporal: min={w_temporal.min():.4f}, max={w_temporal.max():.4f}, mean={w_temporal.mean():.4f}")
-    
-    # if hasattr(first_batch[("node", "spatial", "node")], "edge_attr"):
-    #     w_spatial = first_batch[("node", "spatial", "node")].edge_attr
-    #     print(f"  w_spatial:  min={w_spatial.min():.4f}, max={w_spatial.max():.4f}, mean={w_spatial.mean():.4f}")
-    
-    # Training loop
-    best_val_loss = float('inf')
-    best_epoch = 0
-    no_improve_epochs = 0
-    early_stopped = False
-    start_time = time.time()
-    early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
-    early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
-    early_stopping_min_delta = float(training_cfg.get("early_stopping_min_delta", 0.0))
-    early_stopping_restore_best = bool(training_cfg.get("early_stopping_restore_best", True))
+    def _run_one_attempt(*, safe_loader_mode: bool) -> Dict[str, Any]:
+        """Run one full fold training/evaluation attempt."""
+        # Create model per attempt so retries start from a clean state.
+        model = BinarySpatioTemporalGNN(**model_cfg).to(device)
+        if use_compile and hasattr(torch, "compile"):
+            model = torch.compile(model, mode="default")
 
-    if early_stopping_enabled and early_stopping_patience < 1:
-        raise ValueError("gnn.training.early_stopping_patience must be >= 1 when early stopping is enabled.")
-    
-    print(f"Training GNN for {test_name}...")
-    for epoch in range(training_cfg['num_epochs']):
-        train_loss = train_gnn_epoch(
-            model, train_loader, optimizer, device,
-            training_cfg.get('grad_clip_max_norm', 1.0)
-        )
-        
-        val_metrics, val_loss, _, _ = evaluate_gnn(
-            model, val_loader, device, target_column, decision_threshold
-        )
-        
-        if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg['num_epochs'] - 1 or epoch == 0):
-            val_acc = val_metrics['standard']['aggregated']['accuracy']
-            print(f"  Epoch {epoch+1}/{training_cfg['num_epochs']}: "
-                  f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, "
-                  f"val_acc={val_acc:.4f}")
-        
-        # Save best model
-        if val_loss < (best_val_loss - early_stopping_min_delta):
-            best_val_loss = val_loss
-            best_epoch = epoch
-            no_improve_epochs = 0
-            torch.save(model.state_dict(), os.path.join(fold_dir, 'best_model.pt'))
-        else:
-            no_improve_epochs += 1
+        optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg["learning_rate"])
+        loader_kwargs = _build_loader_kwargs(safe_mode=safe_loader_mode)
+        train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)
+        val_loader = DataLoader(val_graphs, shuffle=False, **loader_kwargs)
+        test_loader = DataLoader(test_graphs, shuffle=False, **loader_kwargs)
 
-        if early_stopping_enabled and no_improve_epochs >= early_stopping_patience:
-            early_stopped = True
-            if verbose:
+        best_val_loss = float("inf")
+        best_epoch = 0
+        no_improve_epochs = 0
+        early_stopped = False
+        start_time = time.time()
+        early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
+        early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
+        early_stopping_min_delta = float(training_cfg.get("early_stopping_min_delta", 0.0))
+        early_stopping_restore_best = bool(training_cfg.get("early_stopping_restore_best", True))
+
+        if early_stopping_enabled and early_stopping_patience < 1:
+            raise ValueError("gnn.training.early_stopping_patience must be >= 1 when early stopping is enabled.")
+
+        mode_note = " [safe-loader mode]" if safe_loader_mode else ""
+        print(f"Training GNN for {test_name}{mode_note}...")
+
+        for epoch in range(training_cfg["num_epochs"]):
+            train_loss = train_gnn_epoch(
+                model,
+                train_loader,
+                optimizer,
+                device,
+                training_cfg.get("grad_clip_max_norm", 1.0),
+            )
+
+            val_metrics, val_loss, _, _ = evaluate_gnn(
+                model, val_loader, device, target_column, decision_threshold
+            )
+
+            if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg["num_epochs"] - 1 or epoch == 0):
+                val_acc = val_metrics["standard"]["aggregated"]["accuracy"]
                 print(
-                    f"  Early stopping at epoch {epoch+1}: "
-                    f"no val_loss improvement for {early_stopping_patience} epoch(s)."
+                    f"  Epoch {epoch+1}/{training_cfg['num_epochs']}: "
+                    f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
                 )
-            break
-    
-    print(f"  Best model at epoch {best_epoch+1}")
-    if early_stopped:
-        print("  Early stopping triggered.")
-    if not early_stopping_restore_best and verbose:
-        print(
-            "  NOTE: early_stopping_restore_best=false requested, "
-            "but evaluation still uses the best checkpoint for comparability."
+
+            if val_loss < (best_val_loss - early_stopping_min_delta):
+                best_val_loss = val_loss
+                best_epoch = epoch
+                no_improve_epochs = 0
+                torch.save(model.state_dict(), os.path.join(fold_dir, "best_model.pt"))
+            else:
+                no_improve_epochs += 1
+
+            if early_stopping_enabled and no_improve_epochs >= early_stopping_patience:
+                early_stopped = True
+                if verbose:
+                    print(
+                        f"  Early stopping at epoch {epoch+1}: "
+                        f"no val_loss improvement for {early_stopping_patience} epoch(s)."
+                    )
+                break
+
+        print(f"  Best model at epoch {best_epoch+1}")
+        if early_stopped:
+            print("  Early stopping triggered.")
+        if not early_stopping_restore_best and verbose:
+            print(
+                "  NOTE: early_stopping_restore_best=false requested, "
+                "but evaluation still uses the best checkpoint for comparability."
+            )
+        print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
+
+        model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
+        test_metrics, _, test_pred, test_true = evaluate_gnn(
+            model, test_loader, device, target_column, decision_threshold
         )
-    print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
-    
-    # Load best model and evaluate on test
-    model.load_state_dict(torch.load(os.path.join(fold_dir, 'best_model.pt')))
-    test_metrics, test_loss, test_pred, test_true = evaluate_gnn(
-        model, test_loader, device, target_column, decision_threshold
-    )
-    
-    # Save predictions and targets
-    np.save(os.path.join(fold_dir, 'test_predictions.npy'), test_pred)
-    np.save(os.path.join(fold_dir, 'test_targets.npy'), test_true)
-    
-    test_acc = test_metrics['standard']['aggregated']['accuracy']
-    if verbose:
-        print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
-    
-    return test_metrics
+
+        np.save(os.path.join(fold_dir, "test_predictions.npy"), test_pred)
+        np.save(os.path.join(fold_dir, "test_targets.npy"), test_true)
+
+        test_acc = test_metrics["standard"]["aggregated"]["accuracy"]
+        if verbose:
+            print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
+        return test_metrics
+
+    try:
+        return _run_one_attempt(safe_loader_mode=False)
+    except RuntimeError as exc:
+        if not _is_loader_thread_error(exc):
+            raise
+        # Persist safe DataLoader settings for subsequent folds in this run.
+        training_cfg["num_workers"] = 0
+        training_cfg["pin_memory"] = False
+        training_cfg["persistent_workers"] = False
+        print(
+            "  Warning: DataLoader pin-memory/multiprocessing failed "
+            f"({exc}). Retrying fold in safe-loader mode and applying safe loader "
+            "settings for subsequent folds."
+        )
+        return _run_one_attempt(safe_loader_mode=True)
 
 
 def train_baselines_fold(
@@ -778,63 +905,98 @@ def run_training_from_config(config_path: str) -> str:
                     n_splits=cv_cfg.get('n_splits', 3),
                 )
             
-            # Reference dataset for fold identification
-            reference_splitter = gnn_splitter if run_experiments['gnn'] else baseline_splitter
-            reference_dataset = base_gnn_dataset if run_experiments['gnn'] else base_tabular_samples
-            
             # Storage for this strategy
             baseline_results_all_folds = {name: {} for name in config['baselines']['models']} if run_experiments['baselines'] else {}
             gnn_results_all_folds = {}
             
-            # Get splits
+            baseline_entries: List[Dict[str, Any]] = []
+            gnn_entries: List[Dict[str, Any]] = []
+            entry_plan: List[Dict[str, Any]] = []
+
+            # Get splits and build fold entries
             if run_experiments['baselines'] and run_experiments['gnn']:
                 baseline_splits = list(baseline_splitter.split())
                 gnn_splits = list(gnn_splitter.split())
                 validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
                 validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
-                num_folds = len(baseline_splits)
+                baseline_entries = build_split_entries(
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    splits=baseline_splits,
+                )
+                gnn_entries = build_split_entries(
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    splits=gnn_splits,
+                )
+                entry_plan = gnn_entries
             elif run_experiments['baselines']:
                 baseline_splits = list(baseline_splitter.split())
                 validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
-                num_folds = len(baseline_splits)
+                baseline_entries = build_split_entries(
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    splits=baseline_splits,
+                )
+                entry_plan = baseline_entries
             else:
                 gnn_splits = list(gnn_splitter.split())
                 validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
-                num_folds = len(gnn_splits)
+                gnn_entries = build_split_entries(
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    splits=gnn_splits,
+                )
+                entry_plan = gnn_entries
+
+            baseline_by_key: Dict[Tuple[str, Tuple[str, ...]], Dict[str, Any]] = {}
+            if run_experiments['baselines']:
+                baseline_by_key = {entry["fold_key"]: entry for entry in baseline_entries}
+            gnn_by_key: Dict[Tuple[str, Tuple[str, ...]], Dict[str, Any]] = {}
+            if run_experiments['gnn']:
+                gnn_by_key = {entry["fold_key"]: entry for entry in gnn_entries}
+
+            if run_experiments['baselines'] and run_experiments['gnn']:
+                baseline_keys = set(baseline_by_key.keys())
+                gnn_keys = set(gnn_by_key.keys())
+                if baseline_keys != gnn_keys:
+                    only_baseline = sorted(baseline_keys - gnn_keys)
+                    only_gnn = sorted(gnn_keys - baseline_keys)
+                    raise ValueError(
+                        f"Split mismatch for strategy '{strategy}': baseline and GNN do not share the same fold identities. "
+                        f"Baseline-only folds: {len(only_baseline)}, GNN-only folds: {len(only_gnn)}. "
+                        "To ensure model comparability, both must use identical folds."
+                    )
+                for fold_key in sorted(gnn_keys):
+                    baseline_signature = baseline_by_key[fold_key]["split_signature"]
+                    gnn_signature = gnn_by_key[fold_key]["split_signature"]
+                    if baseline_signature != gnn_signature:
+                        raise ValueError(
+                            f"Split mismatch for strategy '{strategy}' on fold {fold_key}: "
+                            "baseline and GNN have different train/val/test group assignments. "
+                            "Exact split equality is required for comparable model evaluation."
+                        )
+                entry_plan = gnn_entries
             
-            for fold_num in range(num_folds):
-                # Get indices
+            for entry in entry_plan:
+                test_id = entry["test_id"]
+                test_name = entry["test_name"]
+
+                baseline_entry = None
                 if run_experiments['baselines']:
-                    baseline_train_idx, baseline_val_idx, baseline_test_idx = baseline_splits[fold_num]
+                    baseline_entry = baseline_by_key.get(entry["fold_key"])
+                    if baseline_entry is not None:
+                        baseline_train_idx = baseline_entry["train_idx"]
+                        baseline_val_idx = baseline_entry["val_idx"]
+                        baseline_test_idx = baseline_entry["test_idx"]
+                    elif not run_experiments['gnn']:
+                        raise RuntimeError("Unexpected missing baseline fold entry.")
+
                 if run_experiments['gnn']:
-                    gnn_train_idx, gnn_val_idx, gnn_test_idx = gnn_splits[fold_num]
-                
-                # Identify test fold
-                if run_experiments['gnn']:
-                    ref_test_idx = gnn_test_idx
-                else:
-                    ref_test_idx = baseline_test_idx
-                
-                if strategy == 'subject_loo':
-                    test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
-                    test_id = f"s_{'_'.join(map(str, test_subjects))}"
-                    test_name = f"Subjects {', '.join(map(str, test_subjects))}"
-                elif strategy == 'recording_loo':
-                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
-                    test_id = f"r_{'_'.join(map(str, test_recordings))}"
-                    test_name = f"Recordings {', '.join(map(str, test_recordings))}"
-                elif strategy == "recording_kfold":
-                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
-                    safe_recordings = [str(r).replace("/", "_") for r in test_recordings]
-                    test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
-                    test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(map(str, test_recordings))}"
-                elif strategy == 'combined_loo':
-                    test_pairs = sorted(set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx))
-                    test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
-                    test_name = f"Pairs {', '.join([f'({s}, {r})' for s, r in test_pairs])}"
-                else:
-                    test_id = f"fold_{fold_num}"
-                    test_name = f"Fold {fold_num}"
+                    gnn_entry = gnn_by_key.get(entry["fold_key"], entry)
+                    gnn_train_idx = gnn_entry["train_idx"]
+                    gnn_val_idx = gnn_entry["val_idx"]
+                    gnn_test_idx = gnn_entry["test_idx"]
                 
                 fold_dir = os.path.join(strategy_dir, test_id)
                 os.makedirs(fold_dir, exist_ok=True)
@@ -863,6 +1025,10 @@ def run_training_from_config(config_path: str) -> str:
                 
                 # Train baselines
                 if run_experiments['baselines']:
+                    if baseline_entry is None:
+                        raise RuntimeError(
+                            "Missing baseline fold after fold intersection; this indicates inconsistent fold mapping."
+                        )
                     print("Training baselines...")
                     baseline_results = train_baselines_fold(
                         config['baselines'], baseline_train_idx, baseline_val_idx,

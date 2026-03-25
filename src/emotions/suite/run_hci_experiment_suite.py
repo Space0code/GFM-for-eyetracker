@@ -410,7 +410,14 @@ def run_suite(wrapper_config_path: str) -> str:
                 row["status"] = "success"
             except Exception as exc:  # Continue suite on per-experiment failures.
                 row["status"] = "failed"
-                row["error"] = f"{exc}\n{traceback.format_exc()}"
+                error_text = f"{exc}\n{traceback.format_exc()}"
+                row["error"] = error_text
+                print("\n" + "!" * 100)
+                print(f"[SUITE][FAILED] {suite_experiment_id}")
+                print(f"Reason: {exc}")
+                print("Traceback:")
+                print(traceback.format_exc())
+                print("!" * 100 + "\n")
 
             registry_rows.append(row)
             suite_run_dir.mkdir(parents=True, exist_ok=True)

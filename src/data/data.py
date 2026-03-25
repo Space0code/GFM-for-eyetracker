@@ -313,14 +313,26 @@ class SpacioTemporalDataset(Dataset):
         Generate a unique cache filename based on dataset parameters.
         Uses hash of configuration to ensure different parameters create different caches.
         """
-        # Create a unique identifier based on parameters
-        config_str = f"kt={self.kt}_ks={self.ks}_wl={self.window_length}_wo={self.window_overlap}"
+        # Create a unique identifier based on parameters.
+        # Include all graph-construction options and data source identity to avoid stale collisions.
+        config_str = (
+            f"kt={self.kt}_ks={self.ks}_tau={self.tau}_wl={self.window_length}_wo={self.window_overlap}"
+            f"_edgew={self.use_edge_weights}_dropthr={self.dropping_emotion_threshold}"
+        )
         
         if data_filepath is not None:
-            config_str += f"_file={os.path.basename(data_filepath)}"
+            abs_data_filepath = os.path.abspath(data_filepath)
+            config_str += f"_file={abs_data_filepath}"
+            try:
+                stat = os.stat(abs_data_filepath)
+                config_str += f"_fsize={stat.st_size}_fmtime_ns={stat.st_mtime_ns}"
+            except OSError:
+                # If stat fails, path string still participates in keying.
+                pass
             config_str += f"_subj={filter_subjects}_rec={filter_recordings}"
         else:
-            config_str += f"_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+            abs_root_dir = os.path.abspath(root_dir) if root_dir is not None else None
+            config_str += f"_root={abs_root_dir}_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
         config_str += f"_feat={self.feature_columns}_targets={self.target_columns}_dropna={self.dropna_columns}"
         config_str += f"_expcol={self.experiment_type_column}_expvals={self.allowed_experiment_types}"
         config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
