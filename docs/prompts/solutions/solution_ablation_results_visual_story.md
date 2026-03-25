@@ -4,12 +4,12 @@
 
 | Variant | Valence_delta_pp | Arousal_delta_pp | Note |
 |---|---:|---:|---|
-| `num_layers_10` | `+4.35` | `not_reported` | Strongest valence gain in provided facts |
-| `early_stopping_on` | `not_reported` | `+2.01` | Strongest arousal gain; valence tradeoff noted |
-| `kt/ks` variants | `~0` | `~0` | Low-impact family in tested setup |
-| `edge_weights_on` | `~0` | `~0` | Near no effect in tested setup |
-| `target_aggregation_last` | `~0` | `~0` | Near no effect vs `mean` |
-| `other depth choices` | `mixed` | `mixed` | Depth is sensitive; some settings degrade |
+| `num_layers_10` (pass2 best) | `+4.35` | `-0.99` | Strongest valence gain vs `baseline_default` |
+| `early_stopping_on` | `-1.32` | `+2.01` | Strongest arousal gain; valence tradeoff observed |
+| `kt/ks` variants | `[-0.19, -0.01]` | `[-0.14, +0.23]` | Low-impact family in tested setup |
+| `edge_weights_on` | `+0.00` | `+0.00` | No measurable change vs baseline in this suite |
+| `target_aggregation_last` | `+0.00` | `+0.00` | No measurable change vs `mean` in this suite |
+| `other depth choices` | `+3.28` to `-4.36` | `+0.62` to `-3.29` | Depth is sensitive; several settings degrade strongly |
 
 ## CHART_SPEC_VALENCE
 - Chart type: horizontal bar chart

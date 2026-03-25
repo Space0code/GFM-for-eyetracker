@@ -4,13 +4,13 @@ This appendix consolidates the chronology from `docs/journal.md` and result arti
 
 ## 1. Timeline summary
 
-| Phase | Approx date | Main focus | Outcome |
+| Phase | Evidence anchor | Main focus | Outcome |
 |---|---|---|---|
-| Early `gnext` phase | early project | Next-point gaze prediction (GraphSAGE) | Useful trend-learning proof of concept |
-| eSEEd regression phase | Dec 2025 | Multi-target emotion regression | Partial signal; poor cross-split robustness |
-| eSEEd binary + cleaning | Feb 2026 | Anger/disgust/sadness/tenderness binary tasks | GNN collapse discovered; majority often hard to beat |
-| Collapse debugging | Feb 2026 | Embedding/variance diagnostics | Identified early oversmoothing + low-logit-variance regime |
-| Transition to HCI tagging | Feb-Mar 2026 | Cleaner data + richer labels | Clear improvement in stability and learnability |
+| Early `gnext` phase | `src/gnext/*` + `docs/journal.md` | Next-point gaze prediction (GraphSAGE) | Useful trend-learning proof of concept |
+| eSEEd regression phase | `docs/journal.md` (eSEEd regression sections) | Multi-target emotion regression | Partial signal; poor cross-split robustness |
+| eSEEd binary + cleaning | `docs/journal.md` (binary + cleaning sections) | Binary emotion tasks on eSEEd | GNN collapse discovered; majority often hard to beat |
+| Collapse debugging | `docs/journal.md` (collapse diagnostics) | Embedding/variance diagnostics | Early representation collapse + low-logit-variance regime identified |
+| Transition to HCI tagging | `docs/journal.md` ("Transitioning to MAHNOB-HCI-TAGGING") | Cleaner data + richer labels | Clear improvement in stability and learnability |
 | HCI full suite run | 2026-03-05 13:04:55 | Unified binary/multiclass/regression/tagging benchmark | Best complete reference run |
 | GNN ablation suite | 2026-03-05 | One-factor variants on valence/arousal subset | Depth/early-stopping had strongest effects |
 | “Optimal” rerun | 2026-03-05 16:11:26 | Attempted improved global config | Partial run, failed at `subject_loo` boundary |
@@ -27,9 +27,9 @@ This appendix consolidates the chronology from `docs/journal.md` and result arti
 ## 2.2 Weak or inconsistent
 
 - Multiclass remained weak:
-  - `emotion-id` balanced accuracy ~0.180
-  - VA quadrant balanced accuracy ~0.287
-- Regression remained weak (best CCC around 0.093).
+  - `emotion-id` balanced accuracy: `0.1803` (GNN, `recording_loo`, aggregated)
+  - VA quadrant balanced accuracy: `0.2866` (GNN, `recording_loo`, aggregated)
+- Regression remained weak (best non-Mean CCC in this run: `0.0932`).
 - Some “promising” configs did not transfer reliably across targets/splits.
 - Edge-weight toggling and target aggregation (`mean` vs `last`) showed near-zero effect in tested subset.
 

@@ -49,7 +49,8 @@ Main processing rules:
 5. Interpolate numeric non-protected columns (`limit=10`), plus short rolling smooth on pupil columns.
 6. For HCI emotion scope, rebuild merged cache:
    - `data/processed/cached_hci_tagging_emotion.csv`
-   - subset cache file
+   - `data/processed/cached_hci_tagging_emotion_subset_10K.csv` (current script behavior)
+   - note: the repository currently also contains `cached_hci_tagging_emotion_subset_100K.csv`
 
 ## 4. Current datasets and shapes
 
@@ -121,8 +122,10 @@ From configured target columns:
 
 | Source | Windows | Nodes p50 | Temporal edges p50 | Spatial edges p50 |
 |---|---:|---:|---:|---:|
-| HCI suite snapshot (sampled windows) | 1,698 | 584 | 2,330 | 1,602 |
-| eSEEd cache (sampled windows) | 3,601 | 1,001 | 3,998 | 2,683 |
+| HCI suite snapshot (`binary_emotion_valence_emotion-elicitation`) | 1,698 | 585 | 2,334 | 1,602 |
+| eSEEd cache (core-signal cleaned) | 3,601 | 1,002 | 4,002 | 2,686 |
+
+These statistics were recomputed with the current `SpacioTemporalDataset` implementation and `kt=2`, `ks=2`, `window_length=10`, `window_overlap=0`.
 
 ## 6. Baseline data path
 
@@ -156,4 +159,5 @@ Implemented in trainers:
 
 - Thresholds for binary/VA split are computed on train split only.
 - Feature scalers are fit on train split only.
-- Split alignment checks enforce identical fold composition between GNN and baselines (binary script includes strict signature checks).
+- Binary trainer enforces strict fold-signature equality between GNN and baselines.
+- Multiclass/regression trainers use the same configured splitter strategy, but do not currently enforce binary-style fold-signature equality checks.

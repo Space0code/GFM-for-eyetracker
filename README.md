@@ -19,7 +19,7 @@ Graph Foundation Model (GFM) research codebase for eye-tracking signals, focused
 - Primary dataset now: **MAHNOB-HCI-TAGGING (emotion-elicitation scope)**.
 - Historical dataset: **eSEEd_v2** (important for understanding what failed and why).
 - Main benchmark run to reference: `results/suite/RETAIN_2026-03-05_13-04-55` (complete suite run).
-- Key recent ablation finding: depth/early stopping matter most; `kt/ks`, edge weights, and target aggregation had small effect in tested setup.
+- Key recent ablation finding (valence/arousal ablation subset): depth/early stopping had the largest deltas; `kt/ks`, edge weights, and target aggregation were small in that tested setup.
 
 ---
 
@@ -100,8 +100,10 @@ flowchart TD
 | Dataset | File(s) | Rows | Columns | Subjects | Recordings |
 |---|---|---:|---:|---:|---:|
 | HCI cached (emotion) | `data/processed/cached_hci_tagging_emotion.csv` | 3,797,165 | 22 | 24 | 24 media files |
-| HCI subset | `data/processed/cached_hci_tagging_emotion_subset_100K.csv` | 100,000 | 22 | subset | subset |
+| HCI subset | `data/processed/cached_hci_tagging_emotion_subset_100K.csv` | 100,000 | 22 | 1 | 16 |
 | eSEEd cached | `data/processed/cached_eseed_dataset.csv` | 3,423,045 | 13 | 48 | 10 |
+
+Note: `src/data/data_preprocess.py` currently rebuilds a `_subset_10K.csv` cache file; the checked-in subset file in `data/processed/` is `_subset_100K.csv`.
 
 ### 2.1 For GNN
 
@@ -121,13 +123,13 @@ Example window/graph scale (10s windows, `kt=2`, `ks=2`):
 
 | Snapshot | Total windows | Nodes/window (p50) | Temporal edges/window (p50) | Spatial edges/window (p50) |
 |---|---:|---:|---:|---:|
-| HCI suite snapshot (`binary_emotion_valence_emotion-elicitation`) | 1,698 | 584 | 2,330 | 1,602 |
-| eSEEd cached (cleaned for core features) | 3,601 | 1,001 | 3,998 | 2,683 |
+| HCI suite snapshot (`binary_emotion_valence_emotion-elicitation`) | 1,698 | 585 | 2,334 | 1,602 |
+| eSEEd cached (cleaned for core features) | 3,601 | 1,002 | 4,002 | 2,686 |
 
 Training-ready HCI scale in full cache (emotion-elicitation, `emotion-derivation-status=ok`, core feature dropna, 10s windows):
-- rows: ~3,018,447
-- windows: ~5,551
-- nodes/window p50: ~600
+- rows: 3,018,447
+- windows: 5,551
+- nodes/window p50: 601
 
 ### 2.2 For other models (baselines)
 
@@ -176,7 +178,7 @@ Primary narrative source: `docs/journal.md` + `results/*`.
 | eSEEd_v2 regression | Multi-target emotion regression with LOO splits | GNN partially competitive but unstable; limited generalization |
 | eSEEd_v2 binary + cleaning | Binary tasks + data cleaning + collapse debugging | Major GNN collapse issues identified |
 | Transition to HCI | EDA + binary valence/arousal/control/predictability | Cleaner data, non-collapsed GNN behavior |
-| HCI suite | Full binary/multiclass/regression suite | Binary partly promising, multiclass weak, regression weak |
+| HCI suite | Full binary/multiclass/regression suite | Binary competitive on some tasks; multiclass and regression weak |
 | GNN ablations | Focused one-factor-at-a-time variants | Depth/early stopping most impactful in tested regime |
 
 ### 4.2 What changed performance (from ablation summary)
@@ -196,10 +198,10 @@ Source: `results/gnn_improvement_experiments/gnn_improvement_summary.md`
 
 Reference: `results/suite/RETAIN_2026-03-05_13-04-55`
 
-- Best GNN binary emotion task: **emotion-control** (`balanced_accuracy=0.681`).
-- GNN was competitive but not universally best; LightGBM/MLP often close or better depending on task.
+- Best GNN binary emotion task: **emotion-control** (`balanced_accuracy=0.6813`).
+- In this run, GNN won emotion-control, while LightGBM/MLP were better on several other emotion tasks.
 - Multiclass still weak (emotion-id and VA quadrant).
-- Regression remained weak (best CCC values low).
+- Regression remained weak (best non-Mean CCC in this run: `0.0932`).
 
 ### 4.4 Important known issue
 
@@ -231,10 +233,10 @@ flowchart TD
 ```
 
 Shape trace (typical binary HCI window):
-- Input window: ~584 rows (p50 in referenced snapshot)
-- Node matrix: `X in R^(584 x 4)`
-- Temporal edges (directed): ~2,330
-- Spatial edges (directed, deduped): ~1,602
+- Input window: 585 rows (p50 in referenced snapshot)
+- Node matrix: `X in R^(585 x 4)`
+- Temporal edges (directed): 2,334
+- Spatial edges (directed, deduped): 1,602
 - Output per graph: 
   - binary: scalar logit
   - multiclass: class logits vector
@@ -313,7 +315,5 @@ Loss by task:
 See `docs/prompts/` for reusable prompt templates:
 - `prompt_gnn_high_level_overview_image.md`
 - `prompt_gnn_detailed_dataflow_schema.md`
-- `prompt_experiment_history_timeline_visual.md`
 - `prompt_ablation_results_visual_story.md`
-- `prompt_next_steps_brainstorm.md`
 - `prompt_presentation_slide_outline.md`

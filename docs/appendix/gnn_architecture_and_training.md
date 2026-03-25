@@ -11,7 +11,7 @@ Primary model: `SpatioTemporalHeteroGNN` in `src/emotions/model.py`.
 ```mermaid
 flowchart TD
     A["Node features: x, y, pupilL, pupilR"] --> B{"use preprocess mlp"}
-    B -->|yes| C["Linear then GELU then LN then Dropout then Linear then LN"]
+    B -->|yes| C["Linear -> GELU -> LN -> Dropout -> Linear -> LN"]
     B -->|no| D["Raw node features"]
     C --> E["HeteroConv layer 1"]
     D --> E
@@ -105,11 +105,11 @@ Per fold:
 | `window_length` | `10` sec | `dataset.*` YAML |
 | `window_overlap` | `0` | `dataset.*` YAML |
 | `kt`,`ks` | `2`,`2` | `dataset.*` YAML |
-| `feature_columns` | `x-avg,y-avg,pupil-left,pupil-right` | `dataset.*` YAML |
+| `feature_columns` | `x-avg,y-avg,pupil-size-left-avg,pupil-size-right-avg` | `dataset.*` YAML |
 | `hidden_channels` | `128` | `gnn.model` |
-| `num_layers` | often tuned (`2`, `10`) | `gnn.model` |
+| `num_layers` | run-configured (e.g., `2` in retained suite configs, `10` in ablation variants) | `gnn.model` |
 | `pooling` | `mean` or `mean_max` | `gnn.model` |
-| `conv_type` | mostly `GCNConv` | `gnn.model` |
+| `conv_type` | `GCNConv` in retained suite configs; `GATConv` also supported and tested | `gnn.model` |
 | `batch_size` | `64` | `gnn.training` |
 | `lr` | `1e-3` | `gnn.training` |
 

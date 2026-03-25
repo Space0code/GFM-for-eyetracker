@@ -75,7 +75,8 @@ Important protocol guarantees:
 - train/val/test group separation by strategy
 - fold-specific thresholding for binary/VA tasks
 - train-only scaling
-- strict split matching for baseline vs GNN comparisons (binary pipeline enforces fold-signature identity)
+- strict fold-signature matching is enforced in the binary pipeline
+- multiclass/regression use the same configured splitter strategy for GNN and baselines, but currently do not enforce binary-style fold-signature equality checks
 
 ## 5. Main orchestrators
 

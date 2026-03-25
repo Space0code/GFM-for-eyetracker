@@ -28,12 +28,12 @@ flowchart TB
     end
 
     subgraph gnn["4A. GNN branch"]
-        gds["Graph dataset builder<br/>SpatioTemporalDataset"]
+        gds["Graph dataset builder<br/>SpacioTemporalDataset"]
         nodes["Nodes: time samples\nFeatures: x avg, y avg, pupil left and right"]
         et["Temporal edges: plus minus kt neighbors\nedge weights optional time gap decay"]
         es["Spatial edges: ks kNN in x and y\nedge weights optional time gap decay"]
         split_g["CV splits: subject loo, recording loo, combined loo, recording kfold"]
-        fold_ops_g["Train fold only ops:\nthreshold fit plus scaler fit"]
+        fold_ops_g["Train fold only ops:\nthreshold fit only for binary or VA\nscaler fit when enabled"]
         train_g["Task trainers\ntrain_binary.py\ntrain_multiclass.py\ntrain_regression.py"]
         eval_g["Validation and test eval plus best checkpoint"]
         art_g["GNN artifacts:\nbest_model.pt, test_predictions.npy,\ntest_targets.npy, summary.csv"]
@@ -45,7 +45,7 @@ flowchart TB
         tbuild["Tabular builder\ntrain_baseline.py"]
         agg["Window aggregation:\ngaze mean, std, min, max\npupil mean and std\nconfidence means"]
         split_t["CV splits aligned to GNN strategy"]
-        fold_ops_t["Train fold only ops:\nthreshold fit plus scaler fit"]
+        fold_ops_t["Train fold only ops:\nthreshold fit only for binary or VA\nscaler fit when enabled"]
         train_t["Baseline families:\nMean, SVM, LightGBM, MLP"]
         eval_t["Test eval plus per fold metrics"]
         art_t["Baseline artifacts:\nmodel.pkl, test_predictions.npy,\ntest_targets.npy, summary.csv"]
@@ -55,7 +55,7 @@ flowchart TB
 
     subgraph suite["5. Suite aggregation and plotting"]
         compare["Suite comparison script\ncompare_suite_results.py"]
-        plots_cls["Classification outputs:\nconfusion_matrices.png\nclassification_master_comparison.csv\nclassification_heatmap_*.png"]
+        plots_cls["Classification suite outputs:\nclassification_master_comparison.csv\nclassification_heatmap_*.png\nclassification_group_model_ranking.png"]
         plots_reg["Regression outputs:\nregression_master_comparison.csv\nregression heatmaps"]
 
         art_g --> compare
@@ -76,12 +76,12 @@ flowchart TB
     prep --> win["Window by time"]
 
     win --> gnn["Graph path\nnode features plus temporal and spatial edges"]
-    gnn --> gsplit["Train fold threshold and scaler fit"]
+    gnn --> gsplit["Train fold preprocessing\nthreshold fit only when task needs binning\nscaler fit when enabled"]
     gsplit --> gtrain["Train GNN"]
     gtrain --> gout["Predictions plus summary"]
 
     win --> tab["Tabular path\nwindow feature aggregation"]
-    tab --> tsplit["Train fold threshold and scaler fit"]
+    tab --> tsplit["Train fold preprocessing\nthreshold fit only when task needs binning\nscaler fit when enabled"]
     tsplit --> ttrain["Train baselines"]
     ttrain --> tout["Predictions plus summary"]
 
@@ -101,7 +101,7 @@ flowchart TB
 | GNN build | Window samples | Build heterogeneous graphs (node features + temporal/spatial edges) | `HeteroData` windows |
 | Tabular build | Window samples | Aggregate each window into fixed-length statistics | Tabular windows |
 | CV split | Graph/tabular windows | Group-aware split strategy (`subject_loo`, `recording_loo`, etc.) | Train/val/test folds |
-| Fold-safe ops | Train fold only | Fit thresholds and scalers only on train fold | Fold-specific transformed data |
+| Fold-safe ops | Train fold only | Fit thresholds only when task needs label binning (`binary`, `va-quadrant`), and fit scalers only on train fold when enabled | Fold-specific transformed data |
 | Training | Fold-specific data | Train task model(s) and keep best checkpoint | Trained model artifacts |
 | Evaluation | Test fold predictions | Compute metrics and save fold summaries | `summary.csv`, predictions, targets |
 | Suite aggregation | Per-experiment summaries | Cross-experiment comparison and plotting | Master CSVs + classification/regression plots |

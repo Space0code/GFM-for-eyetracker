@@ -14,7 +14,8 @@ For one window-graph $g$:
   $$
   w_{ij} = \exp\!\left(-\frac{|t_i - t_j|}{\tau}\right).
   $$
-- Graph label: $y_g$ (binary, multiclass index, or scalar target).
+- Graph-level target vector before task-specific remapping: $y_g \in \mathbb{R}^{d_{\text{target}}}$.
+  Binary and VA-quadrant scripts derive fold-specific class labels from these targets; regression uses scalar targets directly.
 
 ## 2. Graph construction math
 
