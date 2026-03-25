@@ -10,7 +10,30 @@
 data/**
 notebooks/temp.ipynb
 checkpoints/**
+
+# ignore everything under results by default
 results/**
+
+# allow git to walk directories under results
+!results/**/
+
+# in RETAIN_* trees, ignore files by default
+results/**/RETAIN_*/**/*
+
+# but keep directories in RETAIN_* trees visible so file exceptions can match
+!results/**/RETAIN_*/
+!results/**/RETAIN_*/**/
+
+# allow only these file types anywhere inside RETAIN_* trees
+!results/**/RETAIN_*/**/*.csv
+!results/**/RETAIN_*/**/*.yaml
+!results/**/RETAIN_*/**/*.yml
+!results/**/RETAIN_*/**/*.md
+!results/**/RETAIN_*/**/*.png
+
+# always ignore experiments folders and everything inside them
+results/**/experiments/
+results/**/experiments/**
 
 # debug files
 src/emotions/binary/temp.py

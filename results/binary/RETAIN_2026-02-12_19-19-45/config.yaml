@@ -1,0 +1,73 @@
+baselines:
+  hyperparameters:
+    LightGBM:
+      n_estimators: 100
+      n_jobs: -1
+      verbose: -1
+    MLP:
+      early_stopping: false
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+    Mean: {}
+    SVM:
+      n_jobs: -1
+      probability: true
+  models:
+  - Mean
+  - SVM
+  - LightGBM
+  - MLP
+binary_task:
+  target_emotion: emotion-disgust
+  threshold: 0.0
+cross_validation:
+  random_state: 42
+  strategies:
+  - subject_loo
+  - recording_loo
+  val_size: 1
+dataset:
+  cache_dir: data/cache
+  data_filepath: data/processed/eSEEd_v2_cleaned/eSEEd_pupil_x_y_cleaned.csv
+  dropping_emotion_threshold: -1
+  filter_recordings: null
+  filter_subjects: null
+  ignore_dirs: []
+  ks: 5
+  kt: 5
+  recursive: true
+  use_cache: false
+  window_length: 10
+  window_overlap: 0
+gnn:
+  model:
+    add_self_loops: true
+    aggr: mean
+    conv_type: GCNConv
+    dropout_gnn: 0.1
+    dropout_head: 0.1
+    dropout_mlp: 0.1
+    hidden_channels: 128
+    in_channels: 5
+    use_preprocess_mlp: true
+  training:
+    batch_size: 32
+    device: auto
+    grad_clip_max_norm: 1.0
+    learning_rate: 0.001
+    num_epochs: 12
+    random_seed: 42
+logging:
+  results_dir: results/binary
+  save_outputs_interval: 10
+  verbose: false
+metrics:
+- accuracy
+- precision
+- recall
+- f1
+- auc
+run_experiments:
+  baselines: true
+  gnn: true

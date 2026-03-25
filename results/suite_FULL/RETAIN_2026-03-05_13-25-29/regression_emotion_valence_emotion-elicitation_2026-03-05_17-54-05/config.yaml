@@ -1,0 +1,107 @@
+run_experiments:
+  baselines: true
+  gnn: true
+regression_task:
+  target_column: emotion-valence
+dataset:
+  data_filepath: results/suite_FULL/2026-03-05_13-25-29/experiments/regression_emotion_valence_emotion-elicitation/snapshot.csv
+  recursive: true
+  ignore_dirs: []
+  window_length: 10
+  window_overlap: 0
+  min_samples_per_window: 3
+  kt: 2
+  ks: 2
+  use_edge_weights: false
+  tau: 0.05
+  cache_dir: data/cache
+  use_cache: false
+  dropping_emotion_threshold: -1
+  standardize_features: true
+  target_aggregation: mean
+  feature_columns:
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  dropna_columns:
+  - time-rel-seconds
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  - emotion-valence
+  - subject
+  - recording
+  experiment_type_column: experiment-type
+  allowed_experiment_types:
+  - emotion-elicitation
+  label_quality_column: emotion-derivation-status
+  allowed_label_quality_values:
+  - ok
+  signal_outlier_filter:
+    enabled: true
+    lower_quantile: 0.01
+    upper_quantile: 0.99
+    columns:
+    - x-avg
+    - y-avg
+    - pupil-size-left-avg
+    - pupil-size-right-avg
+  filter_subjects: null
+  filter_recordings: null
+cross_validation:
+  strategies:
+  - recording_loo
+  val_size: 1
+  random_state: 42
+baselines:
+  models:
+  - Mean
+  - SVM
+  - LightGBM
+  - MLP
+  hyperparameters:
+    Mean: {}
+    SVM:
+      n_jobs: -1
+    LightGBM:
+      n_estimators: 100
+      n_jobs: -1
+      verbose: -1
+    MLP:
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+      early_stopping: false
+gnn:
+  model:
+    in_channels: 4
+    hidden_channels: 128
+    output_scale: 1.0
+    use_preprocess_mlp: true
+    add_self_loops: true
+    dropout_mlp: 0.1
+    dropout_gnn: 0.1
+    dropout_head: 0.1
+    aggr: mean
+    conv_type: GCNConv
+  training:
+    num_epochs: 35
+    batch_size: 64
+    learning_rate: 0.001
+    grad_clip_max_norm: 1.0
+    device: auto
+    random_seed: 42
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    use_torch_compile: true
+metrics:
+- mae
+- ccc
+- spearman
+logging:
+  results_dir: results/suite_FULL/2026-03-05_13-25-29
+  verbose: false
+  run_name_prefix: regression_emotion_valence_emotion-elicitation
