@@ -232,8 +232,8 @@ def save_config(config, exp_dir):
     """Save configuration to YAML file in experiment directory."""
     import yaml
     yaml_path = os.path.join(exp_dir, "config.yaml")
-    with open(yaml_path, 'w') as f:
-        yaml.dump(config, f)
+    with open(yaml_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(config, f, sort_keys=False)
 
 def train_epoch(model, train_loader, optimizer, device, use_edge_attr=True, debug=False):
     """Train for one epoch."""

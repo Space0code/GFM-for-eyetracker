@@ -79,8 +79,8 @@ def main():
     
     # Save config copy
     config_save_path = os.path.join(run_dir, 'config.yaml')
-    with open(config_save_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
+    with open(config_save_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(config, f, sort_keys=False)
     print(f"Saved configuration to: {config_save_path}")
     
     # Set device for GNN

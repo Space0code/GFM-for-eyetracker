@@ -758,8 +758,8 @@ def run_training_from_config(config_path: str) -> str:
         print(f"Run GNN: {run_experiments['gnn']}")
         
         # Save config
-        with open(os.path.join(run_dir, 'config.yaml'), 'w') as f:
-            yaml.dump(config, f, default_flow_style=False)
+        with open(os.path.join(run_dir, "config.yaml"), "w", encoding="utf-8") as f:
+            yaml.safe_dump(config, f, sort_keys=False)
         
         # Set device for GNN
         if run_experiments['gnn']:
