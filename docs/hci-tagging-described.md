@@ -44,6 +44,13 @@
 
 ![Emotion ID distribution (training-ready)](figures/hci-tagging/emotion_id_distribution_training_ready.png)
 
+### How labels are assigned in HCI emotion-elicitation
+- `emotion-id` is a categorical felt-emotion label (observed IDs in this cache: `0, 1, 2, 3, 4, 5, 6, 11, 12`).
+- `emotion-valence`, `emotion-arousal`, `emotion-control`, and `emotion-predictability` are integer ratings on a **1-9** scale.
+- In this processed cache, labels are effectively **one set per (subject, recording) trial** and repeated across all time rows for that trial.
+- Verified on `emotion-derivation-status = ok`: for every `(subject, recording)` group, each emotion label column has exactly one unique value.
+- Label source in conversion: first from `session.xml` (`feltEmo`, `feltArsl`, `feltVlnc`, `feltCtrl`, `feltPred`), with Guide-Cut fallback when needed.
+
 ### Continuous emotion dimensions used in binary/regression tasks
 - Available dimensions: `emotion-valence`, `emotion-arousal`, `emotion-control`, `emotion-predictability`.
 - In binary experiments, thresholds are computed from train split (default config uses `mean`).
@@ -56,8 +63,6 @@
 | Control | 4.8779 | 1,341,526 | 1,676,921 | 55.56% |
 | Predictability | 5.7000 | 1,355,879 | 1,662,568 | 55.08% |
 
-![Binary class balance (mean threshold)](figures/hci-tagging/binary_balance_mean_threshold.png)
-
 - Overall class balance with **global median threshold** (reference only):
 
 | Dimension | Median Threshold | Negative | Positive | Positive Rate |
@@ -67,7 +72,25 @@
 | Control | 5.0000 | 1,341,526 | 1,676,921 | 55.56% |
 | Predictability | 6.0000 | 1,355,879 | 1,662,568 | 55.08% |
 
-![Binary class balance (median threshold)](figures/hci-tagging/binary_balance_median_threshold.png)
+- Combined view (upper half = mean-threshold split, lower half = median-threshold split):
+
+![Binary class balance (split mean/median thresholds)](figures/hci-tagging/binary_balance_split_mean_median_global.png)
+
+### Per-dimension binary class balance across emotions (mean vs median thresholds)
+- In each plot, rows are **emotions**.
+- For each emotion row: **upper half = mean-threshold split**, **lower half = median-threshold split**.
+
+#### Valence
+![Valence split by emotion](figures/hci-tagging/binary_balance_split_mean_median_by_emotion_valence.png)
+
+#### Arousal
+![Arousal split by emotion](figures/hci-tagging/binary_balance_split_mean_median_by_emotion_arousal.png)
+
+#### Control
+![Control split by emotion](figures/hci-tagging/binary_balance_split_mean_median_by_emotion_control.png)
+
+#### Predictability
+![Predictability split by emotion](figures/hci-tagging/binary_balance_split_mean_median_by_emotion_predictability.png)
 
 ### Rough distribution characteristics
 - Subject row count spread (training-ready): min **80,991**, median **127,733**, max **158,649**.
