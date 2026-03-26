@@ -32,6 +32,19 @@ if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 from data.data import SpacioTemporalDataset
+from emotions.common.cv_utils import (
+    build_split_entries as build_common_split_entries,
+    describe_fold as describe_common_fold,
+    split_group_tokens as split_common_group_tokens,
+    validate_non_empty_train_splits as validate_common_non_empty_train_splits,
+)
+from emotions.common.dataset_config import (
+    build_graph_dataset_kwargs,
+    build_tabular_samples_kwargs,
+    resolve_dropna_columns,
+    resolve_feature_columns,
+    resolve_min_samples_per_window,
+)
 from emotions.train_baseline import build_tabular_samples, samples_to_xy
 from emotions.utils import (
     Logger,
@@ -94,15 +107,12 @@ def validate_non_empty_train_splits(
     strategy: str,
     dataset_label: str,
 ) -> None:
-    """Fail fast if a CV strategy produces empty train folds."""
-    bad_folds = [i for i, (train_idx, _, _) in enumerate(splits) if len(train_idx) == 0]
-    if bad_folds:
-        fold_text = ", ".join(str(i) for i in bad_folds)
-        raise ValueError(
-            f"{dataset_label} split(s) {fold_text} from strategy '{strategy}' have empty train sets. "
-            "Adjust `cross_validation.strategies`, reduce `cross_validation.val_size`, "
-            "or include more distinct subjects/recordings."
-        )
+    """Backward-compatible wrapper around shared split validation helper."""
+    validate_common_non_empty_train_splits(
+        splits=splits,
+        strategy=strategy,
+        dataset_label=dataset_label,
+    )
 
 
 def collect_graph_target_values(
@@ -142,21 +152,12 @@ def split_group_tokens(
     dataset: List[Any],
     indices: np.ndarray,
 ) -> Tuple[str, ...]:
-    """Return canonical group tokens for one split partition.
-
-    Tokens are strategy-dependent and used to verify that baseline/GNN use
-    identical train/val/test group assignments.
-    """
-    if strategy == "subject_loo":
-        return tuple(sorted({str(dataset[int(i)].subject) for i in indices}))
-    if strategy in {"recording_loo", "recording_kfold"}:
-        return tuple(sorted({str(dataset[int(i)].recording) for i in indices}))
-    if strategy == "combined_loo":
-        return tuple(
-            sorted({f"{dataset[int(i)].subject}|{dataset[int(i)].recording}" for i in indices})
-        )
-    raise ValueError(
-        f"Unsupported strategy '{strategy}' for strict split comparability."
+    """Backward-compatible wrapper for split-token generation."""
+    return split_common_group_tokens(
+        strategy=strategy,
+        dataset=dataset,
+        indices=indices,
+        combined_id_style="pipe",
     )
 
 
@@ -166,48 +167,15 @@ def describe_fold(
     test_idx: np.ndarray,
     fold_num: int,
 ) -> Tuple[str, str, Tuple[str, Tuple[str, ...]]]:
-    """Build human-readable fold identifiers and a stable fold key.
-
-    The fold key is used to align baseline and GNN folds when their splitters
-    produce different counts (for example due to dataset-specific filtering).
-    """
-    if strategy == "subject_loo":
-        subjects = tuple(sorted({str(dataset[int(i)].subject) for i in test_idx}))
-        test_id = f"s_{'_'.join(subjects)}"
-        test_name = f"Subjects {', '.join(subjects)}"
-        fold_key = ("subject_loo", subjects)
-        return test_id, test_name, fold_key
-
-    if strategy == "recording_loo":
-        recordings = tuple(sorted({str(dataset[int(i)].recording) for i in test_idx}))
-        test_id = f"r_{'_'.join(recordings)}"
-        test_name = f"Recordings {', '.join(recordings)}"
-        fold_key = ("recording_loo", recordings)
-        return test_id, test_name, fold_key
-
-    if strategy == "recording_kfold":
-        recordings = tuple(sorted({str(dataset[int(i)].recording) for i in test_idx}))
-        safe_recordings = [recording.replace("/", "_") for recording in recordings]
-        test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
-        test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(recordings)}"
-        fold_key = ("recording_kfold", recordings)
-        return test_id, test_name, fold_key
-
-    if strategy == "combined_loo":
-        pair_tokens = tuple(
-            sorted({f"{dataset[int(i)].subject}|{dataset[int(i)].recording}" for i in test_idx})
-        )
-        test_id = f"sr_{'_'.join(pair_tokens)}"
-        pretty_pairs = ", ".join(f"({token.replace('|', ', ')})" for token in pair_tokens)
-        test_name = f"Pairs {pretty_pairs}"
-        fold_key = ("combined_loo", pair_tokens)
-        return test_id, test_name, fold_key
-
-    # Fallback for unknown/custom strategies
-    test_id = f"fold_{fold_num}"
-    test_name = f"Fold {fold_num}"
-    fold_key = (str(strategy), (str(fold_num),))
-    return test_id, test_name, fold_key
+    """Backward-compatible wrapper for fold identity derivation."""
+    fold = describe_common_fold(
+        strategy=strategy,
+        dataset=dataset,
+        test_idx=test_idx,
+        fold_num=fold_num,
+        combined_id_style="pipe",
+    )
+    return fold.test_id, fold.test_name, fold.fold_key
 
 
 def build_split_entries(
@@ -215,33 +183,13 @@ def build_split_entries(
     dataset: List[Any],
     splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
 ) -> List[Dict[str, Any]]:
-    """Materialize split tuples with aligned IDs/keys for downstream training."""
-    entries: List[Dict[str, Any]] = []
-    for fold_num, (train_idx, val_idx, test_idx) in enumerate(splits):
-        test_id, test_name, fold_key = describe_fold(
-            strategy=strategy,
-            dataset=dataset,
-            test_idx=test_idx,
-            fold_num=fold_num,
-        )
-        split_signature = (
-            split_group_tokens(strategy=strategy, dataset=dataset, indices=train_idx),
-            split_group_tokens(strategy=strategy, dataset=dataset, indices=val_idx),
-            split_group_tokens(strategy=strategy, dataset=dataset, indices=test_idx),
-        )
-        entries.append(
-            {
-                "fold_num": fold_num,
-                "train_idx": train_idx,
-                "val_idx": val_idx,
-                "test_idx": test_idx,
-                "test_id": test_id,
-                "test_name": test_name,
-                "fold_key": fold_key,
-                "split_signature": split_signature,
-            }
-        )
-    return entries
+    """Backward-compatible wrapper around shared split-entry construction."""
+    return build_common_split_entries(
+        strategy=strategy,
+        dataset=dataset,
+        splits=splits,
+        combined_id_style="pipe",
+    )
 
 
 def fit_graph_feature_scaler(
@@ -778,56 +726,19 @@ def run_training_from_config(config_path: str) -> str:
         # Load datasets
         print("\nLoading datasets...")
         target_columns = [target_column]
-        default_dropna_columns = [
-            "time-rel-seconds",
-            "x-avg",
-            "y-avg",
-            "pupil-size-left-avg",
-            "pupil-size-right-avg",
-            target_column,
-            "subject",
-            "recording",
-        ]
-        dropna_columns = dataset_cfg.get("dropna_columns", default_dropna_columns)
-        allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
-        label_quality_column = dataset_cfg.get("label_quality_column")
-        allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
-        min_samples_per_window = dataset_cfg.get(
-            "min_samples_per_window",
-            max(dataset_cfg["kt"], dataset_cfg["ks"]) + 1,
-        )
-        feature_columns = dataset_cfg.get(
-            "feature_columns",
-            ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
-        )
+        feature_columns = resolve_feature_columns(dataset_cfg)
+        dropna_columns = resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
+        min_samples_per_window = resolve_min_samples_per_window(dataset_cfg)
         
         if run_experiments['gnn']:
             print("Loading graph dataset for GNN...")
             base_gnn_dataset = SpacioTemporalDataset(
-                root_dir=dataset_cfg.get('data_dir'),
-                data_filepath=dataset_cfg.get('data_filepath'),
-                filter_subjects=dataset_cfg.get('filter_subjects'),
-                filter_recordings=dataset_cfg.get('filter_recordings'),
-                file_list=dataset_cfg.get('file_list'),
-                recursive=dataset_cfg['recursive'],
-                ignore_dirs=dataset_cfg.get('ignore_dirs', []),
-                window_length=dataset_cfg['window_length'],
-                window_overlap=dataset_cfg['window_overlap'],
-                kt=dataset_cfg['kt'],
-                ks=dataset_cfg['ks'],
-                use_edge_weights=dataset_cfg['use_edge_weights'],
-                tau=dataset_cfg['tau'],
-                cache_dir=dataset_cfg.get('cache_dir'),
-                use_cache=dataset_cfg.get('use_cache', True),
-                dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
-                feature_columns=feature_columns,
-                target_columns=target_columns,
-                dropna_columns=dropna_columns,
-                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-                allowed_experiment_types=allowed_experiment_types,
-                label_quality_column=label_quality_column,
-                allowed_label_quality_values=allowed_label_quality_values,
-                target_aggregation=target_aggregation,
+                **build_graph_dataset_kwargs(
+                    dataset_cfg=dataset_cfg,
+                    target_columns=target_columns,
+                    feature_columns=feature_columns,
+                    dropna_columns=dropna_columns,
+                ),
             )
             print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
@@ -835,23 +746,13 @@ def run_training_from_config(config_path: str) -> str:
         if run_experiments['baselines']:
             print("Loading tabular samples for baselines...")
             base_tabular_samples = build_tabular_samples(
-                data_dir=dataset_cfg.get('data_dir'),
-                data_filepath=dataset_cfg.get('data_filepath'),
-                filter_subjects=dataset_cfg.get('filter_subjects'),
-                filter_recordings=dataset_cfg.get('filter_recordings'),
-                file_list=dataset_cfg.get('file_list'),
-                window_length=dataset_cfg.get('window_length', 10),
-                window_overlap=dataset_cfg.get("window_overlap", 0.0),
-                min_samples_per_window=min_samples_per_window,
-                dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),
-                feature_columns=feature_columns,
-                target_columns=target_columns,
-                target_aggregation=target_aggregation,
-                dropna_columns=dropna_columns,
-                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-                allowed_experiment_types=allowed_experiment_types,
-                label_quality_column=label_quality_column,
-                allowed_label_quality_values=allowed_label_quality_values,
+                **build_tabular_samples_kwargs(
+                    dataset_cfg=dataset_cfg,
+                    target_columns=target_columns,
+                    feature_columns=feature_columns,
+                    dropna_columns=dropna_columns,
+                    min_samples_per_window=min_samples_per_window,
+                ),
             )
             print(f"Loaded {len(base_tabular_samples)} tabular samples")
             unique_subjects = set(
