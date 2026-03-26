@@ -400,6 +400,7 @@ def train_gnn_fold(
         model = BinarySpatioTemporalGNN(**model_cfg).to(device)
         if use_compile and hasattr(torch, "compile"):
             model = torch.compile(model, mode="default")
+            print("  Compiled GNN model with torch.compile(). When doing final runs, consider setting use_torch_compile=false because of the potential performance issues.")
 
         optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg["learning_rate"])
         loader_kwargs = _build_loader_kwargs(safe_mode=safe_loader_mode)
