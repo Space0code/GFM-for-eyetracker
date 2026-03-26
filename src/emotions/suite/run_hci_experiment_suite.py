@@ -26,6 +26,11 @@ if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 from emotions.binary.train_binary import run_training_from_config as run_binary_training
+from emotions.common.dataset_config import (
+    apply_defaults_when_missing,
+    resolve_dropna_columns,
+    resolve_min_samples_per_window,
+)
 from emotions.multiclass.train_multiclass import (
     run_training_from_config as run_multiclass_training,
 )
@@ -124,25 +129,13 @@ def _threshold_description(task_type: str, experiment_cfg: Dict[str, Any]) -> Di
 
 
 def _ensure_dropna_targets(dataset_cfg: Dict[str, Any], target_columns: List[str]) -> None:
-    dropna_columns = dataset_cfg.get("dropna_columns")
-    if dropna_columns is None:
-        dropna_columns = [
-            "time-rel-seconds",
-            "x-avg",
-            "y-avg",
-            "pupil-size-left-avg",
-            "pupil-size-right-avg",
-            "subject",
-            "recording",
-        ]
-    if not isinstance(dropna_columns, list):
-        raise ValueError("dataset.dropna_columns must be a list when provided.")
+    resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
 
-    for target_column in target_columns:
-        if target_column not in dropna_columns:
-            dropna_columns.append(target_column)
 
-    dataset_cfg["dropna_columns"] = dropna_columns
+def _apply_scope_defaults(dataset_cfg: Dict[str, Any], scope: str) -> None:
+    """Apply scope defaults only for keys absent from merged overrides."""
+    scope_defaults = _scope_dataset_defaults(scope)
+    apply_defaults_when_missing(dataset_cfg, scope_defaults)
 
 
 def _apply_task_to_trainer_config(
@@ -210,12 +203,7 @@ def _compute_window_counts(
     snapshot_csv_path: str,
     target_columns: List[str],
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
-    min_samples = int(
-        dataset_cfg.get(
-            "min_samples_per_window",
-            max(int(dataset_cfg.get("kt", 2)), int(dataset_cfg.get("ks", 2))) + 1,
-        )
-    )
+    min_samples = resolve_min_samples_per_window(dataset_cfg)
 
     samples = build_tabular_samples(
         data_dir=None,
@@ -334,12 +322,7 @@ def run_suite(wrapper_config_path: str) -> str:
                 if not isinstance(dataset_cfg, dict):
                     raise ValueError("Resolved trainer config dataset section must be a dictionary.")
 
-                # Apply scope defaults to keep source-task alignment by default.
-                # If a user needs different values, they can set them again in
-                # experiment-specific overrides and adjust this behavior.
-                scope_defaults = _scope_dataset_defaults(scope)
-                for key, value in scope_defaults.items():
-                    dataset_cfg[key] = value
+                _apply_scope_defaults(dataset_cfg=dataset_cfg, scope=scope)
 
                 target_columns = _required_target_columns(task_type, experiment_cfg)
                 _ensure_dropna_targets(dataset_cfg, target_columns)
