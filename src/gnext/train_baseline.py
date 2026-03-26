@@ -11,13 +11,14 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Subset, DataLoader
 import sys
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+if __package__ in {None, ""}:
+    parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
 
 from data.data_tabular import TabularEyePathDataset
-from baseline_models import MLPBaseline, CNNBaseline
-from train_utils import (
+from gnext.baseline_models import MLPBaseline, CNNBaseline
+from gnext.train_utils import (
     save_config, set_seed, prepare_data_tabular, save_checkpoint, setup_experiment,
     save_final_results, save_epoch_results, run_training_loop, finalize_training
 )

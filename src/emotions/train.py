@@ -26,11 +26,11 @@ import numpy as np
 import pandas as pd
 import torch
 
-# Add src directory to path
-# Add project root to Python path
-project_root = Path(__file__).resolve().parents[1]
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# Add project src root only for direct script execution.
+if __package__ in {None, ""}:
+    project_root = Path(__file__).resolve().parents[1]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
 
 from data.data import SpacioTemporalDataset
 from emotions.train_gnn import train_gnn_fold
@@ -79,8 +79,8 @@ def main():
     
     # Save config copy
     config_save_path = os.path.join(run_dir, 'config.yaml')
-    with open(config_save_path, 'w') as f:
-        yaml.dump(config, f, default_flow_style=False)
+    with open(config_save_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(config, f, sort_keys=False)
     print(f"Saved configuration to: {config_save_path}")
     
     # Set device for GNN

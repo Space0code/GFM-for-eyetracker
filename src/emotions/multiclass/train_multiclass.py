@@ -30,12 +30,24 @@ from torch_geometric.loader import DataLoader
 torch.set_float32_matmul_precision("high")
 torch._dynamo.config.capture_scalar_outputs = True
 
-# Add src directory to path
-src_dir = Path(__file__).resolve().parents[2]
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add src directory only for direct script execution.
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[2]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
 
 from data.data import SpacioTemporalDataset
+from emotions.common.cv_utils import (
+    describe_fold,
+    validate_non_empty_train_splits,
+)
+from emotions.common.dataset_config import (
+    build_graph_dataset_kwargs,
+    build_tabular_samples_kwargs,
+    resolve_dropna_columns,
+    resolve_feature_columns,
+    resolve_min_samples_per_window,
+)
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN
@@ -93,11 +105,11 @@ def _validate_non_empty_train_splits(
     strategy: str,
     dataset_label: str,
 ) -> None:
-    bad = [idx for idx, (train_idx, _, _) in enumerate(splits) if len(train_idx) == 0]
-    if bad:
-        raise ValueError(
-            f"{dataset_label} split(s) {bad} from strategy '{strategy}' have empty train sets."
-        )
+    validate_non_empty_train_splits(
+        splits=splits,
+        strategy=strategy,
+        dataset_label=dataset_label,
+    )
 
 
 def _fit_graph_feature_scaler(
@@ -711,56 +723,20 @@ def run_training_from_config(config_path: str) -> str:
         print("\nLoading datasets...")
         target_columns = task_def["target_columns"]
 
-        default_dropna_columns = [
-            "time-rel-seconds",
-            "x-avg",
-            "y-avg",
-            "pupil-size-left-avg",
-            "pupil-size-right-avg",
-            "subject",
-            "recording",
-            *target_columns,
-        ]
-        dropna_columns = dataset_cfg.get("dropna_columns", default_dropna_columns)
-        allowed_experiment_types = dataset_cfg.get("allowed_experiment_types")
-        label_quality_column = dataset_cfg.get("label_quality_column")
-        allowed_label_quality_values = dataset_cfg.get("allowed_label_quality_values")
-        min_samples_per_window = int(
-            dataset_cfg.get("min_samples_per_window", max(dataset_cfg["kt"], dataset_cfg["ks"]) + 1)
-        )
-        feature_columns = dataset_cfg.get(
-            "feature_columns",
-            ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"],
-        )
+        feature_columns = resolve_feature_columns(dataset_cfg)
+        dropna_columns = resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
+        min_samples_per_window = resolve_min_samples_per_window(dataset_cfg)
 
         base_gnn_dataset = None
         if run_experiments["gnn"]:
             print("Loading graph dataset for GNN...")
             base_gnn_dataset = SpacioTemporalDataset(
-                root_dir=dataset_cfg.get("data_dir"),
-                data_filepath=dataset_cfg.get("data_filepath"),
-                filter_subjects=dataset_cfg.get("filter_subjects"),
-                filter_recordings=dataset_cfg.get("filter_recordings"),
-                file_list=dataset_cfg.get("file_list"),
-                recursive=dataset_cfg["recursive"],
-                ignore_dirs=dataset_cfg.get("ignore_dirs", []),
-                window_length=dataset_cfg["window_length"],
-                window_overlap=dataset_cfg["window_overlap"],
-                kt=dataset_cfg["kt"],
-                ks=dataset_cfg["ks"],
-                use_edge_weights=dataset_cfg["use_edge_weights"],
-                tau=dataset_cfg["tau"],
-                cache_dir=dataset_cfg.get("cache_dir"),
-                use_cache=dataset_cfg.get("use_cache", True),
-                dropping_emotion_threshold=dataset_cfg.get("dropping_emotion_threshold", -1),
-                feature_columns=feature_columns,
-                target_columns=target_columns,
-                dropna_columns=dropna_columns,
-                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-                allowed_experiment_types=allowed_experiment_types,
-                label_quality_column=label_quality_column,
-                allowed_label_quality_values=allowed_label_quality_values,
-                target_aggregation=target_aggregation,
+                **build_graph_dataset_kwargs(
+                    dataset_cfg=dataset_cfg,
+                    target_columns=target_columns,
+                    feature_columns=feature_columns,
+                    dropna_columns=dropna_columns,
+                ),
             )
             print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
@@ -768,23 +744,13 @@ def run_training_from_config(config_path: str) -> str:
         if run_experiments["baselines"]:
             print("Loading tabular samples for baselines...")
             base_tabular_samples = build_tabular_samples(
-                data_dir=dataset_cfg.get("data_dir"),
-                data_filepath=dataset_cfg.get("data_filepath"),
-                filter_subjects=dataset_cfg.get("filter_subjects"),
-                filter_recordings=dataset_cfg.get("filter_recordings"),
-                file_list=dataset_cfg.get("file_list"),
-                window_length=dataset_cfg.get("window_length", 10),
-                window_overlap=dataset_cfg.get("window_overlap", 0.0),
-                min_samples_per_window=min_samples_per_window,
-                dropping_emotion_threshold=dataset_cfg.get("dropping_emotion_threshold", -1),
-                feature_columns=feature_columns,
-                target_columns=target_columns,
-                target_aggregation=target_aggregation,
-                dropna_columns=dropna_columns,
-                experiment_type_column=dataset_cfg.get("experiment_type_column", "experiment-type"),
-                allowed_experiment_types=allowed_experiment_types,
-                label_quality_column=label_quality_column,
-                allowed_label_quality_values=allowed_label_quality_values,
+                **build_tabular_samples_kwargs(
+                    dataset_cfg=dataset_cfg,
+                    target_columns=target_columns,
+                    feature_columns=feature_columns,
+                    dropna_columns=dropna_columns,
+                    min_samples_per_window=min_samples_per_window,
+                ),
             )
             print(f"Loaded {len(base_tabular_samples)} tabular samples")
 
@@ -896,29 +862,15 @@ def run_training_from_config(config_path: str) -> str:
                     gnn_train_idx, gnn_val_idx, gnn_test_idx = gnn_splits[fold_num]
 
                 ref_test_idx = gnn_test_idx if gnn_splitter is not None else baseline_test_idx
-
-                if strategy == "subject_loo":
-                    test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
-                    test_id = f"s_{'_'.join(map(str, test_subjects))}"
-                    test_name = f"Subjects {', '.join(map(str, test_subjects))}"
-                elif strategy == "recording_loo":
-                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
-                    test_id = f"r_{'_'.join(map(str, test_recordings))}"
-                    test_name = f"Recordings {', '.join(map(str, test_recordings))}"
-                elif strategy == "recording_kfold":
-                    test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
-                    safe_recordings = [str(r).replace("/", "_") for r in test_recordings]
-                    test_id = f"rkf_{fold_num}_{'_'.join(safe_recordings)}"
-                    test_name = f"RecordingKFold {fold_num} | Test recordings {', '.join(map(str, test_recordings))}"
-                elif strategy == "combined_loo":
-                    test_pairs = sorted(
-                        set((reference_dataset[i].subject, reference_dataset[i].recording) for i in ref_test_idx)
-                    )
-                    test_id = f"sr_{'_'.join([f'{s}_{r}' for s, r in test_pairs])}"
-                    test_name = f"Pairs {', '.join([f'({s}, {r})' for s, r in test_pairs])}"
-                else:
-                    test_id = f"fold_{fold_num}"
-                    test_name = f"Fold {fold_num}"
+                fold = describe_fold(
+                    strategy=strategy,
+                    dataset=reference_dataset,
+                    test_idx=ref_test_idx,
+                    fold_num=fold_num,
+                    combined_id_style="underscore",
+                )
+                test_id = fold.test_id
+                test_name = fold.test_name
 
                 fold_dir = os.path.join(strategy_dir, test_id)
                 os.makedirs(fold_dir, exist_ok=True)

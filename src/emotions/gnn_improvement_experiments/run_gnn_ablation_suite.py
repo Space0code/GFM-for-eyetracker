@@ -30,10 +30,11 @@ import numpy as np
 import pandas as pd
 import yaml
 
-# Add src directory to Python path.
-src_dir = Path(__file__).resolve().parents[2]
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add src directory only for direct script execution.
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[2]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
 
 from emotions.suite.config_merge import merge_many
 from emotions.suite.run_hci_experiment_suite import run_suite

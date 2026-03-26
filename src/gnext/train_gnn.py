@@ -13,13 +13,14 @@ from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 from torch_geometric.nn import SAGEConv, GCNConv, GATConv, GINConv, TransformerConv
 import sys
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+if __package__ in {None, ""}:
+    parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
 
 from data.data import EyePathDataset
-from model import NextPointGNN
-from train_utils import (
+from gnext.model import NextPointGNN
+from gnext.train_utils import (
     save_config, set_seed, prepare_data, save_checkpoint, setup_experiment,
     save_final_results, save_epoch_results, run_training_loop, finalize_training
 )

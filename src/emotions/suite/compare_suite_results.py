@@ -56,7 +56,7 @@ def _save_heatmap(
     value_col: str,
     output_path: Path,
     title: str,
-    cmap: str = "viridis",
+    cmap: str = "Blues",
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> None:
@@ -279,7 +279,7 @@ def build_suite_comparison_artifacts(
             value_col="mae",
             output_path=plots_dir / "regression_heatmap_mae.png",
             title="Regression MAE (experiment x model)",
-            cmap="magma_r",
+            cmap="Blues",
         )
         _save_heatmap(
             regression_df,

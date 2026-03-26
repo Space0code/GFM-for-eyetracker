@@ -1,6 +1,6 @@
-# Binary Classification for Emotion Recognition on eSEEd_v2 dataset
+# Binary Classification for Emotion Recognition
 
-This module extends the emotion recognition framework to support binary classification tasks.
+This module extends the emotion recognition framework to support binary classification tasks on the current HCI-tagging workflow and other compatible datasets.
 
 ## Overview
 
@@ -37,13 +37,14 @@ src/emotions/binary/
 
 ### 1. Configure Your Experiment
 
-Edit `configs/train_binary.yaml`:
+Edit `configs/train_binary_hci_tagging.yaml`:
 
 ```yaml
-# Select target emotion and threshold
+# Select target and threshold
 binary_task:
-  target_emotion: "emotion-anger"  # Options: emotion-anger, emotion-tenderness, emotion-sadness, emotion-disgust
-  threshold: 0.0  # Intensity threshold for binary classification
+  target_column: "emotion-valence"  # Preferred key (legacy alias: target_emotion)
+  threshold: "mean"  # float or one of: mean, median (computed from train split)
+  decision_threshold: 0.5  # Probability cutoff for metrics/confusion matrix
 
 # Select models to run
 run_experiments:
@@ -60,7 +61,7 @@ run_experiments:
 conda activate gfm
 
 # Run binary classification training
-python src/emotions/binary/train_binary.py --config src/emotions/binary/configs/train_binary.yaml
+python src/emotions/binary/train_binary.py --config src/emotions/binary/configs/train_binary_hci_tagging.yaml
 ```
 
 ### 3. View Results
@@ -76,20 +77,24 @@ Results are saved to `results/binary/<timestamp>/`:
 
 ```yaml
 binary_task:
-  target_emotion: "emotion-anger"  # Which emotion to predict
-  threshold: 0.0                   # Binary threshold
+  target_column: "emotion-valence"  # Which target to predict
+  threshold: "mean"                 # Binary threshold spec
+  decision_threshold: 0.5
 ```
 
-### Available Emotions
-- `emotion-anger`
-- `emotion-tenderness`
-- `emotion-sadness`
-- `emotion-disgust`
+### Typical Targets
+- `emotion-valence`
+- `emotion-arousal`
+- `emotion-control`
+- `emotion-predictability`
+- `tag-valid`
+- `tag-agree`
 
 ### Threshold Selection
-- `threshold: 0.0` → Detect any non-zero emotion intensity (most common)
-- `threshold: 5.0` → Detect high-intensity emotions only
-- The threshold determines class balance
+- `threshold: "mean"` → threshold from train fold mean
+- `threshold: "median"` → threshold from train fold median
+- `threshold: 0.5` (or any float) → fixed threshold
+- Threshold is resolved from train split only, which avoids leakage
 
 ### Cross-Validation Strategies
 
@@ -109,7 +114,7 @@ cross_validation:
 ```yaml
 gnn:
   model:
-    in_channels: 5
+    in_channels: 4
     hidden_channels: 64
     # Binary output is automatic (out_channels=1)
   training:
@@ -190,11 +195,11 @@ This helps verify the threshold creates balanced classes (~50%/50%).
 
 ## Example Workflow
 
-1. **Start with emotion-anger and threshold=0**
+1. **Start with emotion-valence and train-derived threshold**
    ```yaml
    binary_task:
-     target_emotion: "emotion-anger"
-     threshold: 0.0
+     target_column: "emotion-valence"
+     threshold: "mean"
    ```
 
 2. **Run subject-level cross-validation**
@@ -208,8 +213,8 @@ This helps verify the threshold creates balanced classes (~50%/50%).
    python src/emotions/binary/train_binary.py
    ```
 
-4. **Try other emotions**
-   - Change `target_emotion` in config
+4. **Try other targets**
+   - Change `target_column` in config
    - Rerun training
 
 5. **Experiment with thresholds**
