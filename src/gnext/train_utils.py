@@ -62,20 +62,6 @@ def split_by_sequence(dataset, val_split=0.2, seed=42):
         train_idx, val_idx = perm[1:], perm[:1]
     return Subset(dataset, train_idx), Subset(dataset, val_idx)
 
-def prepare_data(dataset, train_cfg, seed, batch_size):
-    """Prepare graph data with PyG DataLoader."""
-    if train_cfg.get('test_set'):
-        train_val_ds = Subset(dataset, list(range(len(dataset) - 1)))
-        train_ds, val_ds = split_by_sequence(train_val_ds, val_split=train_cfg['val_split'], seed=seed)
-        print(f"Using test mode: train={len(train_ds)} val={len(val_ds)} test={1}")
-    else:
-        train_ds, val_ds = split_by_sequence(dataset, val_split=train_cfg['val_split'], seed=seed)
-        print(f"Training: {len(train_ds)} samples | Validation: {len(val_ds)} samples")
-    
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-    return train_loader, val_loader
-
 def prepare_data_tabular(dataset, train_cfg, seed, batch_size):
     """Prepare tabular data by splitting sequences using seq_ids."""
     # Get unique seq_ids and split
