@@ -127,14 +127,19 @@ def interpolate_missing_data(
     """
     assert 'time-rel-seconds' in df.columns, "DataFrame must contain 'time-rel-seconds' column."
     
-    # Calculate average sampling interval in seconds
-    time_diffs = df['time-rel-seconds'].diff().dropna()
-    
-    avg_sampling_interval_s = time_diffs.mean()
+    # Calculate average sampling interval in seconds.
+    # Guard tiny/degenerate groups (for example one-row snapshots after filtering).
+    time_diffs = pd.to_numeric(df["time-rel-seconds"], errors="coerce").diff().dropna()
+    if time_diffs.empty:
+        return df
+
+    avg_sampling_interval_s = float(time_diffs.mean())
+    if not np.isfinite(avg_sampling_interval_s) or avg_sampling_interval_s <= 0:
+        return df
     window_size_s = window_size_ms / 1000.0
     
     # Convert time window to number of samples
-    limit_samples = int(np.ceil(window_size_s / avg_sampling_interval_s)) # if rows are missing, this doesn't work as expected, but it's ok for now
+    limit_samples = max(1, int(np.ceil(window_size_s / avg_sampling_interval_s)))
     
     # Interpolate only selected numeric columns (excluding time column)
     if interpolation_columns is None:
