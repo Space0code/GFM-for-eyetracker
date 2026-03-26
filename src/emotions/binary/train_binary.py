@@ -26,10 +26,11 @@ import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 import joblib
 
-# Add src directory to Python path
-src_dir = Path(__file__).resolve().parents[2]  # Go up to src/ directory
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add src directory only when executed as a script (not as installed package).
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[2]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
 
 from data.data import SpacioTemporalDataset
 from emotions.common.cv_utils import (

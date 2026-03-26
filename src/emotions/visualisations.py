@@ -13,7 +13,11 @@ import random
 import sys
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Add src directory only for direct script execution.
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[1]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
 from data.data import SpacioTemporalDataset
 
 

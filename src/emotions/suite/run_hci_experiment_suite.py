@@ -20,10 +20,11 @@ import yaml
 
 import sys
 
-# Add src directory to Python path
-src_dir = Path(__file__).resolve().parents[2]
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+# Add src directory only for direct script execution.
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[2]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
 
 from emotions.binary.train_binary import run_training_from_config as run_binary_training
 from emotions.common.dataset_config import (
