@@ -36,7 +36,7 @@ Core blocks:
 
 | Stage | What it does |
 |---|---|
-| Input node features | Usually 4 features per node: `x-avg`, `y-avg`, `pupil-size-left-avg`, `pupil-size-right-avg` |
+| Input node features | 4 features per node: `x-avg`, `y-avg`, `pupil-size-left-avg`, `pupil-size-right-avg` |
 | Optional preprocess MLP | `Linear -> GELU -> LayerNorm -> Dropout -> Linear -> LayerNorm` |
 | Message passing (N layers) | Heterogeneous conv over two edge types: temporal + spatial (`GCNConv` or `GATConv`) |
 | Residual + normalization | Residual connection each layer + `LayerNorm` + dropout |
