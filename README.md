@@ -79,16 +79,11 @@ flowchart TD
     B --> C{"Preprocess MLP"}
     C -->|yes| D["MLP plus LayerNorm"]
     C -->|no| E["Raw node features"]
-    D --> F["HeteroConv Layer 1\nTemporal plus Spatial"]
-    E --> F
-    F --> G["Residual plus LayerNorm plus Dropout"]
-    G --> H["HeteroConv Layers 2 to N\nResidual plus LayerNorm plus Dropout"]
-    H --> I{"Pooling"}
-    I -->|mean| J["Global Mean Pool"]
-    I -->|mean max| K["Mean Pool plus Max Pool concat"]
-    J --> L["Head MLP"]
-    K --> L
-    L --> M["Task output\nbinary multiclass regression"]
+    D --> H["GNN"]
+    E --> H["GNN"]
+    H --> I["Pooling"]
+    I --> L["Head MLP"]
+    L --> M["Task output"]
 ```
 
 ---
