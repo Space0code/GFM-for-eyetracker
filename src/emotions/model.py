@@ -77,7 +77,12 @@ class SpatioTemporalHeteroGNN(nn.Module):
         self.gnn_activation = nn.GELU()
         self.gnn_dropout = nn.Dropout(p=dropout_gnn)
 
-        head_in_channels = hidden_channels if pooling == "mean" else (2 * hidden_channels)
+        if pooling == "mean":
+            head_in_channels = hidden_channels
+        elif pooling == "mean_max":
+            head_in_channels = 2 * hidden_channels
+        else:
+            raise ValueError(f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'.")
 
         # Final MLP for graph-level output
         # Output is bounded to [0, 10] for emotion scores
@@ -128,10 +133,12 @@ class SpatioTemporalHeteroGNN(nn.Module):
 
         if self.pooling == "mean":
             graph_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
-        else:
+        elif self.pooling == "mean_max":
             mean_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
             max_emb = global_max_pool(x_node, batch)    # [num_graphs, hidden]
             graph_emb = torch.cat([mean_emb, max_emb], dim=1)  # [num_graphs, 2*hidden]
+        else:
+            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean' or 'mean_max'.")
 
         out = self.head(graph_emb)                    # [num_graphs, out_channels]
         out = out * self.output_scale                 # Scale to [0, 10], for binary, output scale is 1.0 so no scaling
