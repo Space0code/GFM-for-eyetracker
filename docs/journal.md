@@ -511,38 +511,39 @@ Key findings:
 ### Review of work so far and definition of the next steps
 
 #### Next steps
-1. Make mean_max pooling (concat results of mean pool and max pool) the new default. Reason: It holds at least as much information as mean/max pooling alone and does not slow down training significantly.
-2. Try new features
+[ ] Make mean_max pooling (concat results of mean pool and max pool) the new default. Reason: It holds at least as much information as mean/max pooling alone and does not slow down training significantly.
+[ ] Try new features
     - derivatives
-3. Research RoPE and try it out if it seems reasonable.
-4. Virtual node
-    - za vsako fiksacijo umetno ustvari vozlišče in tako naredi "agregiraj v 3D" - agregiraš najprej znotraj fiksacij, nato te fiksacije skupaj agregiraš
-    - enako lahko poskusiš za line graph (povezave so vozlišča), kjer agregiraš sakade (najprej vozlišča v line graph, ki spadajo skupaj v eno sakado, potem pa ta nova vozlišča agregiraš naprej)
-5. Modular approach 
-    - posebej obravnavaš fiksacije iz navadnega grafa in sakade iz line graph-a
+[ ] Research RoPE and try it out if it seems reasonable.
+[ ] Virtual node
+    - for each fixation, artificially create a node and in this way do "aggregate in 3D" - you first aggregate within fixations, then aggregate those fixations together
+    - you can try the same for the line graph (edges are nodes), where you aggregate saccades (first the nodes in the line graph that belong together to one saccade, then aggregate these new nodes further)
+[ ] Modular approach
+    - separately handle fixations from the regular graph and saccades from the line graph
 
-- poskusi self-supervised računat embeddinge z grafom in uporabi to v MLP za klasifikacijo in treniraj end-to-end (to že delaš menda?)
-    - to lahko delaš modulsko - več vzporednih grafov (fix., sac., blinks (ne rabi biti nujno graf))-> več vzporednih embeddingov -> early fusion pred MLP klasifikatorjem
-- dodatno k Recording LOO in Subject LOO, implementiraj: train on history, test on future (within subject) 
+[] try to compute embeddings with the graph in a self-supervised way (SSL) and use this in an MLP for classification and train end-to-end
+    - (we are already doing end-to-end, but not SSL)
+    - you can do this modularly - multiple parallel graphs (fix., sac., blinks (it does not necessarily need to be a graph)) -> multiple parallel embeddings -> early fusion before the MLP classifier
+[ ] in addition to Recording LOO and Subject LOO, implement: train on history, test on future (within subject)
 
-### Research of RoPE
-RoPE could maybe be useful since it encodes position and we can define position very simply with time. The natural order of our data is the order in time, which we inherently lose with the graph structure. 
+#### Research of RoPE
+RoPE could maybe be useful since it encodes position and we can define position very simply with time. The natural order of our data is the order in time, which we inherently lose with the graph structure.
 
-- assumes position -> odlično zame, saj imam graf, ki izgubi pozicijsko info. in jo vgradim z RoPE 
-- vrtimo okrog časa ali prostora (imamo koordinate) - čas se zdi bolj smiselen na prvo žogo
-- konstantna dolžina okna W -> vrtimo za pi/W
-- dela na transformerju (rotira Q in K, V pa ne)
-    - rabimo nujno transformer? bi lahko kar embeddinge vozlišč/fiksacij/... rotirali okoli časa?
-- obstaja WIRE (Wave-Induced Rotary Encodings)
-- "very long ranges can brake down" 
-    - koliko datapointov je "very long range"? 
-    - a je 10s*100Hz=1K datapointov preveč? 
-    - lahko bi tudi časovno vrsto fiksacij vzeli -> se zelo zmanjša "range"
-- razmisli o global PE (lastni vektorji laplacove matrike)
-- znani problemi: neunikatnost, sign flips, nestabilnost pri majhnih perturbacijah grafa
-    - rešitev SPE
-- preizkusit GatedGCN - za molekule dela najbolje menda
-- razišči bolje kaj so SE (structural encodings)
+- assumes position -> excellent for me, since I have a graph that loses positional info, and I can inject it with RoPE
+- rotate around time or space (we have coordinates) - time seems more sensible at first glance
+- constant window length W -> rotate by pi/W
+- works on a transformer (it rotates Q and K, but not V)
+    - do we strictly need a transformer? could we just rotate node/fixation/... embeddings around time?
+- there is WIRE (Wave-Induced Rotary Encodings)
+- "very long ranges can brake down"
+    - how many datapoints is a "very long range"?
+    - is 10s*100Hz=1K datapoints too much?
+    - we could also take the time series of fixations -> this greatly reduces the "range"
+- consider global PE (eigenvectors of the Laplacian matrix)
+- known problems: non-uniqueness, sign flips, instability under small graph perturbations
+    - solution: SPE
+- try GatedGCN - for molecules it supposedly works best
+- research better what SE (structural encodings) are
 
 #### Potentially useful papers:
 - **RoFormer**
@@ -610,3 +611,6 @@ Note: Citation counts are snapshots and may differ by index/database.
 | input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
 |---|---|---|---|---|---|---|---|
 | Small image set + user-specific saliency maps from eye-tracking | User embeddings for personalized saliency prediction | 2 public saliency datasets; exact training size not verified | Siamese conv encoder contrasting image and personal-saliency-map pairs | No official link verified (paper says code planned upon acceptance) | PS closed-set with GT USM: CC 0.846, SIM 0.725, AUC 0.915, NSS 2.595, KLD 0.336; embedding NN Acc up to 0.981 (ID split, `m = 64`) | MultiCNN w/ GT: CC 0.845, SIM 0.711, AUC 0.914, NSS 2.609, KLD 0.415 | 1 |
+
+
+**Note:** We will need these models/architecture info when we will write the final paper. We will want to compare our model to all or most of the architectures here. Additionally, search for new models at the time of writing the final paper, of course.
