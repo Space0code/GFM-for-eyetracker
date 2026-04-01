@@ -508,3 +508,105 @@ Key findings:
 - Depth is sensitive: 3-10 layers helped valence in some runs; 5 layers (and especially 50 for valence) could degrade performance noticeably.
 
 
+### Review of work so far and definition of the next steps
+
+#### Next steps
+1. Make mean_max pooling (concat results of mean pool and max pool) the new default. Reason: It holds at least as much information as mean/max pooling alone and does not slow down training significantly.
+2. Try new features
+    - derivatives
+3. Research RoPE and try it out if it seems reasonable.
+4. Virtual node
+    - za vsako fiksacijo umetno ustvari vozlišče in tako naredi "agregiraj v 3D" - agregiraš najprej znotraj fiksacij, nato te fiksacije skupaj agregiraš
+    - enako lahko poskusiš za line graph (povezave so vozlišča), kjer agregiraš sakade (najprej vozlišča v line graph, ki spadajo skupaj v eno sakado, potem pa ta nova vozlišča agregiraš naprej)
+5. Modular approach 
+    - posebej obravnavaš fiksacije iz navadnega grafa in sakade iz line graph-a
+
+- poskusi self-supervised računat embeddinge z grafom in uporabi to v MLP za klasifikacijo in treniraj end-to-end (to že delaš menda?)
+    - to lahko delaš modulsko - več vzporednih grafov (fix., sac., blinks (ne rabi biti nujno graf))-> več vzporednih embeddingov -> early fusion pred MLP klasifikatorjem
+- dodatno k Recording LOO in Subject LOO, implementiraj: train on history, test on future (within subject) 
+
+### Research of RoPE
+RoPE could maybe be useful since it encodes position and we can define position very simply with time. The natural order of our data is the order in time, which we inherently lose with the graph structure. 
+
+- assumes position -> odlično zame, saj imam graf, ki izgubi pozicijsko info. in jo vgradim z RoPE 
+- vrtimo okrog časa ali prostora (imamo koordinate) - čas se zdi bolj smiselen na prvo žogo
+- konstantna dolžina okna W -> vrtimo za pi/W
+- dela na transformerju (rotira Q in K, V pa ne)
+    - rabimo nujno transformer? bi lahko kar embeddinge vozlišč/fiksacij/... rotirali okoli časa?
+- obstaja WIRE (Wave-Induced Rotary Encodings)
+- "very long ranges can brake down" 
+    - koliko datapointov je "very long range"? 
+    - a je 10s*100Hz=1K datapointov preveč? 
+    - lahko bi tudi časovno vrsto fiksacij vzeli -> se zelo zmanjša "range"
+- razmisli o global PE (lastni vektorji laplacove matrike)
+- znani problemi: neunikatnost, sign flips, nestabilnost pri majhnih perturbacijah grafa
+    - rešitev SPE
+- preizkusit GatedGCN - za molekule dela najbolje menda
+- razišči bolje kaj so SE (structural encodings)
+
+#### Potentially useful papers:
+- **RoFormer**
+    - https://arxiv.org/pdf/2104.09864 
+    - the RoPE paper 
+- **Benchmarking Graph Neural Networks**
+    - https://jmlr.org/papers/volume24/22-0567/22-0567.pdf 
+    - has nice, concise explanations and visualisations in the appendix for different message passing mechanisms (GCN, GraphSage, GAT, ...)
+    - for molecules, GatedGCN seems to work best and is not among most expensive to run
+- **Recipe for a General, Powerful, Scalable Graph Transformer**
+    - https://arxiv.org/pdf/2205.12454 
+    - explains local, global, and relative PE and SE
+    - I assume we want to focus on global SEs
+- **Rotary Position Encodings for Graphs**
+    - https://arxiv.org/pdf/2509.22259v3
+    - WIRE (Wave-Induced Rotary Encodings)
+
+### Screening SOTA models for eyetracking
+#### Original prompt for GPT 5.4 Thinking:
+```
+find papers of SOTA models for emotion inference and/or pshychological state inference from eye-tracking data. and find SOTA encoders for embedding eyetracking data. for each one provide: assumed input data (e.g. gaze coordinates, pupil size, fixations, saccades), what the model infers (if anything) or if it's calculating embeddings only. provide links to papers of the models. the papers must show the model works for eyetracking data.
+```
+
+#### Found models:
+Note: Citation counts are snapshots and may differ by index/database.
+
+**eSEE-d (DMLP)**
+- Link to paper: https://doi.org/10.3390/brainsci13040589
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| Eye/gaze features from low-level metrics (fixation/blink frequency, pupil diameter, fixation-duration stats, saccade amplitude, saccade-duration variation) | Valence/arousal emotion classification | 48 participants, 10 emotion videos each (+ neutral after each); row count not reported | DMLP: input-sized first layer + `m` hidden layers | No official link verified | Valence NV+MV vs PV: AUC 0.91, F1 0.91, Acc 0.92; Arousal MA vs LA: AUC 0.80, F1 0.79, Acc 0.81 | NA | 15 |
+
+**Eye-Tracking Analysis for Emotion Recognition (SVM best reported)**
+- Link to paper: https://doi.org/10.1155/2020/2909267
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| 18 eye-tracking features from fixations, saccades, pupil diameter | 3-class emotion recognition | 30 participants, 21 video fragments; row count not reported | SVM (best reported) | No official link verified | Acc 0.80, mean F1 0.80 (AUC not reported) | LDA: Acc 0.73, mean F1 0.76; k-NN: Acc 0.65, mean F1 0.63 | 66 |
+
+**EM-COGLOAD (CNN-based models)**
+- Link to paper: https://doi.org/10.1016/j.csbj.2024.03.014
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| Eye-movement traces from saccadic and smooth-pursuit tasks | Cognitive-load classification (also age-group prediction reported) | 75 healthy adults; row count not reported | Best model: 1D CNN (2 conv + avg pooling blocks, then flatten + FC) | No official link verified | Cognitive-load test Acc 0.875 on saccadic (V1) | Encoder/Inception test Acc 0.825 on saccadic (V1); FCN overfit and not tested | 11 |
+
+**GazeMAE**
+- Link to paper: https://doi.org/10.1109/ICPR48806.2021.9412761
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| Raw eye-position and velocity signals | Embeddings only; evaluated on downstream tasks | Exact training size not verified | Micro-macro autoencoder with separate temporal conv autoencoders | No official link verified | Exact Acc/F1/AUC values not verified from accessible sources | NA | 6 |
+
+**CLRGaze**
+- Link to paper: https://doi.org/10.23919/EUSIPCO54536.2021.9616181
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| Random eye-movement segments as velocity signals | Embeddings only / feature vectors | 45,755 trials, 143 subjects, 6 datasets | Self-supervised contrastive CNN encoder (SimCLR-style) | https://github.com/chipbautista/clrgaze | Best biometric Acc 0.973 (FIFA); all-datasets Acc 0.846 | GazeMAE velocity-only: Acc 0.798 (EMVIC+ETRA+FIFA), 0.695 (all datasets) | NA |
+
+**Learning User Embeddings from Human Gaze for Personalised Saliency Prediction**
+- Link to paper: https://doi.org/10.1145/3655603
+
+| input | output | amount of data | architecture | code/model/weights | metrics | baseline results | #citations |
+|---|---|---|---|---|---|---|---|
+| Small image set + user-specific saliency maps from eye-tracking | User embeddings for personalized saliency prediction | 2 public saliency datasets; exact training size not verified | Siamese conv encoder contrasting image and personal-saliency-map pairs | No official link verified (paper says code planned upon acceptance) | PS closed-set with GT USM: CC 0.846, SIM 0.725, AUC 0.915, NSS 2.595, KLD 0.336; embedding NN Acc up to 0.981 (ID split, `m = 64`) | MultiCNN w/ GT: CC 0.845, SIM 0.711, AUC 0.914, NSS 2.609, KLD 0.415 | 1 |
