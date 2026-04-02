@@ -592,6 +592,7 @@ Key findings:
 - Depth is sensitive: 3-10 layers helped valence in some runs; 5 layers (and especially 50 for valence) could degrade performance noticeably.
 
 ### Review of work so far and definition of the next steps
+Review of the important stuff - PPT presentation for the AMI meeting on 2. 4. 2026: https://docs.google.com/presentation/d/1dEbUNYaNxrRl0MMtLY5JA7oWOS8n1YYwa70WHSkh_TA/edit?slide=id.p#slide=id.p 
 
 #### Next steps
 - [ ] prepare subject and recording k-fold for fast iterations (use subject 5-fold by default)
