@@ -64,3 +64,4 @@ hwmon0           disk           NVMe disk
 - Our aim is to build a cutting-edge GNN model that will infer different physiological and psychological states from eye-tracking signals. We are aiming for a general graph foundation model (GFM).
 - We want to build our model step-by-step, from ground up and experiment with it to see what works and what does not.
 - We compare our model to baseline models from classical ML.
+- Our current default development and experimenting code is in `src/emotions/`. Ignore gnext code and references.
