@@ -30,7 +30,7 @@ File: `src/data/data_conversion/hci_tagging_conversion.py`
 
 ## 2.2 eSEEd conversion
 
-File: `src/data/data_conversion/eSEED_v2_conversion.py`
+File: `archive/src/data/data_conversion/eSEED_v2_conversion.py`
 
 - Maps merged CSV columns to GFM schema.
 - Adds `time-rel-seconds` from absolute time.

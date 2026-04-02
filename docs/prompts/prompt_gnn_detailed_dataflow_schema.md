@@ -6,7 +6,7 @@ Create a technical dataflow of my eye-tracking ML repository.
 
 Repository anchors:
 - HCI conversion: `src/data/data_conversion/hci_tagging_conversion.py`
-- eSEEd conversion: `src/data/data_conversion/eSEED_v2_conversion.py`
+- eSEEd conversion: `archive/src/data/data_conversion/eSEED_v2_conversion.py`
 - Preprocessing: `src/data/data_preprocess.py`
 - Snapshot builder: `src/emotions/suite/data_snapshot.py`
 - Graph builder: `src/data/data.py` (`SpacioTemporalDataset`)

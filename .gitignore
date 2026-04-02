@@ -8,11 +8,13 @@
 **/.vscode/
 **/.DS_Store
 data/**
+archive/data/**
 notebooks/temp.ipynb
 checkpoints/**
 
 # ignore everything under results by default
 results/**
+archive/results/
 
 # allow git to walk directories under results
 !results/**/

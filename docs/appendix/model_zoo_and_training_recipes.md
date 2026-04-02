@@ -105,7 +105,7 @@ Default wrapper config:
 
 ## 6. Historical predecessor (for context)
 
-`src/gnext/*`:
+`archive/src/gnext/*`:
 - early next-point gaze prediction stack
 - GraphSAGE-centered model (`NextPointGNN`)
 - important for project history, not the current benchmark path

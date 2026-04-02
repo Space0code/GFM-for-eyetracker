@@ -631,6 +631,7 @@ Review of the important stuff - PPT presentation for the AMI meeting on 2. 4. 20
     - version of siamese contrastive learning
         - embed two similar graphs (e.g., consecutive in time or with same label) and push embeddings of those together
         - embed two different graphs (e.g., different subject, different recording) and push embeddings of those apart
+- [ ] use or only compare to encoders listed below (#### Found models; e.g., gazemae, clrgaze)
 
 #### Research of RoPE
 RoPE could maybe be useful since it encodes position and we can define position very simply with time. The natural order of our data is the order in time, which we inherently lose with the graph structure.
@@ -720,3 +721,10 @@ Note: Citation counts are snapshots and may differ by index/database.
 
 
 **Note:** We will need these models/architecture info when we will write the final paper. We will want to compare our model to all or most of the architectures here. Additionally, search for new models at the time of writing the final paper, of course.
+
+### Archiving old files
+- 2026-04-02: We archived legacy `eSEEd_v2` and `gnext` assets into the root `archive/` directory.
+- We kept the original tree structure exactly the same and treated `archive/` as the new root (same relative paths under `archive/`).
+- Archived items include old code, configs, results, conversion/EDA artifacts, legacy visualisation scripts, and related historical analysis files.
+- We intentionally kept active HCI-tagging training/suite pipeline files in their original locations to avoid breaking current work.
+- After moving, we updated key references/defaults so the current HCI workflow still points to active configs and entrypoints.

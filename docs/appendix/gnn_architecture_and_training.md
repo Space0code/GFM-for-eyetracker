@@ -192,7 +192,7 @@ Per fold:
 
 ## 6. Historical predecessor (kept for continuity)
 
-`src/gnext/*` is the predecessor stack:
+`archive/src/gnext/*` is the predecessor stack:
 - task was next-point gaze prediction
 - primary model: `NextPointGNN` (GraphSAGE)
 - this is historical context, not the current emotion benchmark pipeline

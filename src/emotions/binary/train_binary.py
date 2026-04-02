@@ -2,7 +2,7 @@
 Binary classification training script for emotion recognition.
 
 Usage:
-  python src/emotions/binary/train_binary.py --config src/emotions/binary/configs/train_binary.yaml
+  python src/emotions/binary/train_binary.py --config src/emotions/binary/configs/train_binary_hci_tagging.yaml
 """
 
 import os
@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument(
         "--config",
         type=str,
-        default="src/emotions/binary/configs/train_binary.yaml",
+        default="src/emotions/binary/configs/train_binary_hci_tagging.yaml",
         help="Path to binary config YAML file"
     )
     return parser.parse_args()

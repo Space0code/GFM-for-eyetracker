@@ -157,7 +157,7 @@ Binary labels:
 
 ### 3.2 Historical predecessor model
 
-- `src/gnext/`: GraphSAGE next-point gaze prediction prototype (early project phase, predecessor to current emotion inference stack).
+- `archive/src/gnext/`: GraphSAGE next-point gaze prediction prototype (early project phase, predecessor to current emotion inference stack).
 
 ---
 

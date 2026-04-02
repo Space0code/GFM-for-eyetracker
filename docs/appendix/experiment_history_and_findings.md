@@ -6,7 +6,7 @@ This appendix consolidates the chronology from `docs/journal.md` and result arti
 
 | Phase | Evidence anchor | Main focus | Outcome |
 |---|---|---|---|
-| Early `gnext` phase | `src/gnext/*` + `docs/journal.md` | Next-point gaze prediction (GraphSAGE) | Useful trend-learning proof of concept |
+| Early `gnext` phase | `archive/src/gnext/*` + `docs/journal.md` | Next-point gaze prediction (GraphSAGE) | Useful trend-learning proof of concept |
 | eSEEd regression phase | `docs/journal.md` (eSEEd regression sections) | Multi-target emotion regression | Partial signal; poor cross-split robustness |
 | eSEEd binary + cleaning | `docs/journal.md` (binary + cleaning sections) | Binary emotion tasks on eSEEd | GNN collapse discovered; majority often hard to beat |
 | Collapse debugging | `docs/journal.md` (collapse diagnostics) | Embedding/variance diagnostics | Early representation collapse + low-logit-variance regime identified |

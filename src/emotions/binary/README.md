@@ -29,7 +29,7 @@ src/emotions/binary/
 ├── metrics_binary.py           # Binary classification metrics
 ├── train_binary.py             # Main training script
 ├── configs/
-│   └── train_binary.yaml       # Configuration file
+│   └── train_binary_hci_tagging.yaml  # Default HCI-tagging configuration
 └── README.md                   # This file
 ```
 
