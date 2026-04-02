@@ -449,6 +449,90 @@ More references for this dataset than for eSEEd_v2 - more hope :)
 - Pupil left/right consistency is strong (`corr=0.902`), with moderate subject-specific asymmetry outliers (largest mean abs diff: `P28=0.590`).
 - Overall, this HCI emotion data looks much cleaner and more usable than eSEEd_v2 (better label availability and fewer severe preprocessing/pathology issues).
 
+### Dataset paper 
+Link: https://ibug.doc.ic.ac.uk/media/uploads/documents/taffcsi-2010-11-0112-2.pdf
+
+#### Basic info
+| Topic | Verified from paper |
+|---|---|
+| Dataset scope | MAHNOB-HCI contains **two experiments**: (1) emotion recognition from responses to emotional videos, (2) implicit tagging (reaction to correct/incorrect tags). |
+| Number of subjects | `30` recruited; `27` used in paper analysis due technical issues (`P9`, `P12`, `P15`). |
+| Number of recordings (emotion experiment) | Potential `27 x 20 = 540` participant-video responses; `532` usable in their Table 7 setup. |
+| Emotion experiment stimuli | `20` emotional video clips, played in random order, with a short neutral clip before each emotional clip. |
+| Trial timing | About `2.5 min` per trial from trial start to end of self-report. |
+| Self-report questions (per trial) | 5: `emotion label/tag`, `arousal`, `valence`, `dominance`, `predictability`. Questions 2-5 are on a **9-point scale**. |
+| Emotion keywords | `neutral, anxiety, amusement, sadness, joy, disgust, anger, surprise, fear`. |
+| Eye-tracking capture | Tobii X120: projected gaze position, pupil diameter, eye-closed moments, and eye-to-tracker distance; sampled at `60 Hz` (120 Hz described as unstable). |
+| Physiological capture | `ECG, GSR, respiration amplitude, skin temperature` at `1024 Hz`, then downsampled to `256 Hz`. |
+| EEG capture | `32` channels (Biosemi Active II). |
+| Video capture | 6 synchronized face cameras (`780x580` at `60 fps`): 1 color + 5 monochrome. |
+| Neutral segment storage | For each trial, response to the **15-second neutral video** is stored separately. |
+
+#### Paper baseline ML setup (emotion recognition)
+| Item | Verified from paper |
+|---|---|
+| Targets for classification in Table 7 | 3-class arousal and 3-class valence derived from **keyword feedback** via Table 6 mapping (based on [14]). |
+| CV split | Participant-independent **leave-one-participant-out** CV. |
+| Preprocessing | Per-participant min-max feature normalization to `[0, 1]`. |
+| Feature selection | One-way ANOVA on train fold; drop features with `p > 0.05`. |
+| Classifier | libSVM `SVM` with `RBF` kernel, `C=1`, gamma searched in `[0.01, 10]` using 20-fold CV on training set. |
+| Modalities used | Peripheral physiology, EEG, eye gaze, and decision-level fusion (EEG + eye gaze). |
+| Feature counts used | Peripheral physiology: `102`, EEG: `216`, eye gaze: `38`. |
+
+#### Table 5: what "eye gaze" encapsulates in the paper
+The paper's eye-gaze modality is not just `(x, y)` positions. It is a handcrafted feature set with **38 features** in total:
+
+| Eye-gaze channel | #features | What is captured |
+|---|---|---|
+| Pupil diameter | `6` | Mean, standard deviation, and spectral power in low-frequency pupil-oscillation bands. |
+| Gaze distance | `4` | Approach-time ratio, avoidance-time ratio, approach rate, average approach time (distance-to-screen dynamics). |
+| Eye blinking | `4` | Blink depth, blink rate, longest blink duration, total time with eyes closed. |
+| Gaze coordinates (horizontal + vertical) | `24` | Distribution stats (`SD`, skewness, kurtosis), fixation/scan behavior (average fixation time, scan-path length, normalized fixation-zone count), spectral-power descriptors of gaze motion, and dispersion stats within fixation zones. |
+
+***Note***: They use these features for emotion classification only! For image/video tagging they use other features.
+
+#### Table 6 mapping used in the paper
+- Arousal classes:
+    - Calm -> sadness, disgust, neutral
+    - Medium arousal -> joy and happiness, amusement
+    - Excited/Activated -> surprise, fear, anger, anxiety
+- Valence classes:
+    - Unpleasant -> fear, anger, disgust, sadness, anxiety
+    - Neutral valence -> surprise, neutral
+    - Pleasant -> joy and happiness, amusement
+
+#### Table 7 results we should know
+| Modality | Arousal accuracy | Valence accuracy | Arousal F1 | Valence F1 |
+|---|---|---|---|---|
+| Peripheral physiology | 46.2% | 45.5% | 0.38 | 0.39 |
+| EEG | 52.4% | 57.0% | 0.42 | 0.56 |
+| **Eye gaze** | **63.5%** | **68.8%** | **0.60** | **0.68** |
+| Fusion (EEG + eye gaze) | 67.7% | 76.1% | 0.62 | 0.74 |
+| Random (uniform) | 33.3% | 33.3% | 0.36 | 0.34 |
+| Random (weighted) | 35.8% | 34.4% | 0.33 | 0.33 |
+
+#### Fig. 6 (ET baseline only): what was classified and how
+- **Task type**: multiclass classification (not binary), done in two separate schemes:
+    - 3-class arousal: calm / medium aroused / activated.
+    - 3-class valence: unpleasant / neutral valence / pleasant.
+- **Labels**: keyword-based participant feedback mapped via Table 6.
+- **Input for ET baseline**: the 38 handcrafted eye-gaze features (Table 5).
+- **Model for ET baseline**: RBF SVM (libSVM), participant-independent leave-one-participant-out CV.
+- **What Fig. 6 shows for ET**: class-wise F1 bars for the 3 arousal classes + 3 valence classes, plus average arousal/valence F1 bars.
+- **What is not explicitly specified in the paper**:
+    - exact numeric class-wise F1 values underlying each Fig. 6 bar (only plotted, not tabulated),
+    - exact averaging definition for the "Average arousal/valence" F1 in Fig. 6 (e.g., macro vs weighted),
+    - multiclass reduction details inside SVM (one-vs-one vs one-vs-rest).
+
+#### Notes for our experiments
+- Be explicit whether we train on:
+    - numeric ratings (`1-9`) for arousal/valence/dominance/predictability, or
+    - keyword-derived 3-class targets from Table 6.
+- If we compare against paper baselines, the fairest protocol is:
+    - leave-one-participant-out,
+    - per-participant min-max normalization,
+    - ANOVA feature selection,
+    - RBF SVM.
 
 ### Binary classifications
 First, we will test the dataset with simple binary classification problems.
@@ -507,24 +591,45 @@ Key findings:
 - `kt/ks` grid had very small effects; edge weights and target aggregation (`mean` vs `last`) were effectively no-change in this setup.
 - Depth is sensitive: 3-10 layers helped valence in some runs; 5 layers (and especially 50 for valence) could degrade performance noticeably.
 
-
 ### Review of work so far and definition of the next steps
 
 #### Next steps
-[ ] Make mean_max pooling (concat results of mean pool and max pool) the new default. Reason: It holds at least as much information as mean/max pooling alone and does not slow down training significantly.
-[ ] Try new features
+- [ ] prepare subject and recording k-fold for fast iterations (use subject 5-fold by default)
+- [ ] Visualise classified against true values datapoints (by coordinates and pupil size). Maybe try 4 colors: TP, FP, TN, FN
+- [ ] Make `mean_max` pooling (concat results of mean pool and max pool) the new default. Reason: It holds at least as much information as mean/max pooling alone and does not slow down training significantly.
+- [ ] Try HCI-tagging `Table 6` keyword-to-class mappings as classification targets and compare results to paper's (see `#### Table 7 results we should know` above). Mappings:
+    - Arousal classes:
+        - Calm -> sadness, disgust, neutral
+        - Medium arousal -> joy and happiness, amusement
+        - Excited/Activated -> surprise, fear, anger, anxiety
+    - Valence classes:
+        - Unpleasant -> fear, anger, disgust, sadness, anxiety
+        - Neutral valence -> surprise, neutral
+        - Pleasant -> joy and happiness, amusement
+- [ ] edges ablation study
+    - temporal/spatial edges only
+    - weights on/off
+    - additional weights
+- [ ] try different lenghts of window for segmentation
+- [ ] Try new features
     - derivatives
-[ ] Research RoPE and try it out if it seems reasonable.
-[ ] Virtual node
+- [ ] try weighted aggregation of temporal and spatial encodings (inside GNN)
+- [ ] Research RoPE and try it out if it seems reasonable.
+    - turns out you should try PE/SE first, RoPE is for transformers
+- [ ] Virtual node
     - for each fixation, artificially create a node and in this way do "aggregate in 3D" - you first aggregate within fixations, then aggregate those fixations together
     - you can try the same for the line graph (edges are nodes), where you aggregate saccades (first the nodes in the line graph that belong together to one saccade, then aggregate these new nodes further)
-[ ] Modular approach
+- [ ] Modular approach
     - separately handle fixations from the regular graph and saccades from the line graph
 
-[] try to compute embeddings with the graph in a self-supervised way (SSL) and use this in an MLP for classification and train end-to-end
+- [ ] try to compute embeddings with the graph in a self-supervised way (SSL) and use this in an MLP for classification and train end-to-end
     - (we are already doing end-to-end, but not SSL)
     - you can do this modularly - multiple parallel graphs (fix., sac., blinks (it does not necessarily need to be a graph)) -> multiple parallel embeddings -> early fusion before the MLP classifier
-[ ] in addition to Recording LOO and Subject LOO, implement: train on history, test on future (within subject)
+- [ ] in addition to Recording LOO and Subject LOO, implement: train on history, test on future (within subject)
+- [ ] try SSL
+    - version of siamese contrastive learning
+        - embed two similar graphs (e.g., consecutive in time or with same label) and push embeddings of those together
+        - embed two different graphs (e.g., different subject, different recording) and push embeddings of those apart
 
 #### Research of RoPE
 RoPE could maybe be useful since it encodes position and we can define position very simply with time. The natural order of our data is the order in time, which we inherently lose with the graph structure.
