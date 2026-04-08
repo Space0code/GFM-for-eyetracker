@@ -49,7 +49,7 @@ def split_group_tokens(
     combined_id_style: CombinedIdStyle = "pipe",
 ) -> Tuple[str, ...]:
     """Build canonical strategy-dependent tokens used for split signatures."""
-    if strategy == "subject_loo":
+    if strategy in {"subject_loo", "subject_kfold"}:
         return tuple(sorted({_subject_recording_token(dataset, int(i))[0] for i in indices}))
 
     if strategy in {"recording_loo", "recording_kfold"}:
@@ -82,6 +82,14 @@ def describe_fold(
             test_id=f"s_{'_'.join(subjects)}",
             test_name=f"Subjects {', '.join(subjects)}",
             fold_key=("subject_loo", subjects),
+        )
+
+    if strategy == "subject_kfold":
+        subjects = split_group_tokens(strategy=strategy, dataset=dataset, indices=test_idx)
+        return FoldIdentity(
+            test_id=f"skf_{fold_num}_{'_'.join(subjects)}",
+            test_name=f"SubjectKFold {fold_num} | Test subjects {', '.join(subjects)}",
+            fold_key=("subject_kfold", subjects),
         )
 
     if strategy == "recording_loo":
@@ -127,6 +135,93 @@ def describe_fold(
         test_name=f"Fold {fold_num}",
         fold_key=(str(strategy), (str(fold_num),)),
     )
+
+
+def _assert_pairwise_disjoint(
+    a: Tuple[str, ...],
+    b: Tuple[str, ...],
+    a_name: str,
+    b_name: str,
+    *,
+    strategy: str,
+    fold_num: int,
+    dataset_label: str,
+    token_label: str,
+) -> None:
+    overlap = sorted(set(a).intersection(b))
+    if overlap:
+        overlap_text = ", ".join(overlap[:10])
+        suffix = " ..." if len(overlap) > 10 else ""
+        raise ValueError(
+            f"{dataset_label} fold {fold_num} with strategy '{strategy}' has overlapping "
+            f"{token_label} between {a_name} and {b_name}: {overlap_text}{suffix}. "
+            "Expected disjoint groups across train/val/test."
+        )
+
+
+def validate_kfold_group_disjointness(
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    strategy: str,
+    dataset: Sequence[Any],
+    dataset_label: str,
+    combined_id_style: CombinedIdStyle = "pipe",
+) -> None:
+    """Fail fast when k-fold train/val/test sets overlap on split-defining groups."""
+    if strategy not in {"subject_kfold", "recording_kfold"}:
+        return
+
+    token_label = "subjects" if strategy == "subject_kfold" else "recordings"
+
+    for fold_num, (train_idx, val_idx, test_idx) in enumerate(splits):
+        train_tokens = split_group_tokens(
+            strategy=strategy,
+            dataset=dataset,
+            indices=train_idx,
+            combined_id_style=combined_id_style,
+        )
+        val_tokens = split_group_tokens(
+            strategy=strategy,
+            dataset=dataset,
+            indices=val_idx,
+            combined_id_style=combined_id_style,
+        )
+        test_tokens = split_group_tokens(
+            strategy=strategy,
+            dataset=dataset,
+            indices=test_idx,
+            combined_id_style=combined_id_style,
+        )
+
+        _assert_pairwise_disjoint(
+            train_tokens,
+            val_tokens,
+            "train",
+            "val",
+            strategy=strategy,
+            fold_num=fold_num,
+            dataset_label=dataset_label,
+            token_label=token_label,
+        )
+        _assert_pairwise_disjoint(
+            train_tokens,
+            test_tokens,
+            "train",
+            "test",
+            strategy=strategy,
+            fold_num=fold_num,
+            dataset_label=dataset_label,
+            token_label=token_label,
+        )
+        _assert_pairwise_disjoint(
+            val_tokens,
+            test_tokens,
+            "val",
+            "test",
+            strategy=strategy,
+            fold_num=fold_num,
+            dataset_label=dataset_label,
+            token_label=token_label,
+        )
 
 
 def build_split_entries(

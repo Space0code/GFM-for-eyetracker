@@ -52,8 +52,36 @@ def test_recording_kfold_has_no_recording_leakage() -> None:
         test_recordings = {samples[int(i)].recording for i in test_idx}
 
         assert len(test_recordings) >= 1
+        assert train_recordings.isdisjoint(val_recordings)
         assert train_recordings.isdisjoint(test_recordings)
         assert val_recordings.isdisjoint(test_recordings)
+
+
+def test_subject_kfold_has_no_subject_leakage() -> None:
+    samples = []
+    for subject in ["P1", "P2", "P3", "P4", "P5", "P6"]:
+        for recording in ["r1", "r2"]:
+            samples.append(SimpleNamespace(subject=subject, recording=recording))
+
+    splitter = create_splitter(
+        strategy="subject_kfold",
+        samples=samples,
+        val_size=1,
+        random_state=42,
+        n_splits=3,
+    )
+    splits = list(splitter.split())
+    assert len(splits) == 3
+
+    for train_idx, val_idx, test_idx in splits:
+        train_subjects = {samples[int(i)].subject for i in train_idx}
+        val_subjects = {samples[int(i)].subject for i in val_idx}
+        test_subjects = {samples[int(i)].subject for i in test_idx}
+
+        assert len(test_subjects) >= 1
+        assert train_subjects.isdisjoint(val_subjects)
+        assert train_subjects.isdisjoint(test_subjects)
+        assert val_subjects.isdisjoint(test_subjects)
 
 
 def test_gnn_depth_pooling_output_shape_stays_consistent() -> None:

@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from emotions.common.cv_utils import build_split_entries, describe_fold
+from emotions.common.cv_utils import (
+    build_split_entries,
+    describe_fold,
+    validate_kfold_group_disjointness,
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,18 @@ def test_describe_fold_subject_loo_is_stable_and_sorted() -> None:
     assert fold.test_id == "s_P1_P2"
     assert fold.test_name == "Subjects P1, P2"
     assert fold.fold_key == ("subject_loo", ("P1", "P2"))
+
+
+def test_describe_fold_subject_kfold_includes_fold_index() -> None:
+    fold = describe_fold(
+        strategy="subject_kfold",
+        dataset=_samples(),
+        test_idx=np.asarray([0, 2], dtype=int),
+        fold_num=2,
+    )
+
+    assert fold.test_id == "skf_2_P1_P2"
+    assert fold.fold_key == ("subject_kfold", ("P1", "P2"))
 
 
 def test_describe_fold_recording_kfold_sanitizes_path_separators() -> None:
@@ -65,3 +81,25 @@ def test_build_split_entries_generates_split_signatures() -> None:
     assert len(entries) == 1
     assert entries[0]["test_id"] == "sr_P2|rec/2"
     assert entries[0]["split_signature"][0] == ("P1|rec/3", "P2|rec/2")
+
+
+def test_validate_kfold_group_disjointness_detects_overlap() -> None:
+    splits = [
+        (
+            np.asarray([0, 1], dtype=int),  # subjects: P1, P2
+            np.asarray([2], dtype=int),     # subject: P1 (overlap)
+            np.asarray([0], dtype=int),     # subject: P2
+        )
+    ]
+
+    try:
+        validate_kfold_group_disjointness(
+            splits=splits,
+            strategy="subject_kfold",
+            dataset=_samples(),
+            dataset_label="TestDataset",
+        )
+    except ValueError as exc:
+        assert "overlapping subjects" in str(exc)
+    else:  # pragma: no cover - explicit failure branch
+        raise AssertionError("Expected overlap detection for subject_kfold.")

@@ -43,6 +43,7 @@ if __package__ in {None, ""}:
 from data.data import SpacioTemporalDataset
 from emotions.common.cv_utils import (
     describe_fold,
+    validate_kfold_group_disjointness,
     validate_non_empty_train_splits,
 )
 from emotions.common.dataset_config import (
@@ -85,6 +86,21 @@ def _validate_non_empty_train_splits(
         splits=splits,
         strategy=strategy,
         dataset_label=dataset_label,
+    )
+
+
+def _validate_kfold_group_disjointness(
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    strategy: str,
+    dataset: List[Any],
+    dataset_label: str,
+) -> None:
+    validate_kfold_group_disjointness(
+        splits=splits,
+        strategy=strategy,
+        dataset=dataset,
+        dataset_label=dataset_label,
+        combined_id_style="underscore",
     )
 
 
@@ -244,7 +260,7 @@ def _train_gnn_fold(
         aggr=model_cfg.get("aggr", "mean"),
         conv_type=model_cfg.get("conv_type", "GCNConv"),
         num_layers=model_cfg.get("num_layers", 2),
-        pooling=model_cfg.get("pooling", "mean"),
+        pooling=model_cfg.get("pooling", "mean_max"),
     ).to(device)
 
     use_compile = training_cfg.get("use_torch_compile", True)
@@ -632,14 +648,38 @@ def run_training_from_config(config_path: str) -> str:
                 gnn_splits = list(gnn_splitter.split())
                 _validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
                 _validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                _validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
+                _validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 num_folds = len(baseline_splits)
             elif baseline_splitter is not None:
                 baseline_splits = list(baseline_splitter.split())
                 _validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+                _validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
                 num_folds = len(baseline_splits)
             else:
                 gnn_splits = list(gnn_splitter.split())
                 _validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                _validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 num_folds = len(gnn_splits)
 
             for fold_num in range(num_folds):

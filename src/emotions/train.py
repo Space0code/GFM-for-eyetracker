@@ -225,6 +225,10 @@ def main():
                 test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
                 test_id = f"s_{'_'.join(map(str, test_subjects))}"
                 test_name = f"Subjects {', '.join(map(str, test_subjects))}"
+            elif strategy == "subject_kfold":
+                test_subjects = sorted(set(reference_dataset[i].subject for i in ref_test_idx))
+                test_id = f"skf_{fold_num}_{'_'.join(map(str, test_subjects))}"
+                test_name = f"SubjectKFold {fold_num} | Test subjects {', '.join(map(str, test_subjects))}"
             elif strategy == 'recording_loo':
                 test_recordings = sorted(set(reference_dataset[i].recording for i in ref_test_idx))
                 test_id = f"r_{'_'.join(map(str, test_recordings))}"

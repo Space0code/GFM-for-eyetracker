@@ -171,7 +171,8 @@ def load_and_normalize_wrapper_config(config_path: str) -> Dict[str, Any]:
     cv_cfg = global_overrides.setdefault("cross_validation", {})
     if not isinstance(cv_cfg, dict):
         raise WrapperConfigError("global_overrides.cross_validation must be a dictionary.")
-    cv_cfg.setdefault("strategies", ["recording_loo"])
+    cv_cfg.setdefault("strategies", ["subject_kfold"])
+    cv_cfg.setdefault("n_splits", 5)
 
     raw_experiments = raw.get("experiments")
     if raw_experiments is None:
