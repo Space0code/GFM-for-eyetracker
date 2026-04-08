@@ -39,6 +39,7 @@ if __package__ in {None, ""}:
 from data.data import SpacioTemporalDataset
 from emotions.common.cv_utils import (
     describe_fold,
+    validate_kfold_group_disjointness,
     validate_non_empty_train_splits,
 )
 from emotions.common.dataset_config import (
@@ -112,6 +113,21 @@ def _validate_non_empty_train_splits(
     )
 
 
+def _validate_kfold_group_disjointness(
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    strategy: str,
+    dataset: List[Any],
+    dataset_label: str,
+) -> None:
+    validate_kfold_group_disjointness(
+        splits=splits,
+        strategy=strategy,
+        dataset=dataset,
+        dataset_label=dataset_label,
+        combined_id_style="underscore",
+    )
+
+
 def _fit_graph_feature_scaler(
     dataset: SpacioTemporalDataset,
     train_idx: np.ndarray,
@@ -123,6 +139,48 @@ def _fit_graph_feature_scaler(
     scaler = StandardScaler()
     scaler.fit(np.vstack(arrays))
     return scaler
+
+
+def _normalize_int_mapping(raw_mapping: Any, mapping_name: str) -> Dict[int, int]:
+    """Normalize arbitrary mapping keys/values to integer->integer mapping."""
+    if not isinstance(raw_mapping, dict):
+        raise ValueError(f"{mapping_name} must be a dictionary.")
+
+    normalized: Dict[int, int] = {}
+    for raw_key, raw_value in raw_mapping.items():
+        try:
+            key = int(raw_key)
+            value = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{mapping_name} keys/values must be integers. Got ({raw_key!r}, {raw_value!r})."
+            ) from exc
+        normalized[key] = value
+    return normalized
+
+
+def _resolve_table6_enable_flag(
+    multiclass_task_cfg: Dict[str, Any],
+    dataset_cfg: Dict[str, Any],
+) -> bool:
+    """Resolve explicit Table-6 mode flag from task config or YAML spec default."""
+    explicit_flag = multiclass_task_cfg.get("use_table6_3class_targets")
+    if explicit_flag is not None:
+        return bool(explicit_flag)
+
+    spec_path = dataset_cfg.get("label_mapping_spec_path")
+    if not isinstance(spec_path, str) or not spec_path.strip():
+        return False
+
+    path = Path(spec_path)
+    if not path.exists():
+        return False
+
+    with path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    if not isinstance(payload, dict):
+        return False
+    return bool(payload.get("use_table6_3class_targets", False))
 
 
 def _resolve_task_definition(
@@ -169,8 +227,55 @@ def _resolve_task_definition(
             "raw_label_names": raw_label_names,
         }
 
+    if task_name in {"table6-arousal-3class", "table6-valence-3class"}:
+        enabled = _resolve_table6_enable_flag(
+            multiclass_task_cfg=multiclass_task_cfg,
+            dataset_cfg=dataset_cfg,
+        )
+        if not enabled:
+            raise ValueError(
+                "Table-6 multiclass task requested but disabled. "
+                "Set multiclass_task.use_table6_3class_targets=true or set "
+                "use_table6_3class_targets: true in the YAML spec."
+            )
+
+        target_column = str(multiclass_task_cfg.get("target_column", "emotion-id"))
+        table6_mapping = _normalize_int_mapping(
+            raw_mapping=multiclass_task_cfg.get("table6_class_mapping"),
+            mapping_name="multiclass_task.table6_class_mapping",
+        )
+
+        raw_label_names = resolve_multiclass_label_name_mapping(
+            multiclass_task_cfg=multiclass_task_cfg,
+            dataset_cfg=dataset_cfg,
+        )
+        if not raw_label_names:
+            if task_name == "table6-arousal-3class":
+                raw_label_names = {
+                    0: "Calm",
+                    1: "Medium arousal",
+                    2: "Excited/Activated",
+                }
+            else:
+                raw_label_names = {
+                    0: "Unpleasant",
+                    1: "Neutral valence",
+                    2: "Pleasant",
+                }
+
+        return {
+            "mode": "table6-3class",
+            "task_name": task_name,
+            "target_columns": [target_column],
+            "target_column": target_column,
+            "table6_class_mapping": table6_mapping,
+            "drop_unmapped_labels": bool(multiclass_task_cfg.get("drop_unmapped_labels", True)),
+            "raw_label_names": raw_label_names,
+        }
+
     raise ValueError(
-        "Unsupported multiclass task_name. Supported: emotion-id, va-quadrant"
+        "Unsupported multiclass task_name. Supported: emotion-id, va-quadrant, "
+        "table6-arousal-3class, table6-valence-3class"
     )
 
 
@@ -214,7 +319,7 @@ def _resolve_fold_context(task_def: Dict[str, Any], train_raw_targets: np.ndarra
     if train_raw_targets.size == 0:
         raise ValueError("Cannot resolve fold label context with empty train targets.")
 
-    if task_def["mode"] == "emotion-id":
+    if task_def["mode"] in {"emotion-id", "table6-3class"}:
         return {}
 
     valence_train = train_raw_targets[:, 0]
@@ -231,6 +336,12 @@ def _raw_to_label(task_def: Dict[str, Any], raw_values: np.ndarray, fold_context
     if task_def["mode"] == "emotion-id":
         labels = np.asarray(raw_values[:, 0], dtype=float)
         return np.asarray(np.round(labels), dtype=int)
+
+    if task_def["mode"] == "table6-3class":
+        emotion_ids = np.asarray(np.round(raw_values[:, 0]), dtype=int)
+        mapping = task_def["table6_class_mapping"]
+        mapped = np.asarray([int(mapping.get(int(value), -1)) for value in emotion_ids], dtype=int)
+        return mapped
 
     valence = np.asarray(raw_values[:, 0], dtype=float)
     arousal = np.asarray(raw_values[:, 1], dtype=float)
@@ -280,7 +391,14 @@ def _build_graph_subset(
             raw_values=np.asarray([raw], dtype=float),
             fold_context=fold_context,
         )
-        encoded = _encode_labels(raw_labels, class_to_index=class_to_index)
+        raw_label = int(raw_labels[0])
+        if raw_label < 0 and task_def.get("drop_unmapped_labels", False):
+            continue
+        if raw_label < 0:
+            raise ValueError(
+                "Encountered unmapped label in table6 mode with drop_unmapped_labels=false."
+            )
+        encoded = _encode_labels(np.asarray([raw_label], dtype=int), class_to_index=class_to_index)
         graph.y = torch.tensor(encoded[0], dtype=torch.long)
 
         if scaler is not None:
@@ -289,6 +407,11 @@ def _build_graph_subset(
 
         graphs.append(graph)
 
+    if not graphs:
+        raise ValueError(
+            "Graph split became empty after label mapping/drop filtering. "
+            "Check table6_class_mapping coverage and fold composition."
+        )
     return graphs
 
 
@@ -407,7 +530,7 @@ def _train_gnn_fold(
         aggr=model_cfg.get("aggr", "mean"),
         conv_type=model_cfg.get("conv_type", "GCNConv"),
         num_layers=model_cfg.get("num_layers", 2),
-        pooling=model_cfg.get("pooling", "mean"),
+        pooling=model_cfg.get("pooling", "mean_max"),
     ).to(device)
 
     use_compile = training_cfg.get("use_torch_compile", True)
@@ -552,6 +675,17 @@ def _prepare_baseline_split(
         raise ValueError("Baseline split became empty after NaN filtering.")
 
     raw_labels = _raw_to_label(task_def=task_def, raw_values=raw_target_np, fold_context=fold_context)
+    if task_def.get("drop_unmapped_labels", False):
+        keep_mask = raw_labels >= 0
+        X = X.loc[keep_mask].reset_index(drop=True)
+        raw_labels = raw_labels[keep_mask]
+        metadata = [meta for meta, keep in zip(metadata, keep_mask.tolist()) if keep]
+    if len(X) == 0:
+        raise ValueError(
+            "Baseline split became empty after label mapping/drop filtering. "
+            "Check table6_class_mapping coverage and fold composition."
+        )
+
     encoded_labels = _encode_labels(raw_labels=raw_labels, class_to_index=class_to_index)
     return X, encoded_labels, metadata
 
@@ -766,8 +900,24 @@ def run_training_from_config(config_path: str) -> str:
 
         if task_def["mode"] == "emotion-id":
             unique_labels = sorted(np.unique(np.round(raw_all[:, 0]).astype(int)).tolist())
-        else:
+        elif task_def["mode"] == "va-quadrant":
             unique_labels = [0, 1, 2, 3]
+        elif task_def["mode"] == "table6-3class":
+            mapped = _raw_to_label(
+                task_def=task_def,
+                raw_values=raw_all,
+                fold_context={},
+            )
+            if task_def.get("drop_unmapped_labels", False):
+                mapped = mapped[mapped >= 0]
+            if mapped.size == 0:
+                raise ValueError(
+                    "No mapped labels remain for table6 task. "
+                    "Check table6_class_mapping and filtered dataset scope."
+                )
+            unique_labels = sorted(np.unique(mapped.astype(int)).tolist())
+        else:
+            raise ValueError(f"Unsupported task mode: {task_def['mode']}")
 
         class_to_index = {int(label): idx for idx, label in enumerate(unique_labels)}
         class_labels = list(range(len(unique_labels)))
@@ -782,7 +932,13 @@ def run_training_from_config(config_path: str) -> str:
 
         class_metadata = {
             "task_name": task_def["task_name"],
+            "mode": task_def["mode"],
             "target_columns": task_def["target_columns"],
+            "drop_unmapped_labels": bool(task_def.get("drop_unmapped_labels", False)),
+            "table6_class_mapping": {
+                int(raw): int(mapped)
+                for raw, mapped in task_def.get("table6_class_mapping", {}).items()
+            },
             "class_to_index": {int(raw): int(index) for raw, index in class_to_index.items()},
             "index_to_raw_label": {int(index): int(raw) for raw, index in class_to_index.items()},
             "index_to_name": {int(index): str(name) for index, name in class_display_names.items()},
@@ -845,14 +1001,38 @@ def run_training_from_config(config_path: str) -> str:
                 gnn_splits = list(gnn_splitter.split())
                 _validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
                 _validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                _validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
+                _validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 num_folds = len(baseline_splits)
             elif baseline_splitter is not None:
                 baseline_splits = list(baseline_splitter.split())
                 _validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+                _validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
                 num_folds = len(baseline_splits)
             else:
                 gnn_splits = list(gnn_splitter.split())
                 _validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                _validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 num_folds = len(gnn_splits)
 
             for fold_num in range(num_folds):

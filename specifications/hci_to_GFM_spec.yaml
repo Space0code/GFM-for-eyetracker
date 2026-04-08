@@ -69,6 +69,10 @@ experiment_type_map:
   "image tagging 1": "image-tagging-1"
   "image tagging 2": "image-tagging-2"
 
+# Global default flag for Table-6 three-class targets in multiclass experiments.
+# Trainers can override this via experiment config.
+use_table6_3class_targets: false
+
 # Shared output columns guaranteed across all HCI experiment types.
 shared_output_columns:
   - subject

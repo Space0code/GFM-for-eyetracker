@@ -76,6 +76,18 @@ def resolve_multiclass_label_name_mapping(
     task_name = str(multiclass_task_cfg.get("task_name", "emotion-id")).strip().lower().replace("_", "-")
     if task_name in {"va-quadrant", "va-quadrants", "va-quadrant-4", "va-quadrant4"}:
         return {0: "LL", 1: "LH", 2: "HL", 3: "HH"}
+    if task_name == "table6-arousal-3class":
+        return {
+            0: "Calm",
+            1: "Medium arousal",
+            2: "Excited/Activated",
+        }
+    if task_name == "table6-valence-3class":
+        return {
+            0: "Unpleasant",
+            1: "Neutral valence",
+            2: "Pleasant",
+        }
 
     dataset_cfg = dataset_cfg or {}
     spec_path = multiclass_task_cfg.get("class_name_spec_path") or dataset_cfg.get(

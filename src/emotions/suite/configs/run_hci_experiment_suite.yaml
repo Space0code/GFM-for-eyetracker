@@ -18,8 +18,9 @@ suite:
 global_overrides:
   cross_validation:
     strategies: 
-      - "recording_loo"
-      - "subject_loo"
+      - "subject_kfold"
+      # - "recording_kfold"
+    n_splits: 5
     val_size: 1
     random_state: 42
   gnn:
@@ -132,6 +133,54 @@ experiments:
     thresholds:
       valence: mean
       arousal: mean
+
+  multiclass_table6_arousal_3class:
+    enabled: false
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-arousal-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Calm
+      1: Medium arousal
+      2: Excited/Activated
+    table6_class_mapping:
+      0: 0   # Neutral -> Calm
+      1: 2   # Anger -> Excited
+      2: 0   # Disgust -> Calm
+      3: 2   # Fear -> Excited
+      4: 1   # Joy/Happiness -> Medium
+      5: 0   # Sadness -> Calm
+      6: 2   # Surprise -> Excited
+      11: 1  # Amusement -> Medium
+      12: 2  # Anxiety -> Excited
+
+  multiclass_table6_valence_3class:
+    enabled: false
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-valence-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Unpleasant
+      1: Neutral valence
+      2: Pleasant
+    table6_class_mapping:
+      0: 1   # Neutral -> Neutral
+      1: 0   # Anger -> Unpleasant
+      2: 0   # Disgust -> Unpleasant
+      3: 0   # Fear -> Unpleasant
+      4: 2   # Joy/Happiness -> Pleasant
+      5: 0   # Sadness -> Unpleasant
+      6: 1   # Surprise -> Neutral
+      11: 2  # Amusement -> Pleasant
+      12: 0  # Anxiety -> Unpleasant
 
   regression_emotion_valence:
     enabled: false

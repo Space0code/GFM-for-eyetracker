@@ -97,6 +97,8 @@ def _required_target_columns(task_type: str, experiment_cfg: Dict[str, Any]) -> 
     task_name = str(experiment_cfg.get("task_name", "emotion-id")).strip().lower().replace("_", "-")
     if task_name in {"emotion-id", "feltemo"}:
         return [str(experiment_cfg.get("target_column", "emotion-id"))]
+    if task_name in {"table6-arousal-3class", "table6-valence-3class"}:
+        return [str(experiment_cfg.get("target_column", "emotion-id"))]
 
     # VA quadrant multiclass
     target_columns = experiment_cfg.get("target_columns") or ["emotion-valence", "emotion-arousal"]
@@ -119,6 +121,16 @@ def _threshold_description(task_type: str, experiment_cfg: Dict[str, Any]) -> Di
             "task_type": task_type,
             "task_name": "emotion-id",
             "target_column": experiment_cfg.get("target_column", "emotion-id"),
+        }
+
+    if task_name in {"table6-arousal-3class", "table6-valence-3class"}:
+        return {
+            "task_type": task_type,
+            "task_name": task_name,
+            "target_column": experiment_cfg.get("target_column", "emotion-id"),
+            "table6_class_mapping": experiment_cfg.get("table6_class_mapping", {}),
+            "drop_unmapped_labels": bool(experiment_cfg.get("drop_unmapped_labels", True)),
+            "use_table6_3class_targets": bool(experiment_cfg.get("use_table6_3class_targets", False)),
         }
 
     return {
@@ -165,7 +177,14 @@ def _apply_task_to_trainer_config(
             trainer_config["multiclass_task"]["thresholds"] = experiment_cfg["thresholds"]
         if "threshold" in experiment_cfg:
             trainer_config["multiclass_task"]["threshold"] = experiment_cfg["threshold"]
-        for key in ["class_name_mapping", "class_name_spec_path", "class_name_spec_key"]:
+        for key in [
+            "class_name_mapping",
+            "class_name_spec_path",
+            "class_name_spec_key",
+            "table6_class_mapping",
+            "drop_unmapped_labels",
+            "use_table6_3class_targets",
+        ]:
             if key in experiment_cfg:
                 trainer_config["multiclass_task"][key] = experiment_cfg[key]
         return

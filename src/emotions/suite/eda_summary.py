@@ -161,6 +161,33 @@ def _derive_final_labels(
             }
             return labels, details
 
+        if task_name in {"table6-arousal-3class", "table6-valence-3class"}:
+            target_column = experiment_cfg.get("target_column", "emotion-id")
+            raw_emotion_ids = pd.to_numeric(snapshot_df[target_column], errors="coerce")
+            mapping_raw = experiment_cfg.get("table6_class_mapping", {})
+            if not isinstance(mapping_raw, dict):
+                raise ValueError("table6_class_mapping must be a dictionary.")
+
+            mapping: Dict[int, int] = {}
+            for raw_key, raw_value in mapping_raw.items():
+                mapping[int(raw_key)] = int(raw_value)
+
+            mapped_values = raw_emotion_ids.map(lambda value: mapping.get(int(value), np.nan) if pd.notna(value) else np.nan)
+            drop_unmapped = bool(experiment_cfg.get("drop_unmapped_labels", True))
+            if drop_unmapped:
+                labels = mapped_values.dropna().astype(int)
+            else:
+                labels = mapped_values.fillna(-1).astype(int)
+
+            details = {
+                "task_name": task_name,
+                "target_column": target_column,
+                "drop_unmapped_labels": drop_unmapped,
+                "table6_class_mapping": mapping,
+                "num_unmapped_dropped": int(mapped_values.isna().sum()) if drop_unmapped else 0,
+            }
+            return labels, details
+
         # VA quadrant multiclass
         source_columns = experiment_cfg.get("target_columns") or ["emotion-valence", "emotion-arousal"]
         if len(source_columns) != 2:

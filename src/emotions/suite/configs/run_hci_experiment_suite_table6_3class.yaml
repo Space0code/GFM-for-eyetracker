@@ -1,0 +1,95 @@
+# Wrapper config focused on Table-6 three-class multiclass experiments.
+#
+# Usage:
+#   python src/emotions/suite/run_hci_experiment_suite.py \
+#       --config src/emotions/suite/configs/run_hci_experiment_suite_table6_3class.yaml
+
+suite:
+  results_dir: "results/suite"
+  snapshot_cache_dir: "results/_snapshot_cache"
+  seed: 42
+  source_data_root: "data/processed/hci-tagging"
+  base_configs:
+    binary: "src/emotions/binary/configs/train_binary_hci_tagging.yaml"
+    multiclass: "src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml"
+    regression: "src/emotions/regression/configs/train_regression_hci_tagging.yaml"
+
+global_overrides:
+  cross_validation:
+    strategies:
+      - "subject_kfold"
+    n_splits: 5
+    val_size: 1
+    random_state: 42
+  gnn:
+    model:
+      pooling: mean_max
+      num_layers: 10
+    training:
+      early_stopping_enabled: true
+      early_stopping_patience: 7
+      early_stopping_min_delta: 0.0
+      early_stopping_restore_best: true
+  dataset:
+    use_cache: true
+    label_mapping_spec_path: "specifications/hci_to_GFM_spec.yaml"
+    kt: 2
+    ks: 2
+    use_edge_weights: true
+    filter_subjects: null
+    filter_recordings: null
+    target_aggregation: mean
+    signal_outlier_filter:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+      columns: [x-avg, y-avg, pupil-size-left-avg, pupil-size-right-avg]
+
+experiments:
+  multiclass_table6_arousal_3class:
+    enabled: true
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-arousal-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Calm
+      1: Medium arousal
+      2: Excited/Activated
+    table6_class_mapping:
+      0: 0
+      1: 2
+      2: 0
+      3: 2
+      4: 1
+      5: 0
+      6: 2
+      11: 1
+      12: 2
+
+  multiclass_table6_valence_3class:
+    enabled: true
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-valence-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Unpleasant
+      1: Neutral valence
+      2: Pleasant
+    table6_class_mapping:
+      0: 1
+      1: 0
+      2: 0
+      3: 0
+      4: 2
+      5: 0
+      6: 1
+      11: 2
+      12: 0
