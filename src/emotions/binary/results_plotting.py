@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
 
 def _discover_strategy_dirs(run_dir: Path, summary_file: str) -> List[Path]:
@@ -76,6 +78,248 @@ def _save_figure(fig: plt.Figure, output_path: Path) -> Path:
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def _resolve_binary_outcome_labels(y_true: np.ndarray, y_pred_cls: np.ndarray) -> np.ndarray:
+    """Map binary (true, pred) pairs to TP/FP/TN/FN labels."""
+    y_true = y_true.astype(int).reshape(-1)
+    y_pred_cls = y_pred_cls.astype(int).reshape(-1)
+    labels = np.empty(shape=y_true.shape[0], dtype=object)
+
+    labels[(y_true == 1) & (y_pred_cls == 1)] = "TP"
+    labels[(y_true == 0) & (y_pred_cls == 1)] = "FP"
+    labels[(y_true == 0) & (y_pred_cls == 0)] = "TN"
+    labels[(y_true == 1) & (y_pred_cls == 0)] = "FN"
+    return labels
+
+
+def _load_gnn_analysis_artifacts_by_strategy(
+    run_dir: Path,
+    strategy: str,
+    decision_threshold: float,
+) -> dict[str, np.ndarray] | None:
+    """Load and concatenate fold-level GNN analysis artifacts for one strategy."""
+    strategy_dir = run_dir / strategy
+    if not strategy_dir.exists():
+        return None
+
+    pred_parts: List[np.ndarray] = []
+    true_parts: List[np.ndarray] = []
+    raw_parts: List[np.ndarray] = []
+    emb_parts: List[np.ndarray] = []
+    subject_parts: List[np.ndarray] = []
+    recording_parts: List[np.ndarray] = []
+
+    for fold_dir in sorted([path for path in strategy_dir.iterdir() if path.is_dir()]):
+        artifact_path = fold_dir / "gnn_test_analysis_artifacts.npz"
+        if not artifact_path.exists():
+            continue
+
+        with np.load(artifact_path, allow_pickle=True) as payload:
+            if "pred_proba" not in payload or "y_true" not in payload:
+                continue
+            pred = np.asarray(payload["pred_proba"]).reshape(-1)
+            true = np.asarray(payload["y_true"]).reshape(-1)
+            if pred.shape[0] != true.shape[0]:
+                continue
+
+            pred_parts.append(pred)
+            true_parts.append(true)
+
+            if "raw_window_means" in payload:
+                raw = np.asarray(payload["raw_window_means"])
+                if raw.ndim == 2 and raw.shape[0] == pred.shape[0]:
+                    raw_parts.append(raw)
+
+            if "graph_embeddings" in payload:
+                emb = np.asarray(payload["graph_embeddings"])
+                if emb.ndim == 2 and emb.shape[0] == pred.shape[0]:
+                    emb_parts.append(emb)
+
+            if "subjects" in payload:
+                subjects = np.asarray(payload["subjects"]).reshape(-1)
+                if subjects.shape[0] == pred.shape[0]:
+                    subject_parts.append(subjects.astype(str))
+
+            if "recordings" in payload:
+                recordings = np.asarray(payload["recordings"]).reshape(-1)
+                if recordings.shape[0] == pred.shape[0]:
+                    recording_parts.append(recordings.astype(str))
+
+    if not pred_parts:
+        return None
+
+    pred_all = np.concatenate(pred_parts, axis=0)
+    true_all = np.concatenate(true_parts, axis=0)
+    pred_cls = (pred_all >= float(decision_threshold)).astype(int)
+    outcome = _resolve_binary_outcome_labels(y_true=true_all, y_pred_cls=pred_cls)
+
+    data: dict[str, np.ndarray] = {
+        "pred_proba": pred_all,
+        "y_true": true_all.astype(int),
+        "y_pred_cls": pred_cls,
+        "outcome": outcome.astype(str),
+    }
+    if raw_parts:
+        raw_all = np.concatenate(raw_parts, axis=0)
+        if raw_all.shape[0] == pred_all.shape[0]:
+            data["raw_window_means"] = raw_all
+    if emb_parts:
+        emb_all = np.concatenate(emb_parts, axis=0)
+        if emb_all.shape[0] == pred_all.shape[0]:
+            data["graph_embeddings"] = emb_all
+    if subject_parts:
+        subjects_all = np.concatenate(subject_parts, axis=0)
+        if subjects_all.shape[0] == pred_all.shape[0]:
+            data["subjects"] = subjects_all
+    if recording_parts:
+        recordings_all = np.concatenate(recording_parts, axis=0)
+        if recordings_all.shape[0] == pred_all.shape[0]:
+            data["recordings"] = recordings_all
+    return data
+
+
+def _project_embeddings_to_2d(
+    embeddings: np.ndarray,
+    method: str,
+) -> np.ndarray:
+    """Project high-dimensional embeddings to 2D for visualization."""
+    if embeddings.ndim != 2:
+        raise ValueError(f"Expected 2D embeddings array, got shape={embeddings.shape}.")
+    if embeddings.shape[0] < 2:
+        return np.zeros((embeddings.shape[0], 2), dtype=float)
+
+    method_key = method.strip().lower()
+    if method_key == "pca":
+        projector = PCA(n_components=2, random_state=42)
+        return projector.fit_transform(embeddings)
+    if method_key == "tsne":
+        n_samples = embeddings.shape[0]
+        if n_samples < 3:
+            return np.zeros((n_samples, 2), dtype=float)
+        perplexity = max(2.0, min(30.0, float(n_samples - 1) / 3.0))
+        projector = TSNE(
+            n_components=2,
+            perplexity=perplexity,
+            init="pca",
+            learning_rate="auto",
+            random_state=42,
+        )
+        return projector.fit_transform(embeddings)
+    raise ValueError(f"Unsupported embedding projection method '{method}'. Use 'pca' or 'tsne'.")
+
+
+def _scatter_by_outcome(
+    ax: plt.Axes,
+    x: np.ndarray,
+    y: np.ndarray,
+    outcome_labels: np.ndarray,
+    *,
+    title: str,
+    x_label: str,
+    y_label: str,
+) -> None:
+    """Plot 2D points colored by TP/FP/TN/FN outcome."""
+    color_map = {
+        "TP": "#2ca02c",
+        "FP": "#d62728",
+        "TN": "#1f77b4",
+        "FN": "#ff7f0e",
+    }
+    order = ["TP", "FP", "TN", "FN"]
+
+    for label in order:
+        mask = outcome_labels == label
+        if not np.any(mask):
+            continue
+        ax.scatter(
+            x[mask],
+            y[mask],
+            s=16,
+            alpha=0.75,
+            c=color_map[label],
+            label=f"{label} (n={int(np.sum(mask))})",
+            linewidths=0,
+        )
+
+    ax.set_title(title)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.legend(loc="best", fontsize=8, frameon=True)
+    ax.grid(True, alpha=0.25)
+
+
+def _plot_gnn_tp_fp_tn_fn_scatter(
+    run_dir: Path,
+    strategies: Sequence[str],
+    decision_threshold: float,
+    embedding_method: str,
+    output_dir: Path,
+) -> List[Path]:
+    """Create GNN-only TP/FP/TN/FN scatter plots aggregated across folds by strategy."""
+    saved_paths: List[Path] = []
+
+    for strategy in strategies:
+        payload = _load_gnn_analysis_artifacts_by_strategy(
+            run_dir=run_dir,
+            strategy=strategy,
+            decision_threshold=decision_threshold,
+        )
+        if payload is None:
+            continue
+
+        outcome = payload["outcome"]
+        figure, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+        if "raw_window_means" in payload and payload["raw_window_means"].shape[1] >= 4:
+            raw = payload["raw_window_means"]
+            _scatter_by_outcome(
+                axes[0],
+                raw[:, 0],
+                raw[:, 1],
+                outcome,
+                title=f"GNN {strategy} | Raw XY",
+                x_label="window_mean(x-avg)",
+                y_label="window_mean(y-avg)",
+            )
+            _scatter_by_outcome(
+                axes[1],
+                raw[:, 2],
+                raw[:, 3],
+                outcome,
+                title=f"GNN {strategy} | Raw Pupil",
+                x_label="window_mean(pupil-left)",
+                y_label="window_mean(pupil-right)",
+            )
+        else:
+            axes[0].set_axis_off()
+            axes[0].set_title(f"GNN {strategy} | Raw XY unavailable")
+            axes[1].set_axis_off()
+            axes[1].set_title(f"GNN {strategy} | Raw Pupil unavailable")
+
+        if "graph_embeddings" in payload:
+            emb_2d = _project_embeddings_to_2d(
+                embeddings=np.asarray(payload["graph_embeddings"], dtype=float),
+                method=embedding_method,
+            )
+            _scatter_by_outcome(
+                axes[2],
+                emb_2d[:, 0],
+                emb_2d[:, 1],
+                outcome,
+                title=f"GNN {strategy} | Embedding ({embedding_method.lower()})",
+                x_label="component_1",
+                y_label="component_2",
+            )
+        else:
+            axes[2].set_axis_off()
+            axes[2].set_title(f"GNN {strategy} | Embeddings unavailable")
+
+        figure.tight_layout()
+        output_path = output_dir / f"gnn_tp_fp_tn_fn_scatter_{strategy}.png"
+        saved_paths.append(_save_figure(figure, output_path))
+
+    return saved_paths
 
 
 def _plot_metrics_barplots(
@@ -208,6 +452,7 @@ def generate_and_save_binary_results_plots(
     run_dir: Path | str,
     decision_threshold: float,
     models_for_cm: Sequence[str] | None = None,
+    embedding_method: str = "pca",
     summary_file: str = "summary.csv",
     figures_dir_name: str = "figures",
     candidate_metrics: Sequence[str] = ("accuracy", "balanced_accuracy", "f1", "auc", "precision", "recall"),
@@ -263,5 +508,15 @@ def generate_and_save_binary_results_plots(
                 output_path=figures_dir / "confusion_matrices.png",
             )
         )
+
+    saved_paths.extend(
+        _plot_gnn_tp_fp_tn_fn_scatter(
+            run_dir=run_dir_path,
+            strategies=strategies,
+            decision_threshold=float(decision_threshold),
+            embedding_method=embedding_method,
+            output_dir=figures_dir,
+        )
+    )
 
     return saved_paths

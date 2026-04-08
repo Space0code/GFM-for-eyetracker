@@ -11,6 +11,7 @@ binary_task:
   target_column: "emotion-valence"  # Preferred key (legacy: target_emotion)
   threshold: "mean"  # float or one of: median, mean (computed from train split only)
   decision_threshold: 0.5  # Probability threshold used at evaluation time
+  embedding_projection_method: "pca"  # pca | tsne for TP/FP/TN/FN embedding plots
 
 # Dataset configuration (shared by both GNN and baselines)
 dataset:
@@ -50,10 +51,10 @@ dataset:
 # Cross-validation configuration (shared)
 cross_validation:
   strategies: 
-    # - subject_loo
-    - recording_loo
-    # - combined_loo
+    - subject_kfold
+    # - recording_kfold
   val_size: 1  # Number of subjects/recordings/pairs for validation
+  n_splits: 5
   random_state: 42
 
 # Baseline models configuration

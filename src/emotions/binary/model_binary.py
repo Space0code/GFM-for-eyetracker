@@ -22,7 +22,7 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         aggr: str = "mean",
         conv_type: str = "GCNConv",
         num_layers: int = 2,
-        pooling: str = "mean",
+        pooling: str = "mean_max",
     ):
         """
         Initialize binary classification GNN.
@@ -57,7 +57,7 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             pooling=pooling,
         )
     
-    def forward(self, data):
+    def forward(self, data, return_graph_embedding: bool = False):
         """
         Forward pass for binary classification.
         
@@ -65,8 +65,10 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             data: HeteroData graph batch
             
         Returns:
-            Tensor of shape [batch_size, 1] with logits
+            Tensor of shape [batch_size, 1] with logits.
+            When `return_graph_embedding=True`, returns tuple:
+            `(logits, graph_embedding)`.
         """
         # Parent returns raw regression-style head outputs; binary trainer
         # applies BCE-with-logits and sigmoid for metrics.
-        return super().forward(data)
+        return super().forward(data, return_graph_embedding=return_graph_embedding)

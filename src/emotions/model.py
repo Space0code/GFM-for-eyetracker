@@ -10,7 +10,7 @@ class SpatioTemporalHeteroGNN(nn.Module):
             output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
-            num_layers: int = 2, pooling: str = "mean",
+            num_layers: int = 2, pooling: str = "mean_max",
             ):
         super().__init__()
         if num_layers < 1:
@@ -96,7 +96,7 @@ class SpatioTemporalHeteroGNN(nn.Module):
         self.output_scale = output_scale
         self.use_edge_weights = use_edge_weights
 
-    def forward(self, data):
+    def forward(self, data, return_graph_embedding: bool = False):
         
         # data is a HeteroData from your SpacioTemporalDataset
         x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
@@ -142,4 +142,7 @@ class SpatioTemporalHeteroGNN(nn.Module):
 
         out = self.head(graph_emb)                    # [num_graphs, out_channels]
         out = out * self.output_scale                 # Scale to [0, 10], for binary, output scale is 1.0 so no scaling
+
+        if return_graph_embedding:
+            return out, graph_emb
         return out

@@ -180,7 +180,7 @@ def build_fixed_wrapper_overrides(seed: int) -> Dict[str, Any]:
             "gnn": {
                 "model": {
                     "conv_type": "GCNConv",
-                    "pooling": "mean",
+                    "pooling": "mean_max",
                     "num_layers": 2,
                 },
                 "training": {
@@ -223,10 +223,10 @@ def build_pass1_variants() -> List[VariantSpec]:
     variants.extend(
         [
             VariantSpec(
-                variant_id="pooling_mean_max",
+                variant_id="pooling_mean",
                 family="pooling",
-                description="Use mean+max graph pooling head input.",
-                overrides={"global_overrides": {"gnn": {"model": {"pooling": "mean_max"}}}},
+                description="Use mean graph pooling head input.",
+                overrides={"global_overrides": {"gnn": {"model": {"pooling": "mean"}}}},
             ),
             VariantSpec(
                 variant_id="edge_weights_on",

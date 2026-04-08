@@ -37,6 +37,7 @@ from emotions.common.cv_utils import (
     build_split_entries as build_common_split_entries,
     describe_fold as describe_common_fold,
     split_group_tokens as split_common_group_tokens,
+    validate_kfold_group_disjointness as validate_common_kfold_group_disjointness,
     validate_non_empty_train_splits as validate_common_non_empty_train_splits,
 )
 from emotions.common.dataset_config import (
@@ -59,6 +60,13 @@ from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
 from emotions.binary.results_plotting import generate_and_save_binary_results_plots
 
+
+RAW_WINDOW_FEATURE_COLUMNS: Tuple[str, str, str, str] = (
+    "x-avg",
+    "y-avg",
+    "pupil-size-left-avg",
+    "pupil-size-right-avg",
+)
 
 
 def parse_args():
@@ -113,6 +121,22 @@ def validate_non_empty_train_splits(
         splits=splits,
         strategy=strategy,
         dataset_label=dataset_label,
+    )
+
+
+def validate_kfold_group_disjointness(
+    splits: List[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    strategy: str,
+    dataset: List[Any],
+    dataset_label: str,
+) -> None:
+    """Validate that k-fold splits do not mix split-defining groups."""
+    validate_common_kfold_group_disjointness(
+        splits=splits,
+        strategy=strategy,
+        dataset=dataset,
+        dataset_label=dataset_label,
+        combined_id_style="pipe",
     )
 
 
@@ -207,6 +231,25 @@ def fit_graph_feature_scaler(
     return scaler
 
 
+def extract_window_feature_means_raw(
+    graph: Any,
+    feature_columns: List[str],
+) -> np.ndarray:
+    """Compute per-window mean feature values from unscaled node features."""
+    x_raw = graph["node"].x.detach().cpu().numpy()
+    if x_raw.ndim != 2:
+        raise ValueError(f"Expected node feature matrix with 2 dims, got shape {x_raw.shape}.")
+
+    means: List[float] = []
+    for feature_name in RAW_WINDOW_FEATURE_COLUMNS:
+        if feature_name in feature_columns:
+            feature_idx = feature_columns.index(feature_name)
+            means.append(float(np.mean(x_raw[:, feature_idx])))
+        else:
+            means.append(float("nan"))
+    return np.asarray(means, dtype=np.float32)
+
+
 def build_binary_graph_subset(
     dataset: SpacioTemporalDataset,
     indices: np.ndarray,
@@ -216,8 +259,13 @@ def build_binary_graph_subset(
 ) -> List[Any]:
     """Build a list of graphs with binary targets and optional standardized features."""
     graphs = []
+    feature_columns = list(getattr(dataset, "feature_columns", []))
     for idx in indices:
         data = dataset[int(idx)].clone()
+        raw_window_means = extract_window_feature_means_raw(
+            graph=data,
+            feature_columns=feature_columns,
+        )
         names = getattr(data, "emotion_names", getattr(dataset, "emotion_names", []))
         if target_column not in names:
             raise ValueError(f"Target column '{target_column}' not found in graph targets.")
@@ -225,6 +273,7 @@ def build_binary_graph_subset(
         target_value = float(data.y[target_idx].item())
         binary_label = 1.0 if target_value > threshold_value else 0.0
         data.y = torch.tensor([binary_label], dtype=torch.float32)
+        data.window_feature_means_raw = torch.tensor(raw_window_means, dtype=torch.float32)
         if scaler is not None:
             x_scaled = scaler.transform(data["node"].x.detach().cpu().numpy())
             data["node"].x = torch.tensor(x_scaled, dtype=torch.float32)
@@ -259,7 +308,14 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     return total_loss / len(loader)
 
 
-def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
+def evaluate_gnn(
+    model,
+    loader,
+    device,
+    emotion_name,
+    decision_threshold=0.5,
+    collect_analysis_artifacts: bool = False,
+):
     """Evaluate GNN binary classifier."""
     model.eval()
     total_loss = 0
@@ -268,11 +324,20 @@ def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
     all_targets = []
     all_subjects = []
     all_recordings = []
+    all_raw_window_means = []
+    all_graph_embeddings = []
+    raw_feature_count = len(RAW_WINDOW_FEATURE_COLUMNS)
     
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
-            out = model(data).reshape(-1)   # [batch_size] logits; safe when batch_size==1
+            model_output = model(data, return_graph_embedding=collect_analysis_artifacts)
+            if collect_analysis_artifacts:
+                out, graph_embeddings = model_output
+            else:
+                out = model_output
+                graph_embeddings = None
+            out = out.reshape(-1)   # [batch_size] logits; safe when batch_size==1
             target = data.y.reshape(-1)     # [batch_size]
             
             # Loss uses logits directly
@@ -295,6 +360,40 @@ def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
                 all_recordings.extend(batch_recordings)
             elif batch_recordings is not None:
                 all_recordings.append(batch_recordings)
+
+            if collect_analysis_artifacts:
+                batch_raw_means = getattr(data, "window_feature_means_raw", None)
+                if isinstance(batch_raw_means, torch.Tensor):
+                    raw_np = batch_raw_means.detach().cpu().numpy()
+                    if raw_np.ndim == 1:
+                        if raw_np.size % raw_feature_count == 0:
+                            raw_np = raw_np.reshape(-1, raw_feature_count)
+                        else:
+                            raw_np = np.empty((0, raw_feature_count), dtype=np.float32)
+                    elif raw_np.ndim == 2:
+                        if raw_np.shape[1] == raw_feature_count:
+                            pass
+                        elif raw_np.shape[0] == raw_feature_count:
+                            raw_np = raw_np.T
+                        elif raw_np.size % raw_feature_count == 0:
+                            raw_np = raw_np.reshape(-1, raw_feature_count)
+                        else:
+                            raw_np = np.empty((0, raw_feature_count), dtype=np.float32)
+                    else:
+                        flat = raw_np.reshape(-1)
+                        if flat.size % raw_feature_count == 0:
+                            raw_np = flat.reshape(-1, raw_feature_count)
+                        else:
+                            raw_np = np.empty((0, raw_feature_count), dtype=np.float32)
+
+                    if raw_np.shape[0] > 0:
+                        all_raw_window_means.append(raw_np)
+
+                if isinstance(graph_embeddings, torch.Tensor):
+                    emb_tensor = graph_embeddings.detach().cpu()
+                    if emb_tensor.ndim == 1:
+                        emb_tensor = emb_tensor.unsqueeze(0)
+                    all_graph_embeddings.append(emb_tensor.numpy())
     
     # Concatenate predictions
     y_pred = torch.cat(all_outputs).numpy()
@@ -315,8 +414,51 @@ def evaluate_gnn(model, loader, device, emotion_name, decision_threshold=0.5):
         emotion_names=[emotion_name],
         threshold=decision_threshold
     )
-    
-    return metrics, total_loss / len(loader), y_pred, y_true
+
+    artifacts: Dict[str, Any] = {}
+    if collect_analysis_artifacts:
+        if all_raw_window_means:
+            raw_window_means = np.concatenate(all_raw_window_means, axis=0)
+            if raw_window_means.shape[0] == y_true.shape[0]:
+                artifacts["raw_window_means"] = raw_window_means
+        if all_graph_embeddings:
+            graph_embeddings_np = np.concatenate(all_graph_embeddings, axis=0)
+            if graph_embeddings_np.shape[0] == y_true.shape[0]:
+                artifacts["graph_embeddings"] = graph_embeddings_np
+        if len(all_subjects) == y_true.shape[0]:
+            artifacts["subjects"] = np.asarray([str(s) for s in all_subjects], dtype=str)
+        if len(all_recordings) == y_true.shape[0]:
+            artifacts["recordings"] = np.asarray([str(r) for r in all_recordings], dtype=str)
+
+    return metrics, total_loss / len(loader), y_pred, y_true, artifacts
+
+
+def save_gnn_test_analysis_artifacts(
+    fold_dir: str,
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    decision_threshold: float,
+    artifacts: Dict[str, Any],
+) -> None:
+    """Save fold-level GNN analysis artifacts for TP/FP/TN/FN visualizations."""
+    payload: Dict[str, Any] = {
+        "pred_proba": np.asarray(y_pred, dtype=float).reshape(-1),
+        "y_true": np.asarray(y_true, dtype=float).reshape(-1),
+        "decision_threshold": np.asarray([float(decision_threshold)], dtype=float),
+        "raw_feature_order": np.asarray(list(RAW_WINDOW_FEATURE_COLUMNS), dtype=str),
+    }
+
+    if "raw_window_means" in artifacts:
+        payload["raw_window_means"] = np.asarray(artifacts["raw_window_means"], dtype=float)
+    if "graph_embeddings" in artifacts:
+        payload["graph_embeddings"] = np.asarray(artifacts["graph_embeddings"], dtype=float)
+    if "subjects" in artifacts:
+        payload["subjects"] = np.asarray(artifacts["subjects"], dtype=str)
+    if "recordings" in artifacts:
+        payload["recordings"] = np.asarray(artifacts["recordings"], dtype=str)
+
+    output_path = os.path.join(fold_dir, "gnn_test_analysis_artifacts.npz")
+    np.savez(output_path, **payload)
 
 
 def train_gnn_fold(
@@ -433,8 +575,13 @@ def train_gnn_fold(
                 training_cfg.get("grad_clip_max_norm", 1.0),
             )
 
-            val_metrics, val_loss, _, _ = evaluate_gnn(
-                model, val_loader, device, target_column, decision_threshold
+            val_metrics, val_loss, _, _, _ = evaluate_gnn(
+                model,
+                val_loader,
+                device,
+                target_column,
+                decision_threshold,
+                collect_analysis_artifacts=False,
             )
 
             if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg["num_epochs"] - 1 or epoch == 0):
@@ -472,12 +619,24 @@ def train_gnn_fold(
         print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
 
         model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
-        test_metrics, _, test_pred, test_true = evaluate_gnn(
-            model, test_loader, device, target_column, decision_threshold
+        test_metrics, _, test_pred, test_true, test_artifacts = evaluate_gnn(
+            model,
+            test_loader,
+            device,
+            target_column,
+            decision_threshold,
+            collect_analysis_artifacts=True,
         )
 
         np.save(os.path.join(fold_dir, "test_predictions.npy"), test_pred)
         np.save(os.path.join(fold_dir, "test_targets.npy"), test_true)
+        save_gnn_test_analysis_artifacts(
+            fold_dir=fold_dir,
+            y_pred=test_pred,
+            y_true=test_true,
+            decision_threshold=decision_threshold,
+            artifacts=test_artifacts,
+        )
 
         test_acc = test_metrics["standard"]["aggregated"]["accuracy"]
         if verbose:
@@ -671,6 +830,13 @@ def run_training_from_config(config_path: str) -> str:
     
     target_column = resolve_target_column(binary_task_cfg)
     threshold_spec = binary_task_cfg.get("threshold", 0.0)
+    embedding_projection_method = str(
+        binary_task_cfg.get("embedding_projection_method", "pca")
+    ).strip().lower()
+    if embedding_projection_method not in {"pca", "tsne"}:
+        raise ValueError(
+            "binary_task.embedding_projection_method must be 'pca' or 'tsne'."
+        )
     standardize_features = dataset_cfg.get("standardize_features", False)
     target_aggregation = dataset_cfg.get("target_aggregation", "mean")
     if target_aggregation not in {"mean", "last"}:
@@ -683,6 +849,7 @@ def run_training_from_config(config_path: str) -> str:
     print(f"  Target column: {target_column}")
     print(f"  Threshold spec: {threshold_spec}")
     print("  Labels: <=threshold -> 0, >threshold -> 1")
+    print(f"  Embedding projection method: {embedding_projection_method}")
     print(f"  Standardize features: {standardize_features}")
     print(f"  Target aggregation: {target_aggregation}")
     
@@ -822,6 +989,18 @@ def run_training_from_config(config_path: str) -> str:
                 gnn_splits = list(gnn_splitter.split())
                 validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
                 validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
+                validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 baseline_entries = build_split_entries(
                     strategy=strategy,
                     dataset=base_tabular_samples,
@@ -836,6 +1015,12 @@ def run_training_from_config(config_path: str) -> str:
             elif run_experiments['baselines']:
                 baseline_splits = list(baseline_splitter.split())
                 validate_non_empty_train_splits(baseline_splits, strategy, "Baseline")
+                validate_kfold_group_disjointness(
+                    baseline_splits,
+                    strategy=strategy,
+                    dataset=base_tabular_samples,
+                    dataset_label="Baseline",
+                )
                 baseline_entries = build_split_entries(
                     strategy=strategy,
                     dataset=base_tabular_samples,
@@ -845,6 +1030,12 @@ def run_training_from_config(config_path: str) -> str:
             else:
                 gnn_splits = list(gnn_splitter.split())
                 validate_non_empty_train_splits(gnn_splits, strategy, "GNN")
+                validate_kfold_group_disjointness(
+                    gnn_splits,
+                    strategy=strategy,
+                    dataset=base_gnn_dataset,
+                    dataset_label="GNN",
+                )
                 gnn_entries = build_split_entries(
                     strategy=strategy,
                     dataset=base_gnn_dataset,
@@ -981,6 +1172,7 @@ def run_training_from_config(config_path: str) -> str:
             saved_plots = generate_and_save_binary_results_plots(
                 run_dir=Path(run_dir),
                 decision_threshold=float(binary_task_cfg.get('decision_threshold', 0.5)),
+                embedding_method=embedding_projection_method,
                 models_for_cm=models_for_cm if models_for_cm else None,
             )
             for plot_path in saved_plots:

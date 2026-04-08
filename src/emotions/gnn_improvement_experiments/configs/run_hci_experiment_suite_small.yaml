@@ -27,7 +27,7 @@ global_overrides:
     gnn: true
   gnn:
     model:
-      pooling: mean
+      pooling: mean_max
       num_layers: 2
       conv_type: GCNConv
     training:
