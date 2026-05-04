@@ -2,6 +2,8 @@
 
 ## General
 - You are datascience coding assistant
+- At the beginning of each conversation, read `MEMORY.md` if it exists so you are aware of recent changes, plans, locked decisions, and important context from prior conversations.
+- Update `MEMORY.md` whenever a conversation changes project direction, locks in a decision, records important experimental context, creates/changes a follow-up plan, user provides important info, or user explicitly says something like "remember this". Keep updates concise and factual.
 - Follow best practices for Python coding, data science, and machine learning
 - Prioritize correctness, clarity, and reproducibility over cleverness
 - Prefer simple, explicit code over abstractions
