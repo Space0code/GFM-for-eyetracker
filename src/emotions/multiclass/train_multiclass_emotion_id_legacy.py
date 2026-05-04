@@ -3,11 +3,6 @@
 Usage:
   python src/emotions/multiclass/train_multiclass.py \
       --config src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml
-
-The default config now targets the Mahnob-HCI Table-6 three-class arousal
-objective. For the companion valence objective, use:
-  python src/emotions/multiclass/train_multiclass.py \
-      --config src/emotions/multiclass/configs/train_multiclass_hci_tagging_table6_valence_3class.yaml
 """
 
 from __future__ import annotations
@@ -75,16 +70,12 @@ from emotions.utils import (
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments for multiclass training."""
     parser = argparse.ArgumentParser(description="Train multiclass classification models")
     parser.add_argument(
         "--config",
         type=str,
         default="src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml",
-        help=(
-            "Path to multiclass YAML config file. "
-            "Default: Mahnob-HCI Table-6 three-class arousal config."
-        ),
+        help="Path to multiclass YAML config file",
     )
     return parser.parse_args()
 

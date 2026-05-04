@@ -1,29 +1,16 @@
-# Multiclass classification configuration for Mahnob-HCI Table-6 three-class
-# arousal classification experiments.
+# Multiclass classification configuration for HCI-tagging experiments.
 
 run_experiments:
   baselines: true
   gnn: true
 
 multiclass_task:
-  task_name: "table6-arousal-3class"
+  task_name: "emotion-id"  # emotion-id | va-quadrant
   target_column: "emotion-id"
-  use_table6_3class_targets: true
-  drop_unmapped_labels: true
-  class_name_mapping:
-    0: Calm
-    1: Medium arousal
-    2: Excited/Activated
-  table6_class_mapping:
-    0: 0
-    1: 2
-    2: 0
-    3: 2
-    4: 1
-    5: 0
-    6: 2
-    11: 1
-    12: 2
+  # target_columns: ["emotion-valence", "emotion-arousal"]
+  # thresholds:
+  #   valence: mean
+  #   arousal: mean
 
 # Dataset configuration shared by GNN and baselines.
 dataset:
