@@ -54,7 +54,7 @@ from emotions.common.dataset_config import (
     resolve_min_samples_per_window,
 )
 from emotions.baseline_model import get_baseline_by_name
-from emotions.model import SpatioTemporalHeteroGNN
+from emotions.model import SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
 from emotions.metrics import compute_metrics
 from emotions.train_baseline import build_tabular_samples, samples_to_xy
 from emotions.utils import (
@@ -246,7 +246,15 @@ def _train_gnn_fold(
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
-    model = SpatioTemporalHeteroGNN(
+    model_version = str(model_cfg.get("model_version", "v2")).lower()
+    if model_version == "v1":
+        model_cls = SpatioTemporalHeteroGNNV1
+    elif model_version == "v2":
+        model_cls = SpatioTemporalHeteroGNN
+    else:
+        raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
+
+    model = model_cls(
         in_channels=model_cfg["in_channels"],
         hidden_channels=model_cfg["hidden_channels"],
         out_channels=1,

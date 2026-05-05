@@ -17,7 +17,8 @@ dataset:
   min_samples_per_window: 3
   kt: 2
   ks: 2
-  use_edge_weights: false
+  use_edge_weights: true
+  graph_version: v2
   tau: 0.05
   cache_dir: "data/cache"
   use_cache: false
@@ -70,6 +71,7 @@ baselines:
 
 gnn:
   model:
+    model_version: v2
     in_channels: 4
     hidden_channels: 128
     output_scale: 1.0

@@ -166,7 +166,8 @@ class SpacioTemporalDataset(Dataset):
             self, root_dir: str = None, data_filepath: str = None, 
             filter_subjects: list = None, filter_recordings: list = None,
             recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
-            kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05, 
+            kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05,
+            graph_version: str = "v2",
             window_length: int = 60, window_overlap: float = 0, 
             cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1,
             feature_columns: Optional[List[str]] = None, target_columns: Optional[List[str]] = None,
@@ -189,6 +190,7 @@ class SpacioTemporalDataset(Dataset):
         - file_list: list of csv files relative root_dir to be loaded (exclusively these)
         - kt: k temporal neigbors
         - ks: k spatial neigbors
+        - graph_version: "v1" creates temporal/spatial edges; "v2" splits temporal forward/backward edges
         - window_length: in seconds
         - window_overlap: fraction in range [0, 1)
         - cache_dir: directory to store cached processed graphs (default: root_dir/.cache for old, data/.cache for new)
@@ -204,6 +206,9 @@ class SpacioTemporalDataset(Dataset):
         self.ks = ks  # k for spatial kNN
         self.use_edge_weights = use_edge_weights
         self.tau = tau # edge weight time decay constant (in seconds)
+        if graph_version not in {"v1", "v2"}:
+            raise ValueError(f"Unsupported graph_version='{graph_version}'. Choose 'v1' or 'v2'.")
+        self.graph_version = graph_version
         self.window_length = window_length
         self.window_overlap = window_overlap
         self.files = []
@@ -322,7 +327,7 @@ class SpacioTemporalDataset(Dataset):
         # Include all graph-construction options and data source identity to avoid stale collisions.
         config_str = (
             f"kt={self.kt}_ks={self.ks}_tau={self.tau}_wl={self.window_length}_wo={self.window_overlap}"
-            f"_edgew={self.use_edge_weights}_dropthr={self.dropping_emotion_threshold}"
+            f"_edgew={self.use_edge_weights}_graphv={self.graph_version}_dropthr={self.dropping_emotion_threshold}"
         )
         
         if data_filepath is not None:
@@ -509,6 +514,15 @@ class SpacioTemporalDataset(Dataset):
             df_temporal = (t[dst] - t[src]).abs()
             w_temporal = torch.exp(-df_temporal / self.tau)  # shape [E]
 
+        if self.graph_version == "v2":
+            temporal_forward_mask = edge_index_temporal[1] > edge_index_temporal[0]
+            temporal_backward_mask = edge_index_temporal[1] < edge_index_temporal[0]
+            edge_index_temporal_forward = edge_index_temporal[:, temporal_forward_mask]
+            edge_index_temporal_backward = edge_index_temporal[:, temporal_backward_mask]
+            if self.use_edge_weights:
+                w_temporal_forward = w_temporal[temporal_forward_mask]
+                w_temporal_backward = w_temporal[temporal_backward_mask]
+
         #### creating SPATIAL edge_index matrix
         # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
         if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
@@ -541,10 +555,18 @@ class SpacioTemporalDataset(Dataset):
         data = HeteroData()
         data["node"].x = X
         data["node"].num_nodes = n
-        data["node", "temporal", "node"].edge_index = edge_index_temporal
+        if self.graph_version == "v1":
+            data["node", "temporal", "node"].edge_index = edge_index_temporal
+        else:
+            data["node", "temporal_forward", "node"].edge_index = edge_index_temporal_forward
+            data["node", "temporal_backward", "node"].edge_index = edge_index_temporal_backward
         data["node", "spatial", "node"].edge_index = edge_index_spatial
         if self.use_edge_weights:
-            data["node", "temporal", "node"].edge_attr = w_temporal
+            if self.graph_version == "v1":
+                data["node", "temporal", "node"].edge_attr = w_temporal
+            else:
+                data["node", "temporal_forward", "node"].edge_attr = w_temporal_forward
+                data["node", "temporal_backward", "node"].edge_attr = w_temporal_backward
             data["node", "spatial", "node"].edge_attr = w_spatial
         
         # Add emotion targets if available

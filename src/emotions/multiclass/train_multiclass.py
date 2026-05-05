@@ -56,7 +56,7 @@ from emotions.common.dataset_config import (
 )
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
-from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN
+from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN, MulticlassSpatioTemporalGNNV1
 from emotions.multiclass.results_plotting_multiclass import (
     generate_and_save_multiclass_results_plots,
 )
@@ -527,11 +527,20 @@ def _train_gnn_fold(
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
-    model = MulticlassSpatioTemporalGNN(
+    model_version = str(model_cfg.get("model_version", "v2")).lower()
+    if model_version == "v1":
+        model_cls = MulticlassSpatioTemporalGNNV1
+    elif model_version == "v2":
+        model_cls = MulticlassSpatioTemporalGNN
+    else:
+        raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
+
+    model = model_cls(
         in_channels=model_cfg["in_channels"],
         hidden_channels=model_cfg["hidden_channels"],
         num_classes=len(class_labels),
         use_preprocess_mlp=model_cfg.get("use_preprocess_mlp", True),
+        use_edge_weights=config["dataset"].get("use_edge_weights", True),
         add_self_loops=model_cfg.get("add_self_loops", False),
         dropout_mlp=model_cfg.get("dropout_mlp", 0.1),
         dropout_gnn=model_cfg.get("dropout_gnn", 0.1),

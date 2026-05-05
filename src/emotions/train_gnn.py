@@ -17,7 +17,7 @@ from torch_geometric.loader import DataLoader
 import numpy as np
 import os
 
-from emotions.model import SpatioTemporalHeteroGNN
+from emotions.model import SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
 from emotions.metrics import compute_metrics
 
 
@@ -227,7 +227,15 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
     val_loader = DataLoader(val_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=training_cfg['batch_size'], shuffle=False)
     
-    model = SpatioTemporalHeteroGNN(
+    model_version = str(model_cfg.get("model_version", "v2")).lower()
+    if model_version == "v1":
+        model_cls = SpatioTemporalHeteroGNNV1
+    elif model_version == "v2":
+        model_cls = SpatioTemporalHeteroGNN
+    else:
+        raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
+
+    model = model_cls(
         in_channels=model_cfg['in_channels'],
         hidden_channels=model_cfg['hidden_channels'],
         out_channels=model_cfg['out_channels'],

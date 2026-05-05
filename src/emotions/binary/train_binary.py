@@ -55,7 +55,7 @@ from emotions.utils import (
     save_comparison_csv,
     print_comparison_table
 )
-from emotions.binary.model_binary import BinarySpatioTemporalGNN
+from emotions.binary.model_binary import BinarySpatioTemporalGNN, BinarySpatioTemporalGNNV1
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
 from emotions.binary.results_plotting import generate_and_save_binary_results_plots
@@ -539,7 +539,16 @@ def train_gnn_fold(
     def _run_one_attempt(*, safe_loader_mode: bool) -> Dict[str, Any]:
         """Run one full fold training/evaluation attempt."""
         # Create model per attempt so retries start from a clean state.
-        model = BinarySpatioTemporalGNN(**model_cfg).to(device)
+        model_kwargs = dict(model_cfg)
+        model_version = str(model_kwargs.pop("model_version", "v2")).lower()
+        model_kwargs["use_edge_weights"] = bool(config["dataset"].get("use_edge_weights", True))
+        if model_version == "v1":
+            model_cls = BinarySpatioTemporalGNNV1
+        elif model_version == "v2":
+            model_cls = BinarySpatioTemporalGNN
+        else:
+            raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
+        model = model_cls(**model_kwargs).to(device)
         if use_compile and hasattr(torch, "compile"):
             model = torch.compile(model, mode="default")
             print("  Compiled GNN model with torch.compile(). When doing final runs, consider setting use_torch_compile=false because of the potential performance issues.")

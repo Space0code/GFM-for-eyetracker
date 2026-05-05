@@ -25,6 +25,7 @@ global_overrides:
     random_state: 42
   gnn:
     model:
+      model_version: v2
       pooling: mean_max
       num_layers: 10
     training:
@@ -39,6 +40,7 @@ global_overrides:
     kt: 2
     ks: 2
     use_edge_weights: true
+    graph_version: v2
     filter_subjects: null
     filter_recordings: null
     target_aggregation: mean
