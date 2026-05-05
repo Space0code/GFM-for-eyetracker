@@ -202,28 +202,30 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         else:
             raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
+        self.relations = ("spatial", "temporal_forward", "temporal_backward")
         self.num_layers = num_layers
         self.pooling = pooling
 
-        self.convs = nn.ModuleList()
+        self.relation_convs = nn.ModuleList()
+        self.relation_fusion_mlps = nn.ModuleList()
         self.layer_norms = nn.ModuleList()
         for layer_idx in range(num_layers):
             layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
-            conv = HeteroConv(
+            relation_convs = nn.ModuleDict(
                 {
-                    ("node", "temporal_forward", "node"): ConvLayer(
-                        layer_in_channels, hidden_channels, **conv_kwargs
-                    ),
-                    ("node", "temporal_backward", "node"): ConvLayer(
-                        layer_in_channels, hidden_channels, **conv_kwargs
-                    ),
-                    ("node", "spatial", "node"): ConvLayer(
-                        layer_in_channels, hidden_channels, **conv_kwargs
-                    ),
-                },
-                aggr=aggr,
+                    relation: ConvLayer(layer_in_channels, hidden_channels, **conv_kwargs)
+                    for relation in self.relations
+                }
             )
-            self.convs.append(conv)
+            self.relation_convs.append(relation_convs)
+            self.relation_fusion_mlps.append(
+                nn.Sequential(
+                    nn.Linear(len(self.relations) * hidden_channels, hidden_channels),
+                    nn.GELU(),
+                    nn.Dropout(p=dropout_gnn),
+                    nn.Linear(hidden_channels, hidden_channels),
+                )
+            )
             self.layer_norms.append(nn.LayerNorm(hidden_channels))
 
         self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
@@ -245,3 +247,91 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         )
         self.output_scale = output_scale
         self.use_edge_weights = use_edge_weights
+
+    @staticmethod
+    def _edge_type(relation: str) -> tuple[str, str, str]:
+        """Return the heterograph edge type tuple for one node-node relation."""
+        return ("node", relation, "node")
+
+    @staticmethod
+    def _apply_relation_conv(
+        conv: nn.Module,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_weight: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Apply a relation convolution, passing edge weights when supported."""
+        if isinstance(conv, GCNConv) and edge_weight is not None:
+            return conv(x, edge_index, edge_weight=edge_weight.view(-1))
+        return conv(x, edge_index)
+
+    def forward(self, data, return_graph_embedding: bool = False):
+        x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
+        edge_weight_dict = None
+        if self.use_edge_weights:
+            edge_weight_dict = {
+                k: data[k].edge_attr
+                for k in edge_index_dict.keys()
+                if hasattr(data[k], "edge_attr")
+            }
+
+        if self.use_preprocess_mlp:
+            x_dict["node"] = self.preprocess_mlp(x_dict["node"])
+
+        x0_node = x_dict["node"]
+        x_node = x0_node
+
+        for layer_idx, relation_convs in enumerate(self.relation_convs):
+            relation_outputs = []
+            for relation in self.relations:
+                edge_type = self._edge_type(relation)
+                if edge_type not in edge_index_dict:
+                    relation_outputs.append(
+                        torch.zeros(
+                            x_node.shape[0],
+                            self.layer_norms[layer_idx].normalized_shape[0],
+                            dtype=x_node.dtype,
+                            device=x_node.device,
+                        )
+                    )
+                    continue
+
+                edge_weight = None
+                if edge_weight_dict is not None:
+                    edge_weight = edge_weight_dict.get(edge_type)
+
+                relation_out = self._apply_relation_conv(
+                    conv=relation_convs[relation],
+                    x=x_node,
+                    edge_index=edge_index_dict[edge_type],
+                    edge_weight=edge_weight,
+                )
+                relation_outputs.append(self.gnn_activation(relation_out))
+
+            fused = self.relation_fusion_mlps[layer_idx](torch.cat(relation_outputs, dim=1))
+
+            if layer_idx == 0:
+                residual = self.input_residual_proj(x0_node)
+            else:
+                residual = x_node
+
+            x_node = self.layer_norms[layer_idx](fused + residual)
+            x_node = self.gnn_dropout(x_node)
+
+        batch = data["node"].batch
+
+        if self.pooling == "mean":
+            graph_emb = global_mean_pool(x_node, batch)
+        elif self.pooling == "mean_max":
+            mean_emb = global_mean_pool(x_node, batch)
+            max_emb = global_max_pool(x_node, batch)
+            graph_emb = torch.cat([mean_emb, max_emb], dim=1)
+        else:
+            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean' or 'mean_max'.")
+
+        out = self.head(graph_emb)
+        out = out * self.output_scale
+
+        if return_graph_embedding:
+            return out, graph_emb
+        return out
