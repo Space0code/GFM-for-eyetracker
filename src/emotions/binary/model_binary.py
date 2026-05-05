@@ -60,6 +60,7 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         conv_type: str = "GCNConv",
         num_layers: int = 2,
         pooling: str = "attention",
+        edge_weight_mode: str = "learned_signed",
     ):
         """
         Initialize binary classification GNN.
@@ -93,6 +94,7 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             conv_type=conv_type,
             num_layers=num_layers,
             pooling=pooling,
+            edge_weight_mode=edge_weight_mode,
         )
     
     def forward(self, data, return_graph_embedding: bool = False):

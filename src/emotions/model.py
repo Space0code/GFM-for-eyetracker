@@ -171,6 +171,7 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
             num_layers: int = 2, pooling: str = "attention",
+            edge_weight_mode: str = "learned_signed",
             ):
         nn.Module.__init__(self)
         if num_layers < 1:
@@ -179,6 +180,12 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             raise ValueError(
                 f"Unsupported pooling: {pooling}. Choose 'mean', 'mean_max', or 'attention'."
             )
+        if edge_weight_mode not in {"handcrafted", "learned_signed"}:
+            raise ValueError(
+                f"Unsupported edge_weight_mode='{edge_weight_mode}'. "
+                "Choose 'handcrafted' or 'learned_signed'."
+            )
+        self.edge_weight_mode = edge_weight_mode
 
         self.use_preprocess_mlp = use_preprocess_mlp
         if self.use_preprocess_mlp:
@@ -197,6 +204,8 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         if conv_type == "GCNConv":
             ConvLayer = GCNConv
             conv_kwargs = {"add_self_loops": add_self_loops}
+            if edge_weight_mode == "learned_signed":
+                conv_kwargs = {"add_self_loops": False, "normalize": False}
         elif conv_type == "GATConv":
             ConvLayer = GATConv
             conv_kwargs = {"add_self_loops": add_self_loops}
@@ -232,6 +241,24 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
         self.gnn_activation = nn.GELU()
         self.gnn_dropout = nn.Dropout(p=dropout_gnn)
+        self.spatial_edge_weight_mlp = nn.Sequential(
+            nn.Linear(6, 6),
+            nn.GELU(),
+            nn.Linear(6, 4),
+            nn.GELU(),
+            nn.Linear(4, 2),
+            nn.GELU(),
+            nn.Linear(2, 1),
+        )
+        self.temporal_edge_weight_mlp = nn.Sequential(
+            nn.Linear(7, 6),
+            nn.GELU(),
+            nn.Linear(6, 4),
+            nn.GELU(),
+            nn.Linear(4, 2),
+            nn.GELU(),
+            nn.Linear(2, 1),
+        )
 
         if pooling == "mean":
             head_in_channels = hidden_channels
@@ -274,6 +301,49 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             return conv(x, edge_index, edge_weight=edge_weight.view(-1))
         return conv(x, edge_index)
 
+    @staticmethod
+    def normalize_signed_edge_scores(
+        raw_scores: torch.Tensor,
+        dst_index: torch.Tensor,
+        num_nodes: int,
+        eps: float = 1e-8,
+    ) -> torch.Tensor:
+        """Normalize signed edge scores by incoming absolute score magnitude."""
+        signed_scores = torch.tanh(raw_scores.view(-1))
+        denom = torch.zeros(num_nodes, dtype=signed_scores.dtype, device=signed_scores.device)
+        denom.index_add_(0, dst_index, signed_scores.abs())
+        return signed_scores / (denom[dst_index] + eps)
+
+    def _edge_weight_from_attr(
+        self,
+        relation: str,
+        edge_attr: torch.Tensor | None,
+        edge_index: torch.Tensor,
+        num_nodes: int,
+    ) -> torch.Tensor | None:
+        """Resolve scalar edge weights from stored edge attributes."""
+        if edge_attr is None:
+            return None
+        if self.edge_weight_mode == "handcrafted" or edge_attr.dim() == 1 or edge_attr.shape[-1] == 1:
+            return edge_attr.view(-1)
+
+        if relation == "spatial":
+            if edge_attr.shape[-1] != 6:
+                raise ValueError(f"Spatial learned edge attributes must have 6 features, got {edge_attr.shape[-1]}.")
+            raw_scores = self.spatial_edge_weight_mlp(edge_attr)
+        elif relation in {"temporal_forward", "temporal_backward"}:
+            if edge_attr.shape[-1] != 7:
+                raise ValueError(f"Temporal learned edge attributes must have 7 features, got {edge_attr.shape[-1]}.")
+            raw_scores = self.temporal_edge_weight_mlp(edge_attr)
+        else:
+            raise ValueError(f"Unsupported relation for learned edge weights: {relation}.")
+
+        return self.normalize_signed_edge_scores(
+            raw_scores=raw_scores,
+            dst_index=edge_index[1],
+            num_nodes=num_nodes,
+        )
+
     def forward(self, data, return_graph_embedding: bool = False):
         x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
         edge_weight_dict = None
@@ -307,7 +377,12 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
 
                 edge_weight = None
                 if edge_weight_dict is not None:
-                    edge_weight = edge_weight_dict.get(edge_type)
+                    edge_weight = self._edge_weight_from_attr(
+                        relation=relation,
+                        edge_attr=edge_weight_dict.get(edge_type),
+                        edge_index=edge_index_dict[edge_type],
+                        num_nodes=x_node.shape[0],
+                    )
 
                 relation_out = self._apply_relation_conv(
                     conv=relation_convs[relation],

@@ -44,6 +44,9 @@ def _build_v2_graph(subject: str, recording: str) -> HeteroData:
     graph["node", "temporal_forward", "node"].edge_index = forward
     graph["node", "temporal_backward", "node"].edge_index = backward
     graph["node", "spatial", "node"].edge_index = spatial
+    graph["node", "temporal_forward", "node"].edge_attr = torch.randn(forward.shape[1], 7)
+    graph["node", "temporal_backward", "node"].edge_attr = torch.randn(backward.shape[1], 7)
+    graph["node", "spatial", "node"].edge_attr = torch.randn(spatial.shape[1], 6)
     graph.y = torch.tensor([0.0], dtype=torch.float32)
     graph.subject = subject
     graph.recording = recording
@@ -158,7 +161,7 @@ def test_gnn_v2_forward_pass_accepts_split_temporal_edges() -> None:
         out_channels=1,
         output_scale=1.0,
         use_preprocess_mlp=False,
-        use_edge_weights=False,
+        use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=3,
     )
@@ -166,3 +169,17 @@ def test_gnn_v2_forward_pass_accepts_split_temporal_edges() -> None:
     with torch.no_grad():
         out = model(batch)
     assert tuple(out.shape) == (2, 1)
+
+
+def test_signed_edge_weight_normalization_is_per_target_node() -> None:
+    raw_scores = torch.tensor([0.5, -1.0, 2.0, 0.25], dtype=torch.float32)
+    dst_index = torch.tensor([0, 0, 1, 1], dtype=torch.long)
+    weights = SpatioTemporalHeteroGNN.normalize_signed_edge_scores(
+        raw_scores=raw_scores,
+        dst_index=dst_index,
+        num_nodes=2,
+    )
+    assert torch.isfinite(weights).all()
+    for target in [0, 1]:
+        target_weights = weights[dst_index == target]
+        assert torch.isclose(target_weights.abs().sum(), torch.tensor(1.0), atol=1e-6)

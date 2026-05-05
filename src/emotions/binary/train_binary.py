@@ -544,8 +544,13 @@ def train_gnn_fold(
         model_kwargs["use_edge_weights"] = bool(config["dataset"].get("use_edge_weights", True))
         if model_version == "v1":
             model_cls = BinarySpatioTemporalGNNV1
+            model_kwargs.pop("edge_weight_mode", None)
         elif model_version == "v2":
             model_cls = BinarySpatioTemporalGNN
+            model_kwargs.setdefault(
+                "edge_weight_mode",
+                config["dataset"].get("edge_weight_mode", "learned_signed"),
+            )
         else:
             raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
         model = model_cls(**model_kwargs).to(device)

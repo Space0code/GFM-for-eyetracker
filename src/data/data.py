@@ -167,7 +167,7 @@ class SpacioTemporalDataset(Dataset):
             filter_subjects: list = None, filter_recordings: list = None,
             recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
             kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05,
-            graph_version: str = "v2",
+            graph_version: str = "v2", edge_weight_mode: str = "learned_signed",
             window_length: int = 60, window_overlap: float = 0, 
             cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1,
             feature_columns: Optional[List[str]] = None, target_columns: Optional[List[str]] = None,
@@ -191,6 +191,7 @@ class SpacioTemporalDataset(Dataset):
         - kt: k temporal neigbors
         - ks: k spatial neigbors
         - graph_version: "v1" creates temporal/spatial edges; "v2" splits temporal forward/backward edges
+        - edge_weight_mode: "handcrafted" stores scalar exp(-dt/tau) weights; "learned_signed" stores relation features for v2
         - window_length: in seconds
         - window_overlap: fraction in range [0, 1)
         - cache_dir: directory to store cached processed graphs (default: root_dir/.cache for old, data/.cache for new)
@@ -209,6 +210,12 @@ class SpacioTemporalDataset(Dataset):
         if graph_version not in {"v1", "v2"}:
             raise ValueError(f"Unsupported graph_version='{graph_version}'. Choose 'v1' or 'v2'.")
         self.graph_version = graph_version
+        if edge_weight_mode not in {"handcrafted", "learned_signed"}:
+            raise ValueError(
+                f"Unsupported edge_weight_mode='{edge_weight_mode}'. "
+                "Choose 'handcrafted' or 'learned_signed'."
+            )
+        self.edge_weight_mode = edge_weight_mode
         self.window_length = window_length
         self.window_overlap = window_overlap
         self.files = []
@@ -327,7 +334,8 @@ class SpacioTemporalDataset(Dataset):
         # Include all graph-construction options and data source identity to avoid stale collisions.
         config_str = (
             f"kt={self.kt}_ks={self.ks}_tau={self.tau}_wl={self.window_length}_wo={self.window_overlap}"
-            f"_edgew={self.use_edge_weights}_graphv={self.graph_version}_dropthr={self.dropping_emotion_threshold}"
+            f"_edgew={self.use_edge_weights}_graphv={self.graph_version}_ewmode={self.edge_weight_mode}"
+            f"_dropthr={self.dropping_emotion_threshold}"
         )
         
         if data_filepath is not None:
@@ -471,6 +479,36 @@ class SpacioTemporalDataset(Dataset):
 
         #### node features matrix X
         X = torch.tensor(df_window[feature_cols].values, dtype=torch.float32)
+
+        # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
+        if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
+            raise ValueError(
+                "Spatial kNN graph construction requires 'x-avg' and 'y-avg' in feature_columns. "
+                f"Got feature_columns={feature_cols}"
+            )
+        x_idx = feature_cols.index("x-avg")
+        y_idx = feature_cols.index("y-avg")
+        x_values = X[:, x_idx]
+        y_values = X[:, y_idx]
+
+        def build_edge_features(edge_index: torch.Tensor, direction: float | None = None) -> torch.Tensor:
+            """Build relation features for learned edge-weight MLPs."""
+            src_idx, dst_idx = edge_index[0], edge_index[1]
+            delta_t = t[dst_idx] - t[src_idx]
+            delta_x = x_values[dst_idx] - x_values[src_idx]
+            delta_y = y_values[dst_idx] - y_values[src_idx]
+            distance = torch.sqrt(delta_x.square() + delta_y.square())
+            features = [
+                t[src_idx],
+                t[dst_idx],
+                delta_t,
+                delta_x,
+                delta_y,
+                distance,
+            ]
+            if direction is not None:
+                features.append(torch.full_like(delta_t, float(direction)))
+            return torch.stack(features, dim=1)
         
         #### Extract graph-level targets
         target_cols = self._resolve_target_columns(df_window)
@@ -524,14 +562,6 @@ class SpacioTemporalDataset(Dataset):
                 w_temporal_backward = w_temporal[temporal_backward_mask]
 
         #### creating SPATIAL edge_index matrix
-        # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
-        if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
-            raise ValueError(
-                "Spatial kNN graph construction requires 'x-avg' and 'y-avg' in feature_columns. "
-                f"Got feature_columns={feature_cols}"
-            )
-        x_idx = feature_cols.index("x-avg")
-        y_idx = feature_cols.index("y-avg")
         xy = X[:, [x_idx, y_idx]].cpu().numpy()
 
         tree = KDTree(xy)  # use (x, y) for spatial neighbors
@@ -564,10 +594,22 @@ class SpacioTemporalDataset(Dataset):
         if self.use_edge_weights:
             if self.graph_version == "v1":
                 data["node", "temporal", "node"].edge_attr = w_temporal
-            else:
+            elif self.edge_weight_mode == "handcrafted":
                 data["node", "temporal_forward", "node"].edge_attr = w_temporal_forward
                 data["node", "temporal_backward", "node"].edge_attr = w_temporal_backward
-            data["node", "spatial", "node"].edge_attr = w_spatial
+            else:
+                data["node", "temporal_forward", "node"].edge_attr = build_edge_features(
+                    edge_index_temporal_forward,
+                    direction=1.0,
+                )
+                data["node", "temporal_backward", "node"].edge_attr = build_edge_features(
+                    edge_index_temporal_backward,
+                    direction=-1.0,
+                )
+            if self.edge_weight_mode == "learned_signed" and self.graph_version == "v2":
+                data["node", "spatial", "node"].edge_attr = build_edge_features(edge_index_spatial)
+            else:
+                data["node", "spatial", "node"].edge_attr = w_spatial
         
         # Add emotion targets if available
         if y is not None:

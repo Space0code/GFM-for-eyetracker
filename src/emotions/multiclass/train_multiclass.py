@@ -535,21 +535,28 @@ def _train_gnn_fold(
     else:
         raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
 
-    model = model_cls(
-        in_channels=model_cfg["in_channels"],
-        hidden_channels=model_cfg["hidden_channels"],
-        num_classes=len(class_labels),
-        use_preprocess_mlp=model_cfg.get("use_preprocess_mlp", True),
-        use_edge_weights=config["dataset"].get("use_edge_weights", True),
-        add_self_loops=model_cfg.get("add_self_loops", False),
-        dropout_mlp=model_cfg.get("dropout_mlp", 0.1),
-        dropout_gnn=model_cfg.get("dropout_gnn", 0.1),
-        dropout_head=model_cfg.get("dropout_head", 0.1),
-        aggr=model_cfg.get("aggr", "mean"),
-        conv_type=model_cfg.get("conv_type", "GCNConv"),
-        num_layers=model_cfg.get("num_layers", 2),
-        pooling=model_cfg.get("pooling", "mean_max"),
-    ).to(device)
+    model_kwargs = {
+        "in_channels": model_cfg["in_channels"],
+        "hidden_channels": model_cfg["hidden_channels"],
+        "num_classes": len(class_labels),
+        "use_preprocess_mlp": model_cfg.get("use_preprocess_mlp", True),
+        "use_edge_weights": config["dataset"].get("use_edge_weights", True),
+        "add_self_loops": model_cfg.get("add_self_loops", False),
+        "dropout_mlp": model_cfg.get("dropout_mlp", 0.1),
+        "dropout_gnn": model_cfg.get("dropout_gnn", 0.1),
+        "dropout_head": model_cfg.get("dropout_head", 0.1),
+        "aggr": model_cfg.get("aggr", "mean"),
+        "conv_type": model_cfg.get("conv_type", "GCNConv"),
+        "num_layers": model_cfg.get("num_layers", 2),
+        "pooling": model_cfg.get("pooling", "attention" if model_version == "v2" else "mean_max"),
+    }
+    if model_version == "v2":
+        model_kwargs["edge_weight_mode"] = model_cfg.get(
+            "edge_weight_mode",
+            config["dataset"].get("edge_weight_mode", "learned_signed"),
+        )
+
+    model = model_cls(**model_kwargs).to(device)
 
     use_compile = training_cfg.get("use_torch_compile", True)
     if use_compile and hasattr(torch, "compile"):

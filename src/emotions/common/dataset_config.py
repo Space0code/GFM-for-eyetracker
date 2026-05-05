@@ -88,6 +88,7 @@ def build_graph_dataset_kwargs(
         "use_edge_weights": dataset_cfg["use_edge_weights"],
         "tau": dataset_cfg["tau"],
         "graph_version": dataset_cfg.get("graph_version", "v2"),
+        "edge_weight_mode": dataset_cfg.get("edge_weight_mode", "learned_signed"),
         "cache_dir": dataset_cfg.get("cache_dir"),
         "use_cache": dataset_cfg.get("use_cache", True),
         "dropping_emotion_threshold": dataset_cfg.get("dropping_emotion_threshold", -1),

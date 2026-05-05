@@ -235,20 +235,28 @@ def train_gnn_fold(config: dict, train_idx: np.ndarray, val_idx: np.ndarray,
     else:
         raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
 
-    model = model_cls(
-        in_channels=model_cfg['in_channels'],
-        hidden_channels=model_cfg['hidden_channels'],
-        out_channels=model_cfg['out_channels'],
-        output_scale=model_cfg.get('output_scale', 10.0),
-        use_preprocess_mlp=model_cfg.get('use_preprocess_mlp', True),
-        use_edge_weights=data_cfg.get('use_edge_weights', True),
-        add_self_loops=model_cfg.get('add_self_loops', False),
-        dropout_mlp=model_cfg.get('dropout_mlp', 0.1),
-        dropout_gnn=model_cfg.get('dropout_gnn', 0.1),
-        dropout_head=model_cfg.get('dropout_head', 0.1),
-        aggr=model_cfg.get('aggr', 'mean'),
-        conv_type=model_cfg.get('conv_type', 'GCNConv')
-    ).to(device)
+    model_kwargs = {
+        "in_channels": model_cfg["in_channels"],
+        "hidden_channels": model_cfg["hidden_channels"],
+        "out_channels": model_cfg["out_channels"],
+        "output_scale": model_cfg.get("output_scale", 10.0),
+        "use_preprocess_mlp": model_cfg.get("use_preprocess_mlp", True),
+        "use_edge_weights": data_cfg.get("use_edge_weights", True),
+        "add_self_loops": model_cfg.get("add_self_loops", False),
+        "dropout_mlp": model_cfg.get("dropout_mlp", 0.1),
+        "dropout_gnn": model_cfg.get("dropout_gnn", 0.1),
+        "dropout_head": model_cfg.get("dropout_head", 0.1),
+        "aggr": model_cfg.get("aggr", "mean"),
+        "conv_type": model_cfg.get("conv_type", "GCNConv"),
+        "pooling": model_cfg.get("pooling", "attention" if model_version == "v2" else "mean_max"),
+    }
+    if model_version == "v2":
+        model_kwargs["edge_weight_mode"] = model_cfg.get(
+            "edge_weight_mode",
+            data_cfg.get("edge_weight_mode", "learned_signed"),
+        )
+
+    model = model_cls(**model_kwargs).to(device)
     
     optimizer = torch.optim.Adam(model.parameters(), lr=training_cfg['learning_rate'])
     

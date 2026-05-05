@@ -60,6 +60,7 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
         conv_type: str = "GCNConv",
         num_layers: int = 2,
         pooling: str = "attention",
+        edge_weight_mode: str = "learned_signed",
     ) -> None:
         super().__init__(
             in_channels=in_channels,
@@ -76,4 +77,5 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
             conv_type=conv_type,
             num_layers=num_layers,
             pooling=pooling,
+            edge_weight_mode=edge_weight_mode,
         )

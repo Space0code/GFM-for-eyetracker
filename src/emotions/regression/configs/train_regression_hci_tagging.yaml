@@ -19,6 +19,7 @@ dataset:
   ks: 2
   use_edge_weights: true
   graph_version: v2
+  edge_weight_mode: learned_signed
   tau: 0.05
   cache_dir: "data/cache"
   use_cache: false

@@ -36,6 +36,7 @@ dataset:
   ks: 2  # Spatial k-NN for GNN
   use_edge_weights: true  # Whether to use edge weights in GNN layers (requires conv_type that supports it)
   graph_version: v2
+  edge_weight_mode: learned_signed
   tau: 0.05 # Time decay constant for edge weights (in seconds)
   cache_dir: "data/cache"
   use_cache: false
