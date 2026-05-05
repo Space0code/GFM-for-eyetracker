@@ -12,19 +12,23 @@ This file is the persistent working memory for Codex sessions in this repository
 ## Current Focus
 - Build a general graph foundation model (GFM) for eye-tracking data that can infer physiological and psychological states.
 - Develop the model step by step, compare against classical ML baselines, and keep experiments reproducible.
+- Current diploma framing is narrower than the long-term GFM goal: develop and evaluate a spatio-temporal GNN for emotion/affective-state recognition from MAHNOB-HCI-TAGGING.
 
 ## Locked Decisions
 - Use the `gfm` conda environment for Python work.
 - Ignore files under `archive/`.
+- Treat `diploma_knowledge_base.md` as the live project knowledge base as of 2026-05-02; keep it updated when project direction, architecture decisions, experiment context, or writing plans change. The older `diploma_knowledge_base_02_05_2026.md` was renamed to `diploma_knowledge_base.md` in git.
 - Keep scripts configurable with sensible defaults and log final arguments at startup.
 - Normalize confusion-matrix rows to per-class percentages and use a fixed color scale from 0.0 to 1.0.
 - Use the `Blues` color scheme for heatmaps.
 
 ## Recent Notes
 - 2026-05-04: Created this memory file and added repo instructions to read it at the start of each conversation and update it when important project context changes.
+- 2026-05-05: User wants next model work to prioritize incremental, modular upgrades: MLP pooling/fusion of spatial and temporal node representations, MLP pooling of nodes into graph embeddings, separate temporal forward/backward/spatial edge types, and learned edge weights from `[t_i, t_j, x_i, x_j, y_i, y_j]` using an MLP with layers `6 -> 6 -> 4 -> 2 -> 1`.
 
 ## Open Plans
-- Keep this section updated with active implementation or experiment plans from future conversations.
+- Near-term architecture plan: implement changes one at a time and ablate against the current hetero ST-GNN baseline, keeping the experiment set small enough for the diploma.
+- Proposed order: first split temporal edges into forward/backward plus spatial, then add node-level concat+MLP fusion of relation outputs, then add MLP graph pooling, then add learned edge weights and compare shared-vs-relation-specific weight MLPs.
 
 ## Experiment Context
 - For questions about recent experiments, trainings, models, or data, check the latest git commit(s) and explicitly state the assumption that the user likely means the most recently modified experiment context.

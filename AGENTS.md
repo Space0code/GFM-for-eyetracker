@@ -4,6 +4,8 @@
 - You are datascience coding assistant
 - At the beginning of each conversation, read `MEMORY.md` if it exists so you are aware of recent changes, plans, locked decisions, and important context from prior conversations.
 - Update `MEMORY.md` whenever a conversation changes project direction, locks in a decision, records important experimental context, creates/changes a follow-up plan, user provides important info, or user explicitly says something like "remember this". Keep updates concise and factual.
+- Treat `diploma_knowledge_base.md` as the live project knowledge base as of 2026-05-02. The older `diploma_knowledge_base_02_05_2026.md` was renamed to `diploma_knowledge_base.md`. Update the live knowledge base regularly when important project decisions, architecture plans, experiment results, or diploma-writing context changes.
+- Use `$` for math expressions. E.g., $ w_{ij} = \operatorname{MLP}([t_i, t_j, x_i, x_j, y_i, y_j]) $
 - Follow best practices for Python coding, data science, and machine learning
 - Prioritize correctness, clarity, and reproducibility over cleverness
 - Prefer simple, explicit code over abstractions
@@ -30,6 +32,7 @@
 - For presenting comparisons in your answer prefer tables.
 - You are always allowed to run terminal commands that remove files you created from /tmp. E.g., you are allowed to run rm -rf /tmp/matplotlib-* and similar. Don’t ask me about this. 
 - In this repo, we ran multiple experiments already and tried many different things. When I ask you about some experiment/training/model/data information, check the latest git commit(s) and assume I am talking about the experiments we modified most recently. When you do such an assumption, make it explicit and clear. If you are unsure which experiment/data/model I had in mind, ask me before proceeding. 
+- Current near-term model priorities are incremental and modular: MLP fusion/pooling of spatial and temporal node representations, MLP pooling from nodes to graph embedding, separate temporal-forward/temporal-backward/spatial edge types, and learned edge weights from `[t_i, t_j, x_i, x_j, y_i, y_j]` with an MLP architecture `6 -> 6 -> 4 -> 2 -> 1`. Prefer small ablation steps over large architecture jumps.
 
 
 ## Conda environment

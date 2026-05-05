@@ -668,6 +668,28 @@ Suggested small MLP:
 
 This is cheap and avoids committing to a hand-designed temporal decay.
 
+### Architecture priorities from 2026-05-05
+
+Near-term GNN upgrades should stay incremental, modular, and easy to ablate. Current priority order:
+
+1. separate edge types into `temporal_forward`, `temporal_backward`, and `spatial`;
+2. compute relation-specific node representations and combine them with concat + MLP pooling/fusion;
+3. replace simple node-to-graph pooling with a small MLP-based graph pooling module;
+4. replace the handcrafted temporal decay \(w_{ij}=e^{-\Delta t}\) with learned edge weights:
+
+$
+w_{ij} =
+\operatorname{MLP}([t_i, t_j, x_i, x_j, y_i, y_j])
+$
+
+with layer sizes:
+
+$
+6 \rightarrow 6 \rightarrow 4 \rightarrow 2 \rightarrow 1
+$
+
+The shared-vs-relation-specific edge-weight MLP question should be treated as an ablation, not as an immediate large redesign. Start with the simplest shared edge-weight MLP or a temporal-only learned-weight variant, then compare against separate MLPs only if the baseline learns stably.
+
 ### Count and report scale
 
 The thesis should include scale estimates:
@@ -1569,8 +1591,8 @@ Most important next steps:
 
 1. finalize the exact MAHNOB-HCI classification target;
 2. fix train/test-safe preprocessing;
-3. define final graph construction;
-4. implement 2–4 ablations only;
+3. define final graph construction with three edge types: temporal forward, temporal backward, and spatial;
+4. implement 2–4 ablations only, prioritizing relation-specific fusion, MLP graph pooling, and learned edge weights;
 5. compute graph/model scale statistics;
 6. start writing chapters 1–4 immediately;
 7. treat GFM as future work, not as the diploma’s central claim.
