@@ -679,16 +679,24 @@ Near-term GNN upgrades should stay incremental, modular, and easy to ablate. Cur
 
 $
 w_{ij} =
-\operatorname{MLP}([t_i, t_j, x_i, x_j, y_i, y_j])
+\operatorname{MLP}([t_i, t_j, \Delta t, \Delta x, \Delta y, d_{ij}])
 $
 
-with layer sizes:
+with layer sizes for spatial edges:
 
 $
 6 \rightarrow 6 \rightarrow 4 \rightarrow 2 \rightarrow 1
 $
 
-The shared-vs-relation-specific edge-weight MLP question should be treated as an ablation, not as an immediate large redesign. Start with the simplest shared edge-weight MLP or a temporal-only learned-weight variant, then compare against separate MLPs only if the baseline learns stably.
+where \(d_{ij}\) is spatial distance. Temporal edges should add a direction feature, giving temporal edge-weight MLP layer sizes:
+
+$
+7 \rightarrow 6 \rightarrow 4 \rightarrow 2 \rightarrow 1
+$
+
+Edge weights may be signed, but signed incoming weights should be normalized per target node to keep message scales stable, for example by dividing by the sum of incoming absolute signed scores plus \(\epsilon\).
+
+For the fastest path to a stronger working model, use separate edge-weight MLPs for spatial and temporal edges immediately. Temporal forward and backward edges should share the same temporal weight MLP, with direction encoded as an input feature or equivalent relation indicator. Ablations should come after the model works well enough to justify careful comparisons.
 
 ### Count and report scale
 

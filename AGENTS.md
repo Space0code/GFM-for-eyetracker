@@ -32,7 +32,7 @@
 - For presenting comparisons in your answer prefer tables.
 - You are always allowed to run terminal commands that remove files you created from /tmp. E.g., you are allowed to run rm -rf /tmp/matplotlib-* and similar. Don’t ask me about this. 
 - In this repo, we ran multiple experiments already and tried many different things. When I ask you about some experiment/training/model/data information, check the latest git commit(s) and assume I am talking about the experiments we modified most recently. When you do such an assumption, make it explicit and clear. If you are unsure which experiment/data/model I had in mind, ask me before proceeding. 
-- Current near-term model priorities are incremental and modular: MLP fusion/pooling of spatial and temporal node representations, MLP pooling from nodes to graph embedding, separate temporal-forward/temporal-backward/spatial edge types, and learned edge weights from `[t_i, t_j, x_i, x_j, y_i, y_j]` with an MLP architecture `6 -> 6 -> 4 -> 2 -> 1`. Prefer small ablation steps over large architecture jumps.
+- Current near-term model priorities are incremental and modular: MLP fusion/pooling of spatial and temporal node representations, MLP pooling from nodes to graph embedding, separate temporal-forward/temporal-backward/spatial edge types, and learned signed edge weights. Prefer relation features such as `[t_i, t_j, delta_t, delta_x, delta_y, distance]`, normalize signed incoming weights per target node, use spatial edge-weight MLP `6 -> 6 -> 4 -> 2 -> 1`, use temporal edge-weight MLP `7 -> 6 -> 4 -> 2 -> 1` with a direction feature, and share the temporal MLP across forward/backward temporal edges. Ablations come after the model works well.
 
 
 ## Conda environment
