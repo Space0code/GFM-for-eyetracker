@@ -59,7 +59,7 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
         aggr: str = "mean",
         conv_type: str = "GCNConv",
         num_layers: int = 2,
-        pooling: str = "mean_max",
+        pooling: str = "attention",
     ) -> None:
         super().__init__(
             in_channels=in_channels,

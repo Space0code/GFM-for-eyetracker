@@ -2,7 +2,8 @@
 
 import torch
 import torch.nn as nn
-from torch_geometric.nn import GATConv, GCNConv, HeteroConv, global_max_pool, global_mean_pool
+from torch_geometric.nn import GATConv, GCNConv, HeteroConv, global_add_pool, global_max_pool, global_mean_pool
+from torch_geometric.utils import softmax
 
 class SpatioTemporalHeteroGNNV1(nn.Module):
     """Frozen v1 spatio-temporal heterogeneous GNN architecture.
@@ -169,14 +170,14 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
-            num_layers: int = 2, pooling: str = "mean_max",
+            num_layers: int = 2, pooling: str = "attention",
             ):
         nn.Module.__init__(self)
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
-        if pooling not in {"mean", "mean_max"}:
+        if pooling not in {"mean", "mean_max", "attention"}:
             raise ValueError(
-                f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'."
+                f"Unsupported pooling: {pooling}. Choose 'mean', 'mean_max', or 'attention'."
             )
 
         self.use_preprocess_mlp = use_preprocess_mlp
@@ -236,8 +237,16 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             head_in_channels = hidden_channels
         elif pooling == "mean_max":
             head_in_channels = 2 * hidden_channels
+        elif pooling == "attention":
+            head_in_channels = hidden_channels
+            self.attention_pool = nn.Sequential(
+                nn.Linear(hidden_channels, hidden_channels),
+                nn.GELU(),
+                nn.Dropout(p=dropout_head),
+                nn.Linear(hidden_channels, 1),
+            )
         else:
-            raise ValueError(f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'.")
+            raise ValueError(f"Unsupported pooling: {pooling}. Choose 'mean', 'mean_max', or 'attention'.")
 
         self.head = nn.Sequential(
             nn.Linear(head_in_channels, hidden_channels),
@@ -326,8 +335,12 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             mean_emb = global_mean_pool(x_node, batch)
             max_emb = global_max_pool(x_node, batch)
             graph_emb = torch.cat([mean_emb, max_emb], dim=1)
+        elif self.pooling == "attention":
+            scores = self.attention_pool(x_node)
+            alpha = softmax(scores, batch)
+            graph_emb = global_add_pool(alpha * x_node, batch)
         else:
-            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean' or 'mean_max'.")
+            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean', 'mean_max', or 'attention'.")
 
         out = self.head(graph_emb)
         out = out * self.output_scale

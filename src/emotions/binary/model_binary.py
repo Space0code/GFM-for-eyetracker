@@ -59,7 +59,7 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         aggr: str = "mean",
         conv_type: str = "GCNConv",
         num_layers: int = 2,
-        pooling: str = "mean_max",
+        pooling: str = "attention",
     ):
         """
         Initialize binary classification GNN.

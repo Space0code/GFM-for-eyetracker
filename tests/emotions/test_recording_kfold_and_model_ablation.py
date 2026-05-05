@@ -113,7 +113,7 @@ def test_gnn_depth_pooling_output_shape_stays_consistent() -> None:
     batch = next(iter(loader))
 
     for num_layers in [1, 2, 3, 5, 10, 50]:
-        for pooling in ["mean", "mean_max"]:
+        for pooling in ["mean", "mean_max", "attention"]:
             model = SpatioTemporalHeteroGNN(
                 in_channels=4,
                 hidden_channels=8,
