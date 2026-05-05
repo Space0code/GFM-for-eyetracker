@@ -27,10 +27,10 @@ This file is the persistent working memory for Codex sessions in this repository
 - 2026-05-05: User wants next model work to prioritize incremental, modular upgrades: MLP pooling/fusion of spatial and temporal node representations, MLP pooling of nodes into graph embeddings, separate temporal forward/backward/spatial edge types, and learned edge weights from `[t_i, t_j, x_i, x_j, y_i, y_j]` using an MLP with layers `6 -> 6 -> 4 -> 2 -> 1`.
 - 2026-05-05: Updated edge-weight plan for fastest path to a stronger working model: use relation features such as `[t_i, t_j, delta_t, delta_x, delta_y, distance]`; normalize edge weights per target node; use separate weight MLPs for spatial vs temporal edges; use the same temporal weight MLP for forward/backward edges with direction encoded.
 - 2026-05-05: Locked edge-weight details: allow signed weights, but normalize signed incoming weights per target node by signed score magnitude; use spatial MLP `6 -> 6 -> 4 -> 2 -> 1`; use temporal MLP `7 -> 6 -> 4 -> 2 -> 1` by adding a direction feature.
+- 2026-05-05: Implemented GNN v2 architecture in four commits: frozen `SpatioTemporalHeteroGNNV1`, v2 split temporal forward/backward graph schema, relation concat+MLP fusion, attention graph pooling, and learned signed normalized edge weights. Added quick Table-6 arousal comparison runner at `src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py`.
 
 ## Open Plans
-- Near-term architecture plan: implement changes one at a time and ablate against the current hetero ST-GNN baseline, keeping the experiment set small enough for the diploma.
-- Proposed order: first split temporal edges into forward/backward plus spatial, then add learned normalized edge weights with separate spatial/temporal MLPs, then add node-level concat+MLP fusion of relation outputs, then add MLP graph pooling. Ablations come after the model works well enough to justify careful comparisons.
+- Next priority: run the quick Table-6 arousal comparison (`GNN_v1`, `GNN_v2`, `LightGBM`) on a small subset, inspect metrics/runtime/logs, and only then decide whether to tune v2 or broaden to ablations.
 
 ## Experiment Context
 - For questions about recent experiments, trainings, models, or data, check the latest git commit(s) and explicitly state the assumption that the user likely means the most recently modified experiment context.

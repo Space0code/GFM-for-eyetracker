@@ -698,6 +698,30 @@ Edge weights may be signed, but signed incoming weights should be normalized per
 
 For the fastest path to a stronger working model, use separate edge-weight MLPs for spatial and temporal edges immediately. Temporal forward and backward edges should share the same temporal weight MLP, with direction encoded as an input feature or equivalent relation indicator. Ablations should come after the model works well enough to justify careful comparisons.
 
+### Implemented GNN v2 architecture on 2026-05-05
+
+The planned v2 upgrade is implemented in code:
+
+- frozen v1 architecture: `SpatioTemporalHeteroGNNV1`;
+- v2 graph schema: `temporal_forward`, `temporal_backward`, and `spatial` edge types;
+- v2 node-level relation fusion: concatenate spatial/forward/backward relation outputs and pass through a two-layer MLP;
+- v2 graph-level pooling: attention pooling with learned per-node scores \(\alpha_i\);
+- v2 edge weights: learned signed edge weights, normalized per target node by incoming absolute signed-score magnitude.
+
+Default v2 edge-weight setup:
+
+- spatial edge-weight MLP: \(6 \rightarrow 6 \rightarrow 4 \rightarrow 2 \rightarrow 1\);
+- temporal edge-weight MLP: \(7 \rightarrow 6 \rightarrow 4 \rightarrow 2 \rightarrow 1\);
+- temporal forward/backward share the same temporal MLP and use a direction feature.
+
+Quick sanity comparison runner:
+
+```bash
+python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
+```
+
+Default comparison: `GNN_v1` with old handcrafted edge weights enabled, `GNN_v2`, and `LightGBM` on Table-6 arousal three-class classification.
+
 ### Count and report scale
 
 The thesis should include scale estimates:
@@ -1599,8 +1623,8 @@ Most important next steps:
 
 1. finalize the exact MAHNOB-HCI classification target;
 2. fix train/test-safe preprocessing;
-3. define final graph construction with three edge types: temporal forward, temporal backward, and spatial;
-4. implement 2–4 ablations only, prioritizing relation-specific fusion, MLP graph pooling, and learned edge weights;
+3. run quick Table-6 arousal comparison for `GNN_v1`, `GNN_v2`, and `LightGBM`;
+4. inspect whether v2 learns better than v1/LightGBM before starting ablations;
 5. compute graph/model scale statistics;
 6. start writing chapters 1–4 immediately;
 7. treat GFM as future work, not as the diploma’s central claim.
