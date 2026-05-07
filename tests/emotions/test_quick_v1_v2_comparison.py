@@ -8,8 +8,10 @@ import pandas as pd
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
     build_fixed_overrides,
+    build_quick_runs,
     build_variant,
     _build_payload,
+    _ordered_models,
     _save_group_model_ranking,
 )
 
@@ -17,11 +19,12 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
 def _args() -> Namespace:
     return Namespace(
         output_root="results/test_quick",
-        seed=42,
-        cv_strategy="recording_kfold",
-        n_splits=3,
-        val_size=1,
-        num_epochs=2,
+        seed=None,
+        cv_strategy=None,
+        n_splits=None,
+        val_size=None,
+        num_epochs=None,
+        use_torch_compile=False,
     )
 
 
@@ -57,11 +60,72 @@ def test_quick_payload_enables_only_table6_arousal() -> None:
     assert payload["global_overrides"]["run_experiments"] == {"baselines": True, "gnn": False}
 
 
+def test_quick_variants_support_random_and_majority() -> None:
+    random_variant = build_variant("Random")
+    majority_variant = build_variant("Majority")
+
+    assert random_variant.overrides["global_overrides"]["baselines"]["models"] == ["Random"]
+    assert majority_variant.overrides["global_overrides"]["baselines"]["models"] == ["Majority"]
+    assert random_variant.summary_model_name == "Random"
+    assert majority_variant.summary_model_name == "Majority"
+
+
+def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
+    ordered = _ordered_models(["LightGBM", "GNN_v2", "Random", "MLP", "Majority", "SVM", "GNN_v1"])
+
+    assert ordered == ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP", "LightGBM", "SVM"]
+
+
+def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
+    runs = build_quick_runs(["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"])
+
+    assert [run.run_name for run in runs] == ["Baselines", "GNN_v1", "GNN_v2"]
+    assert runs[0].model_names == ["Random", "Majority", "LightGBM"]
+    assert runs[0].overrides["global_overrides"]["baselines"]["models"] == [
+        "Random",
+        "Majority",
+        "LightGBM",
+    ]
+
+
 def test_fixed_overrides_can_target_command_output_dir() -> None:
     output_dir = Path("results/test_quick/command_timestamp")
     overrides = build_fixed_overrides(_args(), run_output_dir=output_dir)
 
     assert overrides["suite"]["results_dir"] == str(output_dir / "model_runs")
+    assert overrides["global_overrides"]["gnn"]["training"]["use_torch_compile"] is False
+
+
+def test_fixed_overrides_only_include_explicit_cli_overrides() -> None:
+    args = Namespace(
+        output_root="results/test_quick",
+        seed=7,
+        cv_strategy="recording_kfold",
+        n_splits=2,
+        val_size=1,
+        num_epochs=3,
+        use_torch_compile=False,
+    )
+    overrides = build_fixed_overrides(args)
+
+    assert overrides["suite"]["seed"] == 7
+    assert overrides["global_overrides"]["cross_validation"] == {
+        "random_state": 7,
+        "strategies": ["recording_kfold"],
+        "n_splits": 2,
+        "val_size": 1,
+    }
+    assert overrides["global_overrides"]["gnn"]["training"]["num_epochs"] == 3
+    assert overrides["global_overrides"]["gnn"]["training"]["use_torch_compile"] is False
+
+
+def test_fixed_overrides_can_explicitly_enable_torch_compile() -> None:
+    args = _args()
+    args.use_torch_compile = True
+
+    overrides = build_fixed_overrides(args)
+
+    assert overrides["global_overrides"]["gnn"]["training"]["use_torch_compile"] is True
 
 
 def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
@@ -75,6 +139,24 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
                 "macro_f1": 0.37,
                 "weighted_f1": 0.38,
                 "auc": 0.52,
+            },
+            {
+                "model": "Random",
+                "status": "success",
+                "accuracy": 0.27,
+                "balanced_accuracy": 0.29,
+                "macro_f1": 0.26,
+                "weighted_f1": 0.27,
+                "auc": 0.50,
+            },
+            {
+                "model": "Majority",
+                "status": "success",
+                "accuracy": 0.31,
+                "balanced_accuracy": 0.33,
+                "macro_f1": 0.25,
+                "weighted_f1": 0.29,
+                "auc": 0.50,
             },
             {
                 "model": "GNN_v1",

@@ -1,31 +1,34 @@
 """Run a quick Table-6 arousal comparison for GNN v1, GNN v2, and baselines.
 
 This script generates focused suite-wrapper configs and optionally runs them
-sequentially on a small MAHNOB-HCI subset. By default it compares frozen
-`GNN_v1`, current `GNN_v2`, and `LightGBM` on the Table-6 three-class arousal
-task with proper k-fold splitting.
+sequentially with the dataset, cross-validation, and training parameters from
+the selected YAML suite config. By default it compares frozen
+`Random`, `Majority`, frozen `GNN_v1`, current `GNN_v2`, and `LightGBM` on the
+Table-6 three-class arousal task with proper k-fold splitting. Requested
+baseline models are grouped into one suite invocation so they share the same
+loaded dataset and CV splits.
 
 Example:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
 
 Useful options:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
-      --models GNN_v1,GNN_v2,LightGBM,SVM \
-      --n-splits 3 \
-      --num-epochs 5 \
+      --models Random,Majority,GNN_v1,GNN_v2,MLP,LightGBM,SVM \
+      --num-epochs 20 \
       --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 import time
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, Iterator, List, Sequence, TextIO
 
 import numpy as np
 import pandas as pd
@@ -48,25 +51,9 @@ from emotions.suite.run_hci_experiment_suite import run_suite
 
 
 AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
-DEFAULT_MODELS = ["GNN_v1", "GNN_v2", "LightGBM"]
-DEFAULT_SUBJECTS = ["P1", "P8", "P5", "P4", "P28", "P2", "P27"]
-DEFAULT_RECORDINGS = [
-    "69.avi",
-    "55.avi",
-    "58.avi",
-    "earworm_f.avi",
-    "53.avi",
-    "80.avi",
-    "79.avi",
-    "73.avi",
-    "107.avi",
-    "146.avi",
-    "30.avi",
-    "138.avi",
-    "detroit_f.avi",
-    "dallas_f.avi",
-]
-BASELINE_MODELS = {"Mean", "SVM", "LightGBM", "MLP"}
+DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
+BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
+PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
 
 
 @dataclass(frozen=True)
@@ -77,6 +64,17 @@ class QuickVariant:
     description: str
     overrides: Dict[str, Any]
     summary_model_name: str
+
+
+@dataclass(frozen=True)
+class QuickRun:
+    """One suite invocation that can produce one or more model results."""
+
+    run_name: str
+    description: str
+    model_names: List[str]
+    summary_model_names: Dict[str, str]
+    overrides: Dict[str, Any]
 
 
 def parse_args() -> argparse.Namespace:
@@ -98,21 +96,83 @@ def parse_args() -> argparse.Namespace:
         "--models",
         type=str,
         default=",".join(DEFAULT_MODELS),
-        help="Comma-separated models: GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP.",
+        help="Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP.",
     )
-    parser.add_argument("--n-splits", type=int, default=3, help="Number of k-fold splits.")
-    parser.add_argument("--val-size", type=int, default=1, help="Validation groups per fold.")
-    parser.add_argument("--num-epochs", type=int, default=5, help="GNN epochs for quick runs.")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument(
+        "--n-splits",
+        type=int,
+        default=None,
+        help="Optional k-fold split override. By default, use the YAML config.",
+    )
+    parser.add_argument(
+        "--val-size",
+        type=int,
+        default=None,
+        help="Optional validation-group override. By default, use the YAML config.",
+    )
+    parser.add_argument(
+        "--num-epochs",
+        type=int,
+        default=None,
+        help="Optional GNN epoch override. By default, use the YAML config.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional suite/CV seed override. By default, use the YAML config.",
+    )
     parser.add_argument(
         "--cv-strategy",
         type=str,
-        default="recording_kfold",
+        default=None,
         choices=["recording_kfold", "subject_kfold"],
-        help="Cross-validation strategy for the quick comparison.",
+        help="Optional CV strategy override. By default, use the YAML config.",
+    )
+    parser.add_argument(
+        "--use-torch-compile",
+        action="store_true",
+        help=(
+            "Enable torch.compile for GNN quick runs. Disabled by default because "
+            "dynamic PyG graph batches can trigger PyTorch Inductor failures."
+        ),
     )
     parser.add_argument("--dry-run", action="store_true", help="Generate configs only.")
     return parser.parse_args()
+
+
+class _TeeStream:
+    """Write console output to both the original stream and a log file."""
+
+    def __init__(self, stream: TextIO, log_handle: TextIO) -> None:
+        self.stream = stream
+        self.log_handle = log_handle
+
+    def write(self, message: str) -> int:
+        self.stream.write(message)
+        self.log_handle.write(message)
+        self.log_handle.flush()
+        return len(message)
+
+    def flush(self) -> None:
+        self.stream.flush()
+        self.log_handle.flush()
+
+
+@contextlib.contextmanager
+def _tee_output(log_path: Path) -> Iterator[None]:
+    """Mirror stdout and stderr to a command-level log file."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    with log_path.open("a", encoding="utf-8") as log_handle:
+        sys.stdout = _TeeStream(original_stdout, log_handle)
+        sys.stderr = _TeeStream(original_stderr, log_handle)
+        try:
+            yield
+        finally:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -143,6 +203,16 @@ def _parse_models(raw_models: str) -> List[str]:
     return models
 
 
+def _ordered_models(model_names: Iterable[str]) -> List[str]:
+    """Return model names in the preferred quick-comparison display order."""
+    unique_models = list(dict.fromkeys(model_names))
+    preferred_idx = {name: idx for idx, name in enumerate(PREFERRED_MODEL_ORDER)}
+    return sorted(
+        unique_models,
+        key=lambda name: (preferred_idx.get(name, len(preferred_idx)), str(name).lower()),
+    )
+
+
 def _enable_only_arousal(wrapper_cfg: Dict[str, Any]) -> None:
     """Enable only the Table-6 arousal experiment in a suite wrapper config."""
     experiments = wrapper_cfg.get("experiments")
@@ -160,48 +230,39 @@ def _enable_only_arousal(wrapper_cfg: Dict[str, Any]) -> None:
 
 
 def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None = None) -> Dict[str, Any]:
-    """Build fixed quick-run overrides shared by all variants."""
+    """Build optional command-level overrides shared by all variants."""
     results_dir = (
         run_output_dir / "model_runs"
         if run_output_dir is not None
         else Path(args.output_root) / "suite_runs"
     )
-    return {
+    overrides: Dict[str, Any] = {
         "suite": {
-            "seed": int(args.seed),
             "results_dir": str(results_dir),
         },
         "global_overrides": {
-            "cross_validation": {
-                "strategies": [str(args.cv_strategy)],
-                "n_splits": int(args.n_splits),
-                "val_size": int(args.val_size),
-                "random_state": int(args.seed),
-            },
-            "dataset": {
-                "use_cache": True,
-                "kt": 2,
-                "ks": 2,
-                "use_edge_weights": True,
-                "filter_subjects": DEFAULT_SUBJECTS,
-                "filter_recordings": DEFAULT_RECORDINGS,
-                "target_aggregation": "mean",
-            },
             "gnn": {
-                "model": {
-                    "conv_type": "GCNConv",
-                    "num_layers": 2,
-                },
                 "training": {
-                    "num_epochs": int(args.num_epochs),
-                    "num_workers": 0,
-                    "persistent_workers": False,
-                    "use_torch_compile": False,
-                    "early_stopping_enabled": False,
-                },
-            },
+                    "use_torch_compile": bool(getattr(args, "use_torch_compile", False)),
+                }
+            }
         },
     }
+    global_overrides = overrides["global_overrides"]
+
+    if args.seed is not None:
+        overrides["suite"]["seed"] = int(args.seed)
+        global_overrides.setdefault("cross_validation", {})["random_state"] = int(args.seed)
+    if args.cv_strategy is not None:
+        global_overrides.setdefault("cross_validation", {})["strategies"] = [str(args.cv_strategy)]
+    if args.n_splits is not None:
+        global_overrides.setdefault("cross_validation", {})["n_splits"] = int(args.n_splits)
+    if args.val_size is not None:
+        global_overrides.setdefault("cross_validation", {})["val_size"] = int(args.val_size)
+    if args.num_epochs is not None:
+        global_overrides.setdefault("gnn", {}).setdefault("training", {})["num_epochs"] = int(args.num_epochs)
+
+    return overrides
 
 
 def build_variant(model_name: str) -> QuickVariant:
@@ -266,11 +327,159 @@ def build_variant(model_name: str) -> QuickVariant:
     raise ValueError(f"Unsupported model_name={model_name}")
 
 
+def build_quick_runs(model_names: Sequence[str]) -> List[QuickRun]:
+    """Group requested models into the minimum safe set of suite invocations."""
+    baseline_names = [name for name in model_names if name in BASELINE_MODELS]
+    emitted_baseline_run = False
+    runs: List[QuickRun] = []
+
+    for model_name in model_names:
+        if model_name in BASELINE_MODELS:
+            if emitted_baseline_run:
+                continue
+            emitted_baseline_run = True
+            runs.append(
+                QuickRun(
+                    run_name="Baselines",
+                    description=f"Baselines on the same quick subset and folds: {', '.join(baseline_names)}.",
+                    model_names=baseline_names,
+                    summary_model_names={name: name for name in baseline_names},
+                    overrides={
+                        "global_overrides": {
+                            "run_experiments": {"baselines": True, "gnn": False},
+                            "baselines": {"models": baseline_names},
+                        }
+                    },
+                )
+            )
+            continue
+
+        variant = build_variant(model_name)
+        runs.append(
+            QuickRun(
+                run_name=variant.model_name,
+                description=variant.description,
+                model_names=[variant.model_name],
+                summary_model_names={variant.model_name: variant.summary_model_name},
+                overrides=variant.overrides,
+            )
+        )
+
+    return runs
+
+
 def _build_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any], variant: QuickVariant) -> Dict[str, Any]:
     """Merge base, fixed, and variant-specific overrides."""
     payload = merge_many(base_cfg, fixed_overrides, variant.overrides)
     _enable_only_arousal(payload)
     return payload
+
+
+def _build_run_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any], quick_run: QuickRun) -> Dict[str, Any]:
+    """Merge base, fixed, and run-specific overrides."""
+    payload = merge_many(base_cfg, fixed_overrides, quick_run.overrides)
+    _enable_only_arousal(payload)
+    return payload
+
+
+def _get_primary_cv_strategy(payload: Dict[str, Any]) -> str:
+    """Return the first configured CV strategy from the merged suite payload."""
+    cv_cfg = payload.get("global_overrides", {}).get("cross_validation", {})
+    strategies = cv_cfg.get("strategies")
+    if isinstance(strategies, list) and strategies:
+        return str(strategies[0])
+    if isinstance(strategies, str) and strategies:
+        return strategies
+    raise ValueError("No cross-validation strategy configured in the merged YAML payload.")
+
+
+def _resolve_repo_path(path_value: str, anchor_path: Path | None = None) -> Path:
+    """Resolve a path from the current working directory or a config-file parent."""
+    path = Path(path_value)
+    if path.is_absolute():
+        return path
+    if path.exists():
+        return path
+    if anchor_path is not None:
+        return (anchor_path.parent / path).resolve()
+    return path.resolve()
+
+
+def _load_multiclass_base_config(base_cfg: Dict[str, Any], base_config_path: Path) -> Dict[str, Any]:
+    """Load the multiclass trainer base config referenced by the suite YAML."""
+    base_configs = base_cfg.get("suite", {}).get("base_configs", {})
+    multiclass_config_raw = base_configs.get("multiclass")
+    if not isinstance(multiclass_config_raw, str):
+        return {}
+
+    multiclass_config_path = _resolve_repo_path(multiclass_config_raw, base_config_path)
+    if not multiclass_config_path.exists():
+        return {}
+
+    return _load_yaml(multiclass_config_path)
+
+
+def _load_all_subject_recording_counts(trainer_cfg: Dict[str, Any], base_config_path: Path) -> tuple[int | None, int | None]:
+    """Load total unique subject/recording counts from the configured trainer CSV."""
+    data_filepath_raw = trainer_cfg.get("dataset", {}).get("data_filepath")
+    if not isinstance(data_filepath_raw, str):
+        return None, None
+
+    data_path = _resolve_repo_path(data_filepath_raw, base_config_path)
+    if not data_path.exists():
+        return None, None
+
+    columns = pd.read_csv(data_path, nrows=0).columns.tolist()
+    usecols = [column for column in ["subject", "recording"] if column in columns]
+    if not usecols:
+        return None, None
+
+    data = pd.read_csv(data_path, usecols=usecols)
+    subject_count = int(data["subject"].dropna().astype(str).nunique()) if "subject" in data else None
+    recording_count = int(data["recording"].dropna().astype(str).nunique()) if "recording" in data else None
+    return subject_count, recording_count
+
+
+def _format_used_total(filter_values: Any, total_count: int | None) -> str:
+    """Format configured filter usage as used/total."""
+    if total_count is None:
+        total_text = "unknown"
+    else:
+        total_text = str(total_count)
+
+    if filter_values is None:
+        used_text = total_text
+    elif isinstance(filter_values, (list, tuple, set)):
+        used_text = str(len(filter_values))
+    else:
+        used_text = "1"
+    return f"{used_text}/{total_text}"
+
+
+def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
+    """Build human-readable resolved YAML context for startup logging."""
+    base_config_path = Path(args.base_config)
+    base_cfg = _load_yaml(base_config_path)
+    fixed_overrides = build_fixed_overrides(args, run_output_dir=Path(args.output_root) / "<timestamp>")
+    payload = merge_many(base_cfg, fixed_overrides)
+    _enable_only_arousal(payload)
+
+    trainer_base_cfg = _load_multiclass_base_config(base_cfg, base_config_path)
+    trainer_cfg = merge_many(trainer_base_cfg, payload.get("global_overrides", {}))
+    cv_cfg = trainer_cfg.get("cross_validation", {})
+    dataset_cfg = trainer_cfg.get("dataset", {})
+    gnn_training_cfg = trainer_cfg.get("gnn", {}).get("training", {})
+    total_subjects, total_recordings = _load_all_subject_recording_counts(trainer_cfg, base_config_path)
+
+    return {
+        "cv_strategy": _get_primary_cv_strategy(payload),
+        "n_splits": str(cv_cfg.get("n_splits", "not configured")),
+        "val_size": str(cv_cfg.get("val_size", "not configured")),
+        "num_epochs": str(gnn_training_cfg.get("num_epochs", "not configured")),
+        "use_torch_compile": str(gnn_training_cfg.get("use_torch_compile", "not configured")),
+        "subjects": _format_used_total(dataset_cfg.get("filter_subjects"), total_subjects),
+        "recordings": _format_used_total(dataset_cfg.get("filter_recordings"), total_recordings),
+    }
 
 
 def _collect_metrics(suite_run_dir: Path, cv_strategy: str, summary_model_name: str) -> Dict[str, float]:
@@ -354,8 +563,7 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     if plot_df.empty:
         return None
 
-    sort_metric = "balanced_accuracy" if "balanced_accuracy" in available_metrics else available_metrics[0]
-    plot_df = plot_df.sort_values(sort_metric, ascending=False)
+    model_order = _ordered_models(plot_df["model"].astype(str).tolist())
     long_df = plot_df.melt(
         id_vars=["model"],
         value_vars=available_metrics,
@@ -370,7 +578,15 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     output_path = plots_dir / "classification_group_model_ranking.png"
 
     fig, ax = plt.subplots(figsize=(12, max(4.5, 0.6 * len(plot_df))))
-    sns.barplot(data=long_df, x="value", y="model", hue="metric", ax=ax, orient="h")
+    sns.barplot(
+        data=long_df,
+        x="value",
+        y="model",
+        hue="metric",
+        order=model_order,
+        ax=ax,
+        orient="h",
+    )
     ax.set_title("Quick Table-6 Arousal Model Ranking")
     ax.set_xlabel("metric value")
     ax.set_ylabel("model")
@@ -438,14 +654,12 @@ def _collect_predictions_for_variant(
 
 def _save_combined_confusion_matrices(
     rows: Sequence[Dict[str, Any]],
-    variants: Sequence[QuickVariant],
     output_dir: Path,
     cv_strategy: str,
 ) -> Path | None:
     """Save confusion matrices comparing all successful quick-run model types."""
     row_by_model = {str(row["model"]): row for row in rows if row.get("status") == "success"}
-    variant_by_model = {variant.model_name: variant for variant in variants}
-    model_names = [variant.model_name for variant in variants if variant.model_name in row_by_model]
+    model_names = _ordered_models(row_by_model.keys())
     if not model_names:
         return None
 
@@ -460,7 +674,7 @@ def _save_combined_confusion_matrices(
         y_true, y_pred = _collect_predictions_for_variant(
             trainer_run_dir=trainer_run_dir,
             cv_strategy=cv_strategy,
-            summary_model_name=variant_by_model[model_name].summary_model_name,
+            summary_model_name=str(row_by_model[model_name]["summary_model_name"]),
         )
         if y_true.size == 0:
             continue
@@ -528,14 +742,15 @@ def _save_combined_confusion_matrices(
     return output_path
 
 
-def run_quick_comparison(args: argparse.Namespace) -> Path:
+def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = None) -> Path:
     """Run or generate the quick comparison configs and summary."""
     base_config_path = Path(args.base_config)
     if not base_config_path.exists():
         raise FileNotFoundError(f"Base config not found: {base_config_path}")
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = Path(args.output_root) / timestamp
+    if output_dir is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = Path(args.output_root) / timestamp
     generated_dir = output_dir / "generated_wrapper_configs"
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_dir.mkdir(parents=True, exist_ok=True)
@@ -543,42 +758,78 @@ def run_quick_comparison(args: argparse.Namespace) -> Path:
     base_cfg = _load_yaml(base_config_path)
     fixed_overrides = build_fixed_overrides(args, run_output_dir=output_dir)
     model_names = _parse_models(args.models)
-    variants = [build_variant(model_name) for model_name in model_names]
+    quick_runs = build_quick_runs(model_names)
 
     rows: List[Dict[str, Any]] = []
-    for variant in variants:
-        payload = _build_payload(base_cfg=base_cfg, fixed_overrides=fixed_overrides, variant=variant)
-        config_path = generated_dir / f"{variant.model_name}.yaml"
+    for quick_run in quick_runs:
+        payload = _build_run_payload(base_cfg=base_cfg, fixed_overrides=fixed_overrides, quick_run=quick_run)
+        cv_strategy = _get_primary_cv_strategy(payload)
+        config_path = generated_dir / f"{quick_run.run_name}.yaml"
         _write_yaml(config_path, payload)
 
-        row: Dict[str, Any] = {
-            "model": variant.model_name,
-            "description": variant.description,
-            "status": "dry_run" if args.dry_run else "pending",
+        base_row: Dict[str, Any] = {
+            "run_name": quick_run.run_name,
+            "description": quick_run.description,
             "wrapper_config_path": str(config_path),
             "suite_run_dir": "",
+            "cv_strategy": cv_strategy,
             "runtime_seconds": np.nan,
             "error": "",
         }
         if args.dry_run:
-            rows.append(row)
-            print(f"dry-run | {variant.model_name} | {config_path}")
+            for model_name in quick_run.model_names:
+                rows.append(
+                    {
+                        **base_row,
+                        "model": model_name,
+                        "summary_model_name": quick_run.summary_model_names[model_name],
+                        "status": "dry_run",
+                    }
+                )
+            print(f"dry-run | {quick_run.run_name} | models={','.join(quick_run.model_names)} | {config_path}")
             continue
 
         started = time.time()
         try:
             suite_run_dir = Path(run_suite(str(config_path)))
-            row.update(_collect_metrics(suite_run_dir, args.cv_strategy, variant.summary_model_name))
-            row["suite_run_dir"] = str(suite_run_dir)
-            row["runtime_seconds"] = round(time.time() - started, 3)
-            row["status"] = "success"
+            runtime_seconds = round(time.time() - started, 3)
+            for model_name in quick_run.model_names:
+                row: Dict[str, Any] = {
+                    **base_row,
+                    "model": model_name,
+                    "summary_model_name": quick_run.summary_model_names[model_name],
+                    "suite_run_dir": str(suite_run_dir),
+                    "runtime_seconds": runtime_seconds,
+                    "status": "success",
+                }
+                try:
+                    row.update(
+                        _collect_metrics(
+                            suite_run_dir=suite_run_dir,
+                            cv_strategy=cv_strategy,
+                            summary_model_name=quick_run.summary_model_names[model_name],
+                        )
+                    )
+                except Exception as metric_exc:
+                    row["status"] = "failed"
+                    row["error"] = f"{metric_exc}\n{traceback.format_exc()}"
+                rows.append(row)
         except Exception as exc:
-            row["runtime_seconds"] = round(time.time() - started, 3)
-            row["status"] = "failed"
-            row["error"] = f"{exc}\n{traceback.format_exc()}"
+            runtime_seconds = round(time.time() - started, 3)
+            for model_name in quick_run.model_names:
+                rows.append(
+                    {
+                        **base_row,
+                        "model": model_name,
+                        "summary_model_name": quick_run.summary_model_names[model_name],
+                        "runtime_seconds": runtime_seconds,
+                        "status": "failed",
+                        "error": f"{exc}\n{traceback.format_exc()}",
+                    }
+                )
 
-        rows.append(row)
-        print(f"{row['status']} | {variant.model_name} | balanced_accuracy={row.get('balanced_accuracy', np.nan)}")
+        for row in rows[-len(quick_run.model_names) :]:
+            print(f"{row['status']} | {row['model']} | balanced_accuracy={row.get('balanced_accuracy', np.nan)}")
 
     summary = _rows_to_dataframe(rows)
     summary_path = output_dir / "quick_comparison_summary.csv"
@@ -586,11 +837,11 @@ def run_quick_comparison(args: argparse.Namespace) -> Path:
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
     confusion_path = None
     if not args.dry_run:
+        confusion_cv_strategy = str(rows[0]["cv_strategy"]) if rows else _get_primary_cv_strategy(base_cfg)
         confusion_path = _save_combined_confusion_matrices(
             rows=rows,
-            variants=variants,
             output_dir=output_dir,
-            cv_strategy=args.cv_strategy,
+            cv_strategy=confusion_cv_strategy,
         )
     print(f"Saved quick comparison summary: {summary_path}")
     if ranking_path is not None:
@@ -603,10 +854,21 @@ def run_quick_comparison(args: argparse.Namespace) -> Path:
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
-    print("Quick v1/v2 comparison arguments:")
-    for key, value in vars(args).items():
-        print(f"  {key}: {value}")
-    run_quick_comparison(args)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    output_dir = Path(args.output_root) / timestamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+    log_path = output_dir / "quick_v1_v2_comparison.log"
+
+    with _tee_output(log_path):
+        print(f"Logging quick comparison output to: {log_path}")
+        print("Quick v1/v2 comparison arguments:")
+        for key, value in vars(args).items():
+            print(f"  {key}: {value}")
+        resolved_context = _build_resolved_run_context(args)
+        print("Resolved YAML run context:")
+        for key, value in resolved_context.items():
+            print(f"  {key}: {value}")
+        run_quick_comparison(args, output_dir=output_dir)
 
 
 if __name__ == "__main__":

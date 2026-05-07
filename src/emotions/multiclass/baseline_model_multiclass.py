@@ -99,6 +99,53 @@ class MeanMulticlassClassifier(MulticlassBaselineModel):
         return probs
 
 
+class RandomMulticlassClassifier(MulticlassBaselineModel):
+    """Predict uniformly random classes with a reproducible random seed."""
+
+    def __init__(self, random_state: int = 42, **_: Any) -> None:
+        super().__init__("Random")
+        self.random_state = random_state
+
+    def fit(self, X_train: Any, y_train: Any) -> None:
+        labels = _as_1d_labels(y_train)
+        self._classes_train = np.unique(labels)
+
+    def predict_proba(self, X: Any, all_classes: np.ndarray) -> np.ndarray:
+        n_samples = len(X)
+        probs = np.zeros((n_samples, len(all_classes)), dtype=float)
+        if n_samples == 0 or len(all_classes) == 0:
+            return probs
+
+        rng = np.random.default_rng(self.random_state)
+        sampled_classes = rng.choice(all_classes, size=n_samples, replace=True)
+        class_to_idx = {int(label): idx for idx, label in enumerate(all_classes.tolist())}
+        for row_idx, label in enumerate(sampled_classes.tolist()):
+            probs[row_idx, class_to_idx[int(label)]] = 1.0
+        return probs
+
+
+class MajorityMulticlassClassifier(MulticlassBaselineModel):
+    """Always predict the most frequent training class."""
+
+    def __init__(self, **_: Any) -> None:
+        super().__init__("Majority")
+
+    def fit(self, X_train: Any, y_train: Any) -> None:
+        labels = _as_1d_labels(y_train)
+        classes, counts = np.unique(labels, return_counts=True)
+        self._constant_class = int(classes[np.argmax(counts)])
+        self._classes_train = classes
+
+    def predict_proba(self, X: Any, all_classes: np.ndarray) -> np.ndarray:
+        probs = np.zeros((len(X), len(all_classes)), dtype=float)
+        if self._constant_class is None:
+            return probs
+        col = np.where(all_classes == self._constant_class)[0]
+        if len(col) > 0:
+            probs[:, int(col[0])] = 1.0
+        return probs
+
+
 class SVMMulticlassBaseline(MulticlassBaselineModel):
     """SVM multiclass classifier with feature standardization."""
 
@@ -250,6 +297,8 @@ class MLPMulticlassBaseline(MulticlassBaselineModel):
 def get_multiclass_baseline_by_name(model_name: str, **hyperparams: Any) -> MulticlassBaselineModel:
     """Factory for multiclass baseline estimators."""
     models = {
+        "Random": RandomMulticlassClassifier,
+        "Majority": MajorityMulticlassClassifier,
         "Mean": MeanMulticlassClassifier,
         "SVM": SVMMulticlassBaseline,
         "LightGBM": LGBMMulticlassBaseline,

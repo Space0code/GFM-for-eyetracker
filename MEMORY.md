@@ -28,9 +28,13 @@ This file is the persistent working memory for Codex sessions in this repository
 - 2026-05-05: Updated edge-weight plan for fastest path to a stronger working model: use relation features such as `[t_i, t_j, delta_t, delta_x, delta_y, distance]`; normalize edge weights per target node; use separate weight MLPs for spatial vs temporal edges; use the same temporal weight MLP for forward/backward edges with direction encoded.
 - 2026-05-05: Locked edge-weight details: allow signed weights, but normalize signed incoming weights per target node by signed score magnitude; use spatial MLP `6 -> 6 -> 4 -> 2 -> 1`; use temporal MLP `7 -> 6 -> 4 -> 2 -> 1` by adding a direction feature.
 - 2026-05-05: Implemented GNN v2 architecture in four commits: frozen `SpatioTemporalHeteroGNNV1`, v2 split temporal forward/backward graph schema, relation concat+MLP fusion, attention graph pooling, and learned signed normalized edge weights. Added quick Table-6 arousal comparison runner at `src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py`.
+- 2026-05-07: Quick v1/v2 comparison now includes `Random` and `Majority` multiclass baselines by default. Comparison plots use the fixed display order `Random`, `Majority`, `GNN_v1`, `GNN_v2`, `MLP`, then remaining trained models alphabetically.
+- 2026-05-07: Quick v1/v2 comparison is YAML-first: subjects, recordings, CV settings, graph settings, cache settings, and epochs should be controlled in the suite YAML by default. CLI flags only apply optional explicit overrides.
+- 2026-05-07: Quick v1/v2 comparison groups all requested baseline models into one suite/trainer invocation so baselines share one dataset load and one CV split construction. GNN v1 and GNN v2 remain separate invocations because their architecture configs differ.
+- 2026-05-07: Debugged quick v1/v2 comparison failure from PyTorch Inductor during `torch.compile` backward graph compilation on dynamic PyG batches. The quick runner now disables `use_torch_compile` by default, offers `--use-torch-compile` for explicit re-enable, and mirrors stdout/stderr to `quick_v1_v2_comparison.log` in each timestamped results folder.
 
 ## Open Plans
-- Next priority: run the quick Table-6 arousal comparison (`GNN_v1`, `GNN_v2`, `LightGBM`) on a small subset, inspect metrics/runtime/logs, and only then decide whether to tune v2 or broaden to ablations.
+- Next priority: run the quick Table-6 arousal comparison (`Random`, `Majority`, `GNN_v1`, `GNN_v2`, `LightGBM`) on a small subset, inspect metrics/runtime/logs, and only then decide whether to tune v2 or broaden to ablations.
 
 ## Experiment Context
 - For questions about recent experiments, trainings, models, or data, check the latest git commit(s) and explicitly state the assumption that the user likely means the most recently modified experiment context.

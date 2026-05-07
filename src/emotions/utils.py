@@ -117,8 +117,14 @@ def validate_config(config: Dict[str, Any]):
     if 'baselines' in config:
         baseline_cfg = config['baselines']
         if 'models' in baseline_cfg:
-            # Import here to avoid circular dependency
-            from emotions.baseline_model import get_baseline_by_name
+            # Import here to avoid circular dependency. Multiclass baselines have
+            # their own factory because they expose predict_proba classifiers.
+            if 'multiclass_task' in config:
+                from emotions.multiclass.baseline_model_multiclass import (
+                    get_multiclass_baseline_by_name as get_baseline_by_name,
+                )
+            else:
+                from emotions.baseline_model import get_baseline_by_name
             
             for model_name in baseline_cfg['models']:
                 try:

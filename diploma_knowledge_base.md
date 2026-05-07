@@ -1629,6 +1629,10 @@ Most important next steps:
 6. start writing chapters 1–4 immediately;
 7. treat GFM as future work, not as the diploma’s central claim.
 
+### 13.1 Experiment runner notes
+
+- 2026-05-07: A quick Table-6 arousal run failed during `loss.backward()` with a PyTorch Inductor `torch.compile` backward-graph assertion on dynamic PyG graph batches. This is treated as a compiler/runtime issue, not evidence of an invalid model objective. The quick v1/v2 runner disables `use_torch_compile` by default and logs each command to `quick_v1_v2_comparison.log` inside the timestamped results folder.
+
 ---
 
 ## 14. Notes on source reliability and removed/weak items
