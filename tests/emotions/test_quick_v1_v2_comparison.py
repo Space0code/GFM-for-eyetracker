@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from pathlib import Path
+
+import pandas as pd
 
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
     build_fixed_overrides,
     build_variant,
     _build_payload,
+    _save_group_model_ranking,
 )
 
 
@@ -51,3 +55,25 @@ def test_quick_payload_enables_only_table6_arousal() -> None:
     assert payload["experiments"]["multiclass_table6_valence_3class"]["enabled"] is False
     assert payload["global_overrides"]["baselines"]["models"] == ["LightGBM"]
     assert payload["global_overrides"]["run_experiments"] == {"baselines": True, "gnn": False}
+
+
+def test_fixed_overrides_can_target_command_output_dir() -> None:
+    output_dir = Path("results/test_quick/command_timestamp")
+    overrides = build_fixed_overrides(_args(), run_output_dir=output_dir)
+
+    assert overrides["suite"]["results_dir"] == str(output_dir / "model_runs")
+
+
+def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
+    summary = pd.DataFrame(
+        [
+            {"model": "GNN_v2", "status": "success", "balanced_accuracy": 0.41},
+            {"model": "GNN_v1", "status": "success", "balanced_accuracy": 0.35},
+            {"model": "LightGBM", "status": "success", "balanced_accuracy": 0.38},
+        ]
+    )
+
+    output_path = _save_group_model_ranking(summary=summary, output_dir=tmp_path)
+
+    assert output_path == tmp_path / "plots" / "classification_group_model_ranking.png"
+    assert output_path.exists()

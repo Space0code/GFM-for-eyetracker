@@ -30,6 +30,12 @@ from typing import Any, Dict, Iterable, List
 import numpy as np
 import pandas as pd
 import yaml
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
 
 # Add src directory only for direct script execution.
 if __package__ in {None, ""}:
@@ -153,12 +159,17 @@ def _enable_only_arousal(wrapper_cfg: Dict[str, Any]) -> None:
     raise ValueError("Unsupported experiments format; expected dict or list.")
 
 
-def build_fixed_overrides(args: argparse.Namespace) -> Dict[str, Any]:
+def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None = None) -> Dict[str, Any]:
     """Build fixed quick-run overrides shared by all variants."""
+    results_dir = (
+        run_output_dir / "model_runs"
+        if run_output_dir is not None
+        else Path(args.output_root) / "suite_runs"
+    )
     return {
         "suite": {
             "seed": int(args.seed),
-            "results_dir": str(Path(args.output_root) / "suite_runs"),
+            "results_dir": str(results_dir),
         },
         "global_overrides": {
             "cross_validation": {
@@ -295,6 +306,21 @@ def _collect_metrics(suite_run_dir: Path, cv_strategy: str, summary_model_name: 
     return metrics
 
 
+def _resolve_trainer_run_dir(suite_run_dir: Path) -> Path:
+    """Return the trainer run directory for the quick arousal experiment."""
+    registry_path = suite_run_dir / "suite_experiment_registry.csv"
+    if not registry_path.exists():
+        raise FileNotFoundError(f"Suite registry not found: {registry_path}")
+    registry = pd.read_csv(registry_path)
+    row = registry[
+        (registry["experiment_id"] == AROUSAL_EXPERIMENT_ID)
+        & (registry["status"] == "success")
+    ]
+    if row.empty:
+        raise ValueError(f"No successful {AROUSAL_EXPERIMENT_ID} run found in {registry_path}.")
+    return Path(str(row.iloc[-1]["trainer_run_dir"]))
+
+
 def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     """Build a stable summary dataframe from result rows."""
     df = pd.DataFrame(list(rows))
@@ -303,6 +329,179 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     sort_cols = [col for col in ["status", "balanced_accuracy", "macro_f1", "model"] if col in df.columns]
     ascending = [True] + [False] * (len(sort_cols) - 1)
     return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
+
+
+def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path | None:
+    """Save a command-level model ranking plot from quick summary metrics."""
+    if summary.empty or "balanced_accuracy" not in summary.columns:
+        return None
+    plot_df = summary[summary["status"] == "success"].copy()
+    plot_df["balanced_accuracy"] = pd.to_numeric(plot_df["balanced_accuracy"], errors="coerce")
+    plot_df = plot_df.dropna(subset=["balanced_accuracy"])
+    if plot_df.empty:
+        return None
+
+    plot_df = plot_df.sort_values("balanced_accuracy", ascending=False)
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / "classification_group_model_ranking.png"
+
+    fig, ax = plt.subplots(figsize=(10, max(4, 0.45 * len(plot_df))))
+    sns.barplot(data=plot_df, x="balanced_accuracy", y="model", ax=ax, orient="h", color="#4C78A8")
+    ax.set_title("Quick Table-6 Arousal Model Ranking")
+    ax.set_xlabel("balanced_accuracy")
+    ax.set_ylabel("model")
+    ax.set_xlim(0.0, 1.0)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+    return output_path
+
+
+def _load_class_display_names(trainer_run_dir: Path) -> Dict[int, str]:
+    """Load encoded class display names from one trainer run."""
+    metadata_path = trainer_run_dir / "class_metadata.yaml"
+    if not metadata_path.exists():
+        return {}
+    with metadata_path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    index_to_name = payload.get("index_to_name") if isinstance(payload, dict) else None
+    if not isinstance(index_to_name, dict):
+        return {}
+    result: Dict[int, str] = {}
+    for raw_idx, raw_name in index_to_name.items():
+        try:
+            idx = int(raw_idx)
+        except (TypeError, ValueError):
+            continue
+        result[idx] = str(raw_name)
+    return result
+
+
+def _collect_predictions_for_variant(
+    trainer_run_dir: Path,
+    cv_strategy: str,
+    summary_model_name: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Collect concatenated test targets and predicted labels for one variant."""
+    strategy_dir = trainer_run_dir / cv_strategy
+    if not strategy_dir.exists():
+        raise FileNotFoundError(f"Strategy directory not found: {strategy_dir}")
+
+    all_targets: List[np.ndarray] = []
+    all_preds: List[np.ndarray] = []
+    for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+        if summary_model_name == "GNN":
+            pred_path = fold_dir / "test_predictions.npy"
+            target_path = fold_dir / "test_targets.npy"
+        else:
+            pred_path = fold_dir / "baselines" / summary_model_name / "test_predictions.npy"
+            target_path = fold_dir / "baselines" / summary_model_name / "test_targets.npy"
+        if not pred_path.exists() or not target_path.exists():
+            continue
+
+        pred = np.asarray(np.load(pred_path))
+        target = np.asarray(np.load(target_path)).reshape(-1)
+        if pred.ndim == 1:
+            pred = pred.reshape(-1, 1)
+        all_targets.append(target.astype(int))
+        all_preds.append(np.argmax(pred, axis=1).astype(int))
+
+    if not all_targets:
+        return np.asarray([], dtype=int), np.asarray([], dtype=int)
+    return np.concatenate(all_targets), np.concatenate(all_preds)
+
+
+def _save_combined_confusion_matrices(
+    rows: Sequence[Dict[str, Any]],
+    variants: Sequence[QuickVariant],
+    output_dir: Path,
+    cv_strategy: str,
+) -> Path | None:
+    """Save confusion matrices comparing all successful quick-run model types."""
+    row_by_model = {str(row["model"]): row for row in rows if row.get("status") == "success"}
+    variant_by_model = {variant.model_name: variant for variant in variants}
+    model_names = [variant.model_name for variant in variants if variant.model_name in row_by_model]
+    if not model_names:
+        return None
+
+    class_display_names: Dict[int, str] = {}
+    collected: Dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    all_classes: List[np.ndarray] = []
+    for model_name in model_names:
+        suite_run_dir = Path(str(row_by_model[model_name]["suite_run_dir"]))
+        trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir)
+        if not class_display_names:
+            class_display_names = _load_class_display_names(trainer_run_dir)
+        y_true, y_pred = _collect_predictions_for_variant(
+            trainer_run_dir=trainer_run_dir,
+            cv_strategy=cv_strategy,
+            summary_model_name=variant_by_model[model_name].summary_model_name,
+        )
+        if y_true.size == 0:
+            continue
+        collected[model_name] = (y_true, y_pred)
+        all_classes.extend([y_true, y_pred])
+
+    if not collected:
+        return None
+
+    classes = np.unique(np.concatenate(all_classes))
+    tick_labels = [
+        class_display_names.get(int(class_idx), str(int(class_idx)))
+        for class_idx in classes
+    ]
+
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    output_path = figures_dir / "confusion_matrices.png"
+
+    n_models = len(collected)
+    fig, axes = plt.subplots(n_models, 2, figsize=(10, 4 * n_models))
+    if n_models == 1:
+        axes = np.asarray([axes])
+
+    for row_idx, (model_name, (y_true, y_pred)) in enumerate(collected.items()):
+        cm = confusion_matrix(y_true, y_pred, labels=classes)
+        row_sums = cm.sum(axis=1, keepdims=True)
+        cm_norm = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0)
+
+        abs_ax = axes[row_idx, 0]
+        norm_ax = axes[row_idx, 1]
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            cbar=False,
+            ax=abs_ax,
+            xticklabels=tick_labels,
+            yticklabels=tick_labels,
+        )
+        abs_ax.set_xlabel("predicted")
+        abs_ax.set_ylabel("true")
+        abs_ax.set_title(f"{model_name} - {cv_strategy} (absolute)")
+
+        sns.heatmap(
+            cm_norm,
+            annot=True,
+            fmt=".2f",
+            cmap="Blues",
+            vmin=0.0,
+            vmax=1.0,
+            cbar=False,
+            ax=norm_ax,
+            xticklabels=tick_labels,
+            yticklabels=tick_labels,
+        )
+        norm_ax.set_xlabel("predicted")
+        norm_ax.set_ylabel("true")
+        norm_ax.set_title(f"{model_name} - {cv_strategy} (row-normalized)")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
 
 
 def run_quick_comparison(args: argparse.Namespace) -> Path:
@@ -318,7 +517,7 @@ def run_quick_comparison(args: argparse.Namespace) -> Path:
     generated_dir.mkdir(parents=True, exist_ok=True)
 
     base_cfg = _load_yaml(base_config_path)
-    fixed_overrides = build_fixed_overrides(args)
+    fixed_overrides = build_fixed_overrides(args, run_output_dir=output_dir)
     model_names = _parse_models(args.models)
     variants = [build_variant(model_name) for model_name in model_names]
 
@@ -360,7 +559,20 @@ def run_quick_comparison(args: argparse.Namespace) -> Path:
     summary = _rows_to_dataframe(rows)
     summary_path = output_dir / "quick_comparison_summary.csv"
     summary.to_csv(summary_path, index=False)
+    ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
+    confusion_path = None
+    if not args.dry_run:
+        confusion_path = _save_combined_confusion_matrices(
+            rows=rows,
+            variants=variants,
+            output_dir=output_dir,
+            cv_strategy=args.cv_strategy,
+        )
     print(f"Saved quick comparison summary: {summary_path}")
+    if ranking_path is not None:
+        print(f"Saved ranking plot: {ranking_path}")
+    if confusion_path is not None:
+        print(f"Saved confusion matrices: {confusion_path}")
     return output_dir
 
 
