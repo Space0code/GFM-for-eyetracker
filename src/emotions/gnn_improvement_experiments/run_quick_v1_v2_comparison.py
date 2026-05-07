@@ -300,9 +300,19 @@ def _collect_metrics(suite_run_dir: Path, cv_strategy: str, summary_model_name: 
         raise ValueError(f"No aggregated row for model={summary_model_name} in {summary_path}.")
 
     metrics: Dict[str, float] = {}
-    for metric in ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "loss"]:
-        if metric in model_row.columns:
-            metrics[metric] = float(model_row.iloc[0][metric])
+    metric_aliases = {
+        "accuracy": ["accuracy"],
+        "balanced_accuracy": ["balanced_accuracy"],
+        "macro_f1": ["macro_f1"],
+        "weighted_f1": ["weighted_f1"],
+        "auc": ["auc", "macro_auc_ovr", "weighted_auc_ovr"],
+        "loss": ["loss"],
+    }
+    for output_metric, candidate_columns in metric_aliases.items():
+        for column in candidate_columns:
+            if column in model_row.columns and pd.notna(model_row.iloc[0][column]):
+                metrics[output_metric] = float(model_row.iloc[0][column])
+                break
     return metrics
 
 
@@ -333,25 +343,39 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
 
 def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path | None:
     """Save a command-level model ranking plot from quick summary metrics."""
-    if summary.empty or "balanced_accuracy" not in summary.columns:
+    metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
+    available_metrics = [metric for metric in metric_columns if metric in summary.columns]
+    if summary.empty or not available_metrics:
         return None
     plot_df = summary[summary["status"] == "success"].copy()
-    plot_df["balanced_accuracy"] = pd.to_numeric(plot_df["balanced_accuracy"], errors="coerce")
-    plot_df = plot_df.dropna(subset=["balanced_accuracy"])
+    for metric in available_metrics:
+        plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+    plot_df = plot_df.dropna(subset=available_metrics, how="all")
     if plot_df.empty:
         return None
 
-    plot_df = plot_df.sort_values("balanced_accuracy", ascending=False)
+    sort_metric = "balanced_accuracy" if "balanced_accuracy" in available_metrics else available_metrics[0]
+    plot_df = plot_df.sort_values(sort_metric, ascending=False)
+    long_df = plot_df.melt(
+        id_vars=["model"],
+        value_vars=available_metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+    if long_df.empty:
+        return None
+
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     output_path = plots_dir / "classification_group_model_ranking.png"
 
-    fig, ax = plt.subplots(figsize=(10, max(4, 0.45 * len(plot_df))))
-    sns.barplot(data=plot_df, x="balanced_accuracy", y="model", ax=ax, orient="h", color="#4C78A8")
+    fig, ax = plt.subplots(figsize=(12, max(4.5, 0.6 * len(plot_df))))
+    sns.barplot(data=long_df, x="value", y="model", hue="metric", ax=ax, orient="h")
     ax.set_title("Quick Table-6 Arousal Model Ranking")
-    ax.set_xlabel("balanced_accuracy")
+    ax.set_xlabel("metric value")
     ax.set_ylabel("model")
     ax.set_xlim(0.0, 1.0)
+    ax.legend(loc="lower right", title="metric")
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)

@@ -67,9 +67,33 @@ def test_fixed_overrides_can_target_command_output_dir() -> None:
 def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
     summary = pd.DataFrame(
         [
-            {"model": "GNN_v2", "status": "success", "balanced_accuracy": 0.41},
-            {"model": "GNN_v1", "status": "success", "balanced_accuracy": 0.35},
-            {"model": "LightGBM", "status": "success", "balanced_accuracy": 0.38},
+            {
+                "model": "GNN_v2",
+                "status": "success",
+                "accuracy": 0.39,
+                "balanced_accuracy": 0.41,
+                "macro_f1": 0.37,
+                "weighted_f1": 0.38,
+                "auc": 0.52,
+            },
+            {
+                "model": "GNN_v1",
+                "status": "success",
+                "accuracy": 0.34,
+                "balanced_accuracy": 0.35,
+                "macro_f1": 0.31,
+                "weighted_f1": 0.32,
+                "auc": 0.49,
+            },
+            {
+                "model": "LightGBM",
+                "status": "success",
+                "accuracy": 0.37,
+                "balanced_accuracy": 0.38,
+                "macro_f1": 0.35,
+                "weighted_f1": 0.36,
+                "auc": 0.51,
+            },
         ]
     )
 
