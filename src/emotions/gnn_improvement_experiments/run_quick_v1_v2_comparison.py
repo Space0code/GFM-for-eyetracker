@@ -1,10 +1,10 @@
-"""Run a quick Table-6 arousal comparison for GNN v1, GNN v2, and baselines.
+"""Run a quick Table-6 arousal/valence comparison for GNN v1, GNN v2, and baselines.
 
 This script generates focused suite-wrapper configs and optionally runs them
 sequentially with the dataset, cross-validation, and training parameters from
 the selected YAML suite config. By default it compares frozen
 `Random`, `Majority`, frozen `GNN_v1`, current `GNN_v2`, and `LightGBM` on the
-Table-6 three-class arousal task with proper k-fold splitting. Requested
+Table-6 three-class arousal and valence tasks with proper k-fold splitting. Requested
 baseline models are grouped into one suite invocation so they share the same
 loaded dataset and CV splits.
 
@@ -51,6 +51,12 @@ from emotions.suite.run_hci_experiment_suite import run_suite
 
 
 AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
+VALENCE_EXPERIMENT_ID = "multiclass_table6_valence_3class"
+QUICK_EXPERIMENT_IDS = [AROUSAL_EXPERIMENT_ID, VALENCE_EXPERIMENT_ID]
+EXPERIMENT_DISPLAY_NAMES = {
+    AROUSAL_EXPERIMENT_ID: "Table-6 Arousal",
+    VALENCE_EXPERIMENT_ID: "Table-6 Valence",
+}
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
 PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
@@ -250,18 +256,18 @@ def _ordered_models(model_names: Iterable[str]) -> List[str]:
     )
 
 
-def _enable_only_arousal(wrapper_cfg: Dict[str, Any]) -> None:
-    """Enable only the Table-6 arousal experiment in a suite wrapper config."""
+def _enable_quick_table6_tasks(wrapper_cfg: Dict[str, Any]) -> None:
+    """Enable only the quick-comparison Table-6 tasks in a suite wrapper config."""
     experiments = wrapper_cfg.get("experiments")
     if isinstance(experiments, dict):
         for experiment_id, experiment_cfg in experiments.items():
             if isinstance(experiment_cfg, dict):
-                experiment_cfg["enabled"] = experiment_id == AROUSAL_EXPERIMENT_ID
+                experiment_cfg["enabled"] = experiment_id in QUICK_EXPERIMENT_IDS
         return
     if isinstance(experiments, list):
         for experiment_cfg in experiments:
             if isinstance(experiment_cfg, dict):
-                experiment_cfg["enabled"] = str(experiment_cfg.get("id", "")) == AROUSAL_EXPERIMENT_ID
+                experiment_cfg["enabled"] = str(experiment_cfg.get("id", "")) in QUICK_EXPERIMENT_IDS
         return
     raise ValueError("Unsupported experiments format; expected dict or list.")
 
@@ -281,6 +287,11 @@ def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None 
             "gnn": {
                 "training": {
                     "use_torch_compile": bool(getattr(args, "use_torch_compile", False)),
+                    # Quick runs favor robustness over throughput because some PyG/CUDA
+                    # combinations intermittently fail in worker pin-memory threads.
+                    "num_workers": 0,
+                    "pin_memory": False,
+                    "persistent_workers": False,
                 }
             }
         },
@@ -408,14 +419,14 @@ def build_quick_runs(model_names: Sequence[str]) -> List[QuickRun]:
 def _build_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any], variant: QuickVariant) -> Dict[str, Any]:
     """Merge base, fixed, and variant-specific overrides."""
     payload = merge_many(base_cfg, fixed_overrides, variant.overrides)
-    _enable_only_arousal(payload)
+    _enable_quick_table6_tasks(payload)
     return payload
 
 
 def _build_run_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any], quick_run: QuickRun) -> Dict[str, Any]:
     """Merge base, fixed, and run-specific overrides."""
     payload = merge_many(base_cfg, fixed_overrides, quick_run.overrides)
-    _enable_only_arousal(payload)
+    _enable_quick_table6_tasks(payload)
     return payload
 
 
@@ -430,9 +441,30 @@ def _get_cv_strategies(payload: Dict[str, Any]) -> List[str]:
     raise ValueError("No cross-validation strategy configured in the merged YAML payload.")
 
 
-def _get_primary_cv_strategy(payload: Dict[str, Any]) -> str:
-    """Return the first configured CV strategy from the merged suite payload."""
-    return _get_cv_strategies(payload)[0]
+def _get_enabled_experiment_ids(payload: Dict[str, Any]) -> List[str]:
+    """Return enabled quick-comparison experiment IDs from a merged wrapper payload."""
+    experiments = payload.get("experiments")
+    enabled_ids: List[str] = []
+    if isinstance(experiments, dict):
+        for experiment_id, experiment_cfg in experiments.items():
+            if (
+                experiment_id in QUICK_EXPERIMENT_IDS
+                and isinstance(experiment_cfg, dict)
+                and bool(experiment_cfg.get("enabled", False))
+            ):
+                enabled_ids.append(experiment_id)
+    elif isinstance(experiments, list):
+        for experiment_cfg in experiments:
+            if not isinstance(experiment_cfg, dict):
+                continue
+            experiment_id = str(experiment_cfg.get("id", ""))
+            if experiment_id in QUICK_EXPERIMENT_IDS and bool(experiment_cfg.get("enabled", False)):
+                enabled_ids.append(experiment_id)
+    else:
+        raise ValueError("Unsupported experiments format; expected dict or list.")
+    if not enabled_ids:
+        raise ValueError("No enabled quick-comparison Table-6 experiments found in merged wrapper payload.")
+    return enabled_ids
 
 
 def _resolve_repo_path(path_value: str, anchor_path: Path | None = None) -> Path:
@@ -461,41 +493,49 @@ def _load_multiclass_base_config(base_cfg: Dict[str, Any], base_config_path: Pat
     return _load_yaml(multiclass_config_path)
 
 
-def _load_all_subject_recording_counts(trainer_cfg: Dict[str, Any], base_config_path: Path) -> tuple[int | None, int | None]:
-    """Load total unique subject/recording counts from the configured trainer CSV."""
+def _load_subject_recording_usage(
+    trainer_cfg: Dict[str, Any],
+    base_config_path: Path,
+) -> tuple[int | None, int | None, int | None, int | None]:
+    """Load total and configured-used subject/recording counts from the trainer CSV."""
     data_filepath_raw = trainer_cfg.get("dataset", {}).get("data_filepath")
     if not isinstance(data_filepath_raw, str):
-        return None, None
+        return None, None, None, None
 
     data_path = _resolve_repo_path(data_filepath_raw, base_config_path)
     if not data_path.exists():
-        return None, None
+        return None, None, None, None
 
     columns = pd.read_csv(data_path, nrows=0).columns.tolist()
     usecols = [column for column in ["subject", "recording"] if column in columns]
     if not usecols:
-        return None, None
+        return None, None, None, None
 
     data = pd.read_csv(data_path, usecols=usecols)
-    subject_count = int(data["subject"].dropna().astype(str).nunique()) if "subject" in data else None
-    recording_count = int(data["recording"].dropna().astype(str).nunique()) if "recording" in data else None
-    return subject_count, recording_count
+    subject_values = sorted(data["subject"].dropna().astype(str).unique().tolist()) if "subject" in data else []
+    recording_values = sorted(data["recording"].dropna().astype(str).unique().tolist()) if "recording" in data else []
 
+    dataset_cfg = trainer_cfg.get("dataset", {})
+    filter_subjects = dataset_cfg.get("filter_subjects")
+    exclude_subjects = dataset_cfg.get("exclude_subjects")
+    filter_recordings = dataset_cfg.get("filter_recordings")
 
-def _format_used_total(filter_values: Any, total_count: int | None) -> str:
-    """Format configured filter usage as used/total."""
-    if total_count is None:
-        total_text = "unknown"
-    else:
-        total_text = str(total_count)
+    used_subjects = set(subject_values)
+    if filter_subjects is not None:
+        used_subjects &= {str(value) for value in filter_subjects}
+    if exclude_subjects is not None:
+        used_subjects -= {str(value) for value in exclude_subjects}
 
-    if filter_values is None:
-        used_text = total_text
-    elif isinstance(filter_values, (list, tuple, set)):
-        used_text = str(len(filter_values))
-    else:
-        used_text = "1"
-    return f"{used_text}/{total_text}"
+    used_recordings = set(recording_values)
+    if filter_recordings is not None:
+        used_recordings &= {str(value) for value in filter_recordings}
+
+    return (
+        len(subject_values),
+        len(recording_values),
+        len(used_subjects),
+        len(used_recordings),
+    )
 
 
 def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
@@ -504,14 +544,17 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
     base_cfg = _load_yaml(base_config_path)
     fixed_overrides = build_fixed_overrides(args, run_output_dir=Path(args.output_root) / "<timestamp>")
     payload = merge_many(base_cfg, fixed_overrides)
-    _enable_only_arousal(payload)
+    _enable_quick_table6_tasks(payload)
 
     trainer_base_cfg = _load_multiclass_base_config(base_cfg, base_config_path)
     trainer_cfg = merge_many(trainer_base_cfg, payload.get("global_overrides", {}))
     cv_cfg = trainer_cfg.get("cross_validation", {})
     dataset_cfg = trainer_cfg.get("dataset", {})
     gnn_training_cfg = trainer_cfg.get("gnn", {}).get("training", {})
-    total_subjects, total_recordings = _load_all_subject_recording_counts(trainer_cfg, base_config_path)
+    total_subjects, total_recordings, used_subjects, used_recordings = _load_subject_recording_usage(
+        trainer_cfg,
+        base_config_path,
+    )
 
     return {
         "cv_strategies": ",".join(_get_cv_strategies(payload)),
@@ -519,23 +562,40 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
         "val_size": str(cv_cfg.get("val_size", "not configured")),
         "num_epochs": str(gnn_training_cfg.get("num_epochs", "not configured")),
         "use_torch_compile": str(gnn_training_cfg.get("use_torch_compile", "not configured")),
-        "subjects": _format_used_total(dataset_cfg.get("filter_subjects"), total_subjects),
-        "recordings": _format_used_total(dataset_cfg.get("filter_recordings"), total_recordings),
+        "num_workers": str(gnn_training_cfg.get("num_workers", "not configured")),
+        "pin_memory": str(gnn_training_cfg.get("pin_memory", "not configured")),
+        "persistent_workers": str(gnn_training_cfg.get("persistent_workers", "not configured")),
+        "subjects": (
+            f"{used_subjects}/{total_subjects}"
+            if used_subjects is not None and total_subjects is not None
+            else "unknown/unknown"
+        ),
+        "recordings": (
+            f"{used_recordings}/{total_recordings}"
+            if used_recordings is not None and total_recordings is not None
+            else "unknown/unknown"
+        ),
+        "experiments": ",".join(_get_enabled_experiment_ids(payload)),
     }
 
 
-def _collect_metrics(suite_run_dir: Path, cv_strategy: str, summary_model_name: str) -> Dict[str, float]:
-    """Collect aggregate metrics from one suite run."""
+def _collect_metrics(
+    suite_run_dir: Path,
+    cv_strategy: str,
+    summary_model_name: str,
+    experiment_id: str,
+) -> Dict[str, float]:
+    """Collect aggregate metrics from one suite run and one experiment."""
     registry_path = suite_run_dir / "suite_experiment_registry.csv"
     if not registry_path.exists():
         raise FileNotFoundError(f"Suite registry not found: {registry_path}")
     registry = pd.read_csv(registry_path)
     row = registry[
-        (registry["experiment_id"] == AROUSAL_EXPERIMENT_ID)
+        (registry["experiment_id"] == experiment_id)
         & (registry["status"] == "success")
     ]
     if row.empty:
-        raise ValueError(f"No successful {AROUSAL_EXPERIMENT_ID} run found in {registry_path}.")
+        raise ValueError(f"No successful {experiment_id} run found in {registry_path}.")
 
     trainer_run_dir = Path(str(row.iloc[-1]["trainer_run_dir"]))
     summary_path = trainer_run_dir / cv_strategy / "summary.csv"
@@ -567,18 +627,18 @@ def _collect_metrics(suite_run_dir: Path, cv_strategy: str, summary_model_name: 
     return metrics
 
 
-def _resolve_trainer_run_dir(suite_run_dir: Path) -> Path:
-    """Return the trainer run directory for the quick arousal experiment."""
+def _resolve_trainer_run_dir(suite_run_dir: Path, experiment_id: str) -> Path:
+    """Return the trainer run directory for one quick-comparison experiment."""
     registry_path = suite_run_dir / "suite_experiment_registry.csv"
     if not registry_path.exists():
         raise FileNotFoundError(f"Suite registry not found: {registry_path}")
     registry = pd.read_csv(registry_path)
     row = registry[
-        (registry["experiment_id"] == AROUSAL_EXPERIMENT_ID)
+        (registry["experiment_id"] == experiment_id)
         & (registry["status"] == "success")
     ]
     if row.empty:
-        raise ValueError(f"No successful {AROUSAL_EXPERIMENT_ID} run found in {registry_path}.")
+        raise ValueError(f"No successful {experiment_id} run found in {registry_path}.")
     return Path(str(row.iloc[-1]["trainer_run_dir"]))
 
 
@@ -612,8 +672,13 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
         if "cv_strategy" in plot_df.columns
         else ["all"]
     )
+    experiment_order = (
+        list(dict.fromkeys(plot_df["experiment_id"].astype(str).tolist()))
+        if "experiment_id" in plot_df.columns
+        else ["all"]
+    )
     long_df = plot_df.melt(
-        id_vars=[col for col in ["cv_strategy", "model"] if col in plot_df.columns],
+        id_vars=[col for col in ["experiment_id", "experiment_display_name", "cv_strategy", "model"] if col in plot_df.columns],
         value_vars=available_metrics,
         var_name="metric",
         value_name="value",
@@ -626,33 +691,42 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     output_path = plots_dir / "classification_group_model_ranking.png"
 
     fig, axes = plt.subplots(
-        len(strategy_order),
+        len(experiment_order) * len(strategy_order),
         1,
-        figsize=(12, max(4.5, 0.65 * len(model_order)) * len(strategy_order)),
+        figsize=(12, max(4.5, 0.65 * len(model_order)) * len(experiment_order) * len(strategy_order)),
         squeeze=False,
     )
-    for row_idx, strategy in enumerate(strategy_order):
-        ax = axes[row_idx, 0]
-        strategy_df = (
-            long_df[long_df["cv_strategy"].astype(str) == strategy]
-            if "cv_strategy" in long_df.columns
+    row_idx = 0
+    for experiment_id in experiment_order:
+        experiment_df = (
+            long_df[long_df["experiment_id"].astype(str) == experiment_id]
+            if "experiment_id" in long_df.columns
             else long_df
         )
-        sns.barplot(
-            data=strategy_df,
-            x="value",
-            y="model",
-            hue="metric",
-            order=model_order,
-            ax=ax,
-            orient="h",
-        )
-        title_suffix = f" - {strategy}" if "cv_strategy" in long_df.columns else ""
-        ax.set_title(f"Quick Table-6 Arousal Model Ranking{title_suffix}")
-        ax.set_xlabel("metric value")
-        ax.set_ylabel("model")
-        ax.set_xlim(0.0, 1.0)
-        ax.legend(loc="lower right", title="metric")
+        experiment_name = EXPERIMENT_DISPLAY_NAMES.get(str(experiment_id), str(experiment_id))
+        for strategy in strategy_order:
+            ax = axes[row_idx, 0]
+            strategy_df = (
+                experiment_df[experiment_df["cv_strategy"].astype(str) == strategy]
+                if "cv_strategy" in experiment_df.columns
+                else experiment_df
+            )
+            sns.barplot(
+                data=strategy_df,
+                x="value",
+                y="model",
+                hue="metric",
+                order=model_order,
+                ax=ax,
+                orient="h",
+            )
+            title_suffix = f" - {strategy}" if "cv_strategy" in experiment_df.columns else ""
+            ax.set_title(f"Quick {experiment_name} Model Ranking{title_suffix}")
+            ax.set_xlabel("metric value")
+            ax.set_ylabel("model")
+            ax.set_xlim(0.0, 1.0)
+            ax.legend(loc="lower right", title="metric")
+            row_idx += 1
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -716,6 +790,7 @@ def _collect_predictions_for_variant(
 def _save_combined_confusion_matrices(
     rows: Sequence[Dict[str, Any]],
     output_dir: Path,
+    experiment_id: str,
     cv_strategy: str,
     use_strategy_suffix: bool = True,
 ) -> Path | None:
@@ -723,7 +798,9 @@ def _save_combined_confusion_matrices(
     row_by_model = {
         str(row["model"]): row
         for row in rows
-        if row.get("status") == "success" and str(row.get("cv_strategy")) == cv_strategy
+        if row.get("status") == "success"
+        and str(row.get("experiment_id")) == experiment_id
+        and str(row.get("cv_strategy")) == cv_strategy
     }
     model_names = _ordered_models(row_by_model.keys())
     if not model_names:
@@ -734,7 +811,7 @@ def _save_combined_confusion_matrices(
     all_classes: List[np.ndarray] = []
     for model_name in model_names:
         suite_run_dir = Path(str(row_by_model[model_name]["suite_run_dir"]))
-        trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir)
+        trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
         if not class_display_names:
             class_display_names = _load_class_display_names(trainer_run_dir)
         y_true, y_pred = _collect_predictions_for_variant(
@@ -758,7 +835,11 @@ def _save_combined_confusion_matrices(
 
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"confusion_matrices_{cv_strategy}.png" if use_strategy_suffix else "confusion_matrices.png"
+    experiment_slug = str(experiment_id).replace("multiclass_", "").replace("_3class", "")
+    if use_strategy_suffix:
+        filename = f"confusion_matrices_{experiment_slug}_{cv_strategy}.png"
+    else:
+        filename = f"confusion_matrices_{experiment_slug}.png"
     output_path = figures_dir / filename
 
     n_models = len(collected)
@@ -831,6 +912,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     for quick_run in quick_runs:
         payload = _build_run_payload(base_cfg=base_cfg, fixed_overrides=fixed_overrides, quick_run=quick_run)
         cv_strategies = _get_cv_strategies(payload)
+        experiment_ids = _get_enabled_experiment_ids(payload)
         config_path = generated_dir / f"{quick_run.run_name}.yaml"
         _write_yaml(config_path, payload)
 
@@ -843,20 +925,23 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
             "error": "",
         }
         if args.dry_run:
-            for cv_strategy in cv_strategies:
-                for model_name in quick_run.model_names:
-                    rows.append(
-                        {
-                            **base_row,
-                            "cv_strategy": cv_strategy,
-                            "model": model_name,
-                            "summary_model_name": quick_run.summary_model_names[model_name],
-                            "status": "dry_run",
-                        }
-                    )
+            for experiment_id in experiment_ids:
+                for cv_strategy in cv_strategies:
+                    for model_name in quick_run.model_names:
+                        rows.append(
+                            {
+                                **base_row,
+                                "experiment_id": experiment_id,
+                                "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
+                                "cv_strategy": cv_strategy,
+                                "model": model_name,
+                                "summary_model_name": quick_run.summary_model_names[model_name],
+                                "status": "dry_run",
+                            }
+                        )
             print(
                 f"dry-run | {quick_run.run_name} | models={','.join(quick_run.model_names)} "
-                f"| cv={','.join(cv_strategies)} | {config_path}"
+                f"| tasks={','.join(experiment_ids)} | cv={','.join(cv_strategies)} | {config_path}"
             )
             continue
 
@@ -864,48 +949,55 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
         try:
             suite_run_dir = Path(run_suite(str(config_path)))
             runtime_seconds = round(time.time() - started, 3)
-            for cv_strategy in cv_strategies:
-                for model_name in quick_run.model_names:
-                    row: Dict[str, Any] = {
-                        **base_row,
-                        "cv_strategy": cv_strategy,
-                        "model": model_name,
-                        "summary_model_name": quick_run.summary_model_names[model_name],
-                        "suite_run_dir": str(suite_run_dir),
-                        "runtime_seconds": runtime_seconds,
-                        "status": "success",
-                    }
-                    try:
-                        row.update(
-                            _collect_metrics(
-                                suite_run_dir=suite_run_dir,
-                                cv_strategy=cv_strategy,
-                                summary_model_name=quick_run.summary_model_names[model_name],
-                            )
-                        )
-                    except Exception as metric_exc:
-                        row["status"] = "failed"
-                        row["error"] = f"{metric_exc}\n{traceback.format_exc()}"
-                    rows.append(row)
-        except Exception as exc:
-            runtime_seconds = round(time.time() - started, 3)
-            for cv_strategy in cv_strategies:
-                for model_name in quick_run.model_names:
-                    rows.append(
-                        {
+            for experiment_id in experiment_ids:
+                for cv_strategy in cv_strategies:
+                    for model_name in quick_run.model_names:
+                        row: Dict[str, Any] = {
                             **base_row,
+                            "experiment_id": experiment_id,
+                            "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
                             "cv_strategy": cv_strategy,
                             "model": model_name,
                             "summary_model_name": quick_run.summary_model_names[model_name],
+                            "suite_run_dir": str(suite_run_dir),
                             "runtime_seconds": runtime_seconds,
-                            "status": "failed",
-                            "error": f"{exc}\n{traceback.format_exc()}",
+                            "status": "success",
                         }
-                    )
+                        try:
+                            row.update(
+                                _collect_metrics(
+                                    suite_run_dir=suite_run_dir,
+                                    cv_strategy=cv_strategy,
+                                    summary_model_name=quick_run.summary_model_names[model_name],
+                                    experiment_id=experiment_id,
+                                )
+                            )
+                        except Exception as metric_exc:
+                            row["status"] = "failed"
+                            row["error"] = f"{metric_exc}\n{traceback.format_exc()}"
+                        rows.append(row)
+        except Exception as exc:
+            runtime_seconds = round(time.time() - started, 3)
+            for experiment_id in experiment_ids:
+                for cv_strategy in cv_strategies:
+                    for model_name in quick_run.model_names:
+                        rows.append(
+                            {
+                                **base_row,
+                                "experiment_id": experiment_id,
+                                "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
+                                "cv_strategy": cv_strategy,
+                                "model": model_name,
+                                "summary_model_name": quick_run.summary_model_names[model_name],
+                                "runtime_seconds": runtime_seconds,
+                                "status": "failed",
+                                "error": f"{exc}\n{traceback.format_exc()}",
+                            }
+                        )
 
-        for row in rows[-(len(quick_run.model_names) * len(cv_strategies)) :]:
+        for row in rows[-(len(quick_run.model_names) * len(cv_strategies) * len(experiment_ids)) :]:
             print(
-                f"{row['status']} | {row['cv_strategy']} | {row['model']} "
+                f"{row['status']} | {row.get('experiment_id')} | {row['cv_strategy']} | {row['model']} "
                 f"| balanced_accuracy={row.get('balanced_accuracy', np.nan)}"
             )
 
@@ -915,12 +1007,23 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
     if not args.dry_run:
-        successful_strategies = list(dict.fromkeys(str(row["cv_strategy"]) for row in rows))
-        use_strategy_suffix = len(successful_strategies) > 1
-        for cv_strategy in successful_strategies:
+        successful_pairs = list(
+            dict.fromkeys(
+                (
+                    str(row["experiment_id"]),
+                    str(row["cv_strategy"]),
+                )
+                for row in rows
+                if str(row.get("status")) == "success"
+            )
+        )
+        successful_strategies = [cv_strategy for _, cv_strategy in successful_pairs]
+        use_strategy_suffix = len(set(successful_strategies)) > 1 or len(successful_pairs) > 1
+        for experiment_id, cv_strategy in successful_pairs:
             confusion_path = _save_combined_confusion_matrices(
                 rows=rows,
                 output_dir=output_dir,
+                experiment_id=experiment_id,
                 cv_strategy=cv_strategy,
                 use_strategy_suffix=use_strategy_suffix,
             )

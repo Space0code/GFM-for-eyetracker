@@ -180,6 +180,7 @@ class SpacioTemporalDataset(Dataset):
             graph_version: str = "v2", edge_weight_mode: str = "learned_signed",
             window_length: int = 60, window_overlap: float = 0, 
             cache_dir: str = None, use_cache: bool = True, dropping_emotion_threshold: float = -1,
+            min_samples_per_window: Optional[int] = None,
             feature_columns: Optional[List[str]] = None, target_columns: Optional[List[str]] = None,
             dropna_columns: Optional[List[str]] = None, experiment_type_column: str = "experiment-type",
             allowed_experiment_types: Optional[List[str]] = None, label_quality_column: Optional[str] = None,
@@ -229,6 +230,10 @@ class SpacioTemporalDataset(Dataset):
         self.edge_weight_mode = edge_weight_mode
         self.window_length = window_length
         self.window_overlap = window_overlap
+        resolved_min_samples = max(self.kt, self.ks) + 1 if min_samples_per_window is None else int(min_samples_per_window)
+        if resolved_min_samples <= 0:
+            raise ValueError("min_samples_per_window must be > 0.")
+        self.min_samples_per_window = resolved_min_samples
         self.files = []
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
@@ -311,9 +316,10 @@ class SpacioTemporalDataset(Dataset):
 
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
-                if (window_slice.stop - window_slice.start) < max(self.kt, self.ks) + 1:
+                if (window_slice.stop - window_slice.start) < self.min_samples_per_window:
                     print(
-                        f"Window {window_slice} too small for kt={self.kt} and ks={self.ks}. "
+                        f"Window {window_slice} too small for min_samples_per_window="
+                        f"{self.min_samples_per_window}. "
                         f"[path={path}]. Skipping... "
                     )
                     continue
@@ -379,6 +385,7 @@ class SpacioTemporalDataset(Dataset):
         config_str += f"_expcol={self.experiment_type_column}_expvals={self.allowed_experiment_types}"
         config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
         config_str += f"_tagg={self.target_aggregation}"
+        config_str += f"_minsamples={self.min_samples_per_window}"
         
         # Hash the configuration
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -403,7 +410,8 @@ class SpacioTemporalDataset(Dataset):
                     'kt': self.kt,
                     'ks': self.ks,
                     'window_length': self.window_length,
-                    'window_overlap': self.window_overlap
+                    'window_overlap': self.window_overlap,
+                    'min_samples_per_window': self.min_samples_per_window,
                 }, f)
             print(f"Successfully cached {len(self.graphs)} graphs")
         except Exception as e:

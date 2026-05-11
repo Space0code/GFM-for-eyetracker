@@ -44,6 +44,7 @@ global_overrides:
     filter_subjects: null
     exclude_subjects: [P9, P12, P15]
     filter_recordings: null
+    min_samples_per_window: 60
     target_aggregation: mean
     signal_outlier_filter:
       enabled: true

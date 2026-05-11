@@ -115,6 +115,7 @@ def main():
             window_overlap=dataset_cfg['window_overlap'],
             kt=dataset_cfg['kt'],
             ks=dataset_cfg['ks'],
+            min_samples_per_window=dataset_cfg.get('min_samples_per_window'),
             cache_dir=dataset_cfg.get('cache_dir'),
             use_cache=dataset_cfg.get('use_cache', True),
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1),

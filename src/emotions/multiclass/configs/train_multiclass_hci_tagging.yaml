@@ -37,7 +37,7 @@ dataset:
   ignore_dirs: []
   window_length: 10
   window_overlap: 0
-  min_samples_per_window: 3
+  min_samples_per_window: 60
   kt: 2
   ks: 2
   use_edge_weights: true

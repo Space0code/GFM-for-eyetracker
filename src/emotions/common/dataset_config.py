@@ -93,6 +93,7 @@ def build_graph_dataset_kwargs(
         "cache_dir": dataset_cfg.get("cache_dir"),
         "use_cache": dataset_cfg.get("use_cache", True),
         "dropping_emotion_threshold": dataset_cfg.get("dropping_emotion_threshold", -1),
+        "min_samples_per_window": int(resolve_min_samples_per_window(dataset_cfg)),
         "feature_columns": list(feature_columns),
         "target_columns": [str(column) for column in target_columns],
         "dropna_columns": list(dropna_columns),
