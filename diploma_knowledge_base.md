@@ -1632,6 +1632,16 @@ Most important next steps:
 ### 13.1 Experiment runner notes
 
 - 2026-05-07: A quick Table-6 arousal run failed during `loss.backward()` with a PyTorch Inductor `torch.compile` backward-graph assertion on dynamic PyG graph batches. This is treated as a compiler/runtime issue, not evidence of an invalid model objective. The quick v1/v2 runner disables `use_torch_compile` by default and logs each command to `quick_v1_v2_comparison.log` inside the timestamped results folder.
+- 2026-05-07: Completed a LOSO Table-6 arousal comparison with command:
+  `python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py --models GNN_v1,GNN_v2,LightGBM,random,majority --num-epochs 30 --cv-strategy subject_loo`.
+  Results folder: `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
+  Aggregated standard metrics:
+  - `GNN_v2`: accuracy `0.5562`, balanced accuracy `0.4740`, macro-F1 `0.4462`, weighted-F1 `0.5233`, AUC `0.7113`;
+  - `GNN_v1`: accuracy `0.5416`, balanced accuracy `0.4603`, macro-F1 `0.4297`, weighted-F1 `0.5038`, AUC `0.6950`;
+  - `LightGBM`: accuracy `0.4707`, balanced accuracy `0.3854`, macro-F1 `0.3505`, weighted-F1 `0.4288`, AUC `0.6041`;
+  - `Majority`: accuracy `0.4771`, balanced accuracy `0.3333`, macro-F1 `0.2139`, weighted-F1 `0.3125`, AUC `0.5000`;
+  - `Random`: accuracy `0.3031`, balanced accuracy `0.3068`, macro-F1 `0.2895`, weighted-F1 `0.3201`, AUC `0.4812`.
+  The command-level ranking plot and combined confusion matrices include `Random` and `Majority`.
 
 ---
 

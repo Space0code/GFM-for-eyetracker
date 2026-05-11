@@ -54,6 +54,25 @@ AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
 PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
+MODEL_ALIASES = {
+    "random": "Random",
+    "rand": "Random",
+    "majority": "Majority",
+    "maj": "Majority",
+    "mean": "Mean",
+    "svm": "SVM",
+    "lightgbm": "LightGBM",
+    "lgbm": "LightGBM",
+    "mlp": "MLP",
+    "gnn1": "GNN_v1",
+    "gnn_v1": "GNN_v1",
+    "gnn-v1": "GNN_v1",
+    "v1": "GNN_v1",
+    "gnn2": "GNN_v2",
+    "gnn_v2": "GNN_v2",
+    "gnn-v2": "GNN_v2",
+    "v2": "GNN_v2",
+}
 
 
 @dataclass(frozen=True)
@@ -96,7 +115,10 @@ def parse_args() -> argparse.Namespace:
         "--models",
         type=str,
         default=",".join(DEFAULT_MODELS),
-        help="Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP.",
+        help=(
+            "Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP. "
+            "Common lowercase aliases like random, majority, gnn1, gnn2, and lgbm are accepted."
+        ),
     )
     parser.add_argument(
         "--n-splits",
@@ -126,7 +148,7 @@ def parse_args() -> argparse.Namespace:
         "--cv-strategy",
         type=str,
         default=None,
-        choices=["recording_kfold", "subject_kfold"],
+        choices=["subject_loo", "recording_loo", "recording_kfold", "subject_kfold"],
         help="Optional CV strategy override. By default, use the YAML config.",
     )
     parser.add_argument(
@@ -193,7 +215,8 @@ def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
 
 def _parse_models(raw_models: str) -> List[str]:
     """Parse and validate requested model names."""
-    models = [token.strip() for token in raw_models.split(",") if token.strip()]
+    raw_tokens = [token.strip() for token in raw_models.split(",") if token.strip()]
+    models = [MODEL_ALIASES.get(token.lower(), token) for token in raw_tokens]
     allowed = {"GNN_v1", "GNN_v2"} | BASELINE_MODELS
     unknown = sorted(set(models) - allowed)
     if unknown:

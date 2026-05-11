@@ -32,9 +32,10 @@ This file is the persistent working memory for Codex sessions in this repository
 - 2026-05-07: Quick v1/v2 comparison is YAML-first: subjects, recordings, CV settings, graph settings, cache settings, and epochs should be controlled in the suite YAML by default. CLI flags only apply optional explicit overrides.
 - 2026-05-07: Quick v1/v2 comparison groups all requested baseline models into one suite/trainer invocation so baselines share one dataset load and one CV split construction. GNN v1 and GNN v2 remain separate invocations because their architecture configs differ.
 - 2026-05-07: Debugged quick v1/v2 comparison failure from PyTorch Inductor during `torch.compile` backward graph compilation on dynamic PyG batches. The quick runner now disables `use_torch_compile` by default, offers `--use-torch-compile` for explicit re-enable, and mirrors stdout/stderr to `quick_v1_v2_comparison.log` in each timestamped results folder.
+- 2026-05-07: Completed LOSO Table-6 arousal quick comparison with `--models GNN_v1,GNN_v2,LightGBM,random,majority --num-epochs 30 --cv-strategy subject_loo`. Results folder: `results/quick_v1_v2_comparison/2026-05-07_14-54-32`. Aggregated balanced accuracy: `GNN_v2=0.4740`, `GNN_v1=0.4603`, `LightGBM=0.3854`, `Majority=0.3333`, `Random=0.3068`.
 
 ## Open Plans
-- Next priority: run the quick Table-6 arousal comparison (`Random`, `Majority`, `GNN_v1`, `GNN_v2`, `LightGBM`) on a small subset, inspect metrics/runtime/logs, and only then decide whether to tune v2 or broaden to ablations.
+- Next priority: inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`, then decide whether to tune v2 or broaden to ablations.
 
 ## Experiment Context
 - For questions about recent experiments, trainings, models, or data, check the latest git commit(s) and explicitly state the assumption that the user likely means the most recently modified experiment context.

@@ -4,6 +4,7 @@ from argparse import Namespace
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
@@ -12,6 +13,8 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     build_variant,
     _build_payload,
     _ordered_models,
+    _parse_models,
+    _save_combined_confusion_matrices,
     _save_group_model_ranking,
 )
 
@@ -68,6 +71,12 @@ def test_quick_variants_support_random_and_majority() -> None:
     assert majority_variant.overrides["global_overrides"]["baselines"]["models"] == ["Majority"]
     assert random_variant.summary_model_name == "Random"
     assert majority_variant.summary_model_name == "Majority"
+
+
+def test_quick_model_parser_accepts_common_aliases() -> None:
+    parsed = _parse_models("random,majority,gnn1,gnn2,lgbm")
+
+    assert parsed == ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 
 
 def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
@@ -182,4 +191,72 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
     output_path = _save_group_model_ranking(summary=summary, output_dir=tmp_path)
 
     assert output_path == tmp_path / "plots" / "classification_group_model_ranking.png"
+    assert output_path.exists()
+
+
+def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "subject_loo" / "fold_0"
+    (strategy_dir / "baselines" / "Random").mkdir(parents=True)
+    (strategy_dir / "baselines" / "Majority").mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+
+    targets = np.asarray([0, 1, 2, 0])
+    random_predictions = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0],
+        ]
+    )
+    majority_predictions = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ]
+    )
+
+    for model_name, predictions in {
+        "Random": random_predictions,
+        "Majority": majority_predictions,
+    }.items():
+        model_dir = strategy_dir / "baselines" / model_name
+        np.save(model_dir / "test_targets.npy", targets)
+        np.save(model_dir / "test_predictions.npy", predictions)
+
+    rows = [
+        {
+            "model": "Random",
+            "status": "success",
+            "suite_run_dir": str(suite_run_dir),
+            "summary_model_name": "Random",
+        },
+        {
+            "model": "Majority",
+            "status": "success",
+            "suite_run_dir": str(suite_run_dir),
+            "summary_model_name": "Majority",
+        },
+    ]
+
+    output_path = _save_combined_confusion_matrices(
+        rows=rows,
+        output_dir=tmp_path,
+        cv_strategy="subject_loo",
+    )
+
+    assert output_path == tmp_path / "figures" / "confusion_matrices.png"
     assert output_path.exists()
