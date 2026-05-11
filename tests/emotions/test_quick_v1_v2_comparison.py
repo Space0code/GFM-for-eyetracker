@@ -17,6 +17,7 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     _parse_models,
     _save_combined_confusion_matrices,
     _save_group_model_ranking,
+    _save_label_distribution_outputs,
 )
 
 
@@ -45,7 +46,7 @@ def test_quick_variants_set_expected_gnn_versions() -> None:
     assert v2.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "v2"
 
 
-def test_quick_payload_enables_only_table6_arousal() -> None:
+def test_quick_payload_enables_table6_arousal_and_valence() -> None:
     base_cfg = {
         "experiments": {
             AROUSAL_EXPERIMENT_ID: {"enabled": False},
@@ -59,7 +60,7 @@ def test_quick_payload_enables_only_table6_arousal() -> None:
     )
 
     assert payload["experiments"][AROUSAL_EXPERIMENT_ID]["enabled"] is True
-    assert payload["experiments"]["multiclass_table6_valence_3class"]["enabled"] is False
+    assert payload["experiments"]["multiclass_table6_valence_3class"]["enabled"] is True
     assert payload["global_overrides"]["baselines"]["models"] == ["LightGBM"]
     assert payload["global_overrides"]["run_experiments"] == {"baselines": True, "gnn": False}
 
@@ -247,6 +248,7 @@ def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path)
     rows = [
         {
             "model": "Random",
+            "experiment_id": AROUSAL_EXPERIMENT_ID,
             "cv_strategy": "subject_loo",
             "status": "success",
             "suite_run_dir": str(suite_run_dir),
@@ -254,6 +256,7 @@ def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path)
         },
         {
             "model": "Majority",
+            "experiment_id": AROUSAL_EXPERIMENT_ID,
             "cv_strategy": "subject_loo",
             "status": "success",
             "suite_run_dir": str(suite_run_dir),
@@ -264,11 +267,12 @@ def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path)
     output_path = _save_combined_confusion_matrices(
         rows=rows,
         output_dir=tmp_path,
+        experiment_id=AROUSAL_EXPERIMENT_ID,
         cv_strategy="subject_loo",
         use_strategy_suffix=False,
     )
 
-    assert output_path == tmp_path / "figures" / "confusion_matrices.png"
+    assert output_path == tmp_path / "figures" / "confusion_matrices_table6_arousal.png"
     assert output_path.exists()
 
 
@@ -295,6 +299,7 @@ def test_combined_confusion_matrices_can_use_strategy_suffix(tmp_path: Path) -> 
         rows=[
             {
                 "model": "Random",
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
                 "cv_strategy": "recording_loo",
                 "status": "success",
                 "suite_run_dir": str(suite_run_dir),
@@ -302,9 +307,57 @@ def test_combined_confusion_matrices_can_use_strategy_suffix(tmp_path: Path) -> 
             }
         ],
         output_dir=tmp_path,
+        experiment_id=AROUSAL_EXPERIMENT_ID,
         cv_strategy="recording_loo",
         use_strategy_suffix=True,
     )
 
-    assert output_path == tmp_path / "figures" / "confusion_matrices_recording_loo.png"
+    assert output_path == tmp_path / "figures" / "confusion_matrices_table6_arousal_recording_loo.png"
     assert output_path.exists()
+
+
+def test_label_distribution_outputs_include_tables_and_plots(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "subject_kfold" / "fold_0"
+    model_dir = strategy_dir / "baselines" / "Random"
+    model_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    np.save(model_dir / "test_targets.npy", np.asarray([0, 0, 1, 2]))
+
+    paths = _save_label_distribution_outputs(
+        rows=[
+            {
+                "model": "Random",
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "cv_strategy": "subject_kfold",
+                "status": "success",
+                "suite_run_dir": str(suite_run_dir),
+                "summary_model_name": "Random",
+            }
+        ],
+        output_dir=tmp_path,
+    )
+
+    expected_paths = {
+        tmp_path / "tables" / "label_distribution_by_fold.csv",
+        tmp_path / "tables" / "label_distribution_aggregate.csv",
+        tmp_path / "plots" / "label_distribution_counts.png",
+        tmp_path / "plots" / "label_distribution_proportions.png",
+    }
+    assert expected_paths.issubset(set(paths))
+    for path in expected_paths:
+        assert path.exists()
+
+    aggregate = pd.read_csv(tmp_path / "tables" / "label_distribution_aggregate.csv")
+    assert aggregate["count"].tolist() == [2, 1, 1]
+    assert np.allclose(aggregate["proportion"].to_numpy(), np.asarray([0.5, 0.25, 0.25]))

@@ -787,6 +787,220 @@ def _collect_predictions_for_variant(
     return np.concatenate(all_targets), np.concatenate(all_preds)
 
 
+def _collect_fold_targets_for_variant(
+    trainer_run_dir: Path,
+    cv_strategy: str,
+    summary_model_name: str,
+) -> Dict[str, np.ndarray]:
+    """Collect test targets per fold for one model output directory."""
+    strategy_dir = trainer_run_dir / cv_strategy
+    if not strategy_dir.exists():
+        raise FileNotFoundError(f"Strategy directory not found: {strategy_dir}")
+
+    fold_targets: Dict[str, np.ndarray] = {}
+    for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+        if summary_model_name == "GNN":
+            target_path = fold_dir / "test_targets.npy"
+        else:
+            target_path = fold_dir / "baselines" / summary_model_name / "test_targets.npy"
+        if not target_path.exists():
+            continue
+        fold_targets[fold_dir.name] = np.asarray(np.load(target_path)).reshape(-1).astype(int)
+    return fold_targets
+
+
+def _build_label_distribution_tables(rows: Sequence[Dict[str, Any]]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build per-fold and aggregate label-distribution tables from saved test targets."""
+    successful_rows = [row for row in rows if row.get("status") == "success"]
+    pairs = list(
+        dict.fromkeys(
+            (str(row.get("experiment_id")), str(row.get("cv_strategy")))
+            for row in successful_rows
+        )
+    )
+
+    fold_records: List[Dict[str, Any]] = []
+    aggregate_records: List[Dict[str, Any]] = []
+    for experiment_id, cv_strategy in pairs:
+        pair_rows = [
+            row
+            for row in successful_rows
+            if str(row.get("experiment_id")) == experiment_id and str(row.get("cv_strategy")) == cv_strategy
+        ]
+        row_by_model = {str(row["model"]): row for row in pair_rows}
+        source_row: Dict[str, Any] | None = None
+        fold_targets: Dict[str, np.ndarray] = {}
+        class_display_names: Dict[int, str] = {}
+
+        for model_name in _ordered_models(row_by_model.keys()):
+            candidate = row_by_model[model_name]
+            try:
+                suite_run_dir = Path(str(candidate["suite_run_dir"]))
+                trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+                fold_targets = _collect_fold_targets_for_variant(
+                    trainer_run_dir=trainer_run_dir,
+                    cv_strategy=cv_strategy,
+                    summary_model_name=str(candidate["summary_model_name"]),
+                )
+                if fold_targets:
+                    source_row = candidate
+                    class_display_names = _load_class_display_names(trainer_run_dir)
+                    break
+            except Exception:
+                continue
+
+        if source_row is None or not fold_targets:
+            continue
+
+        observed_classes = sorted(
+            {
+                int(class_idx)
+                for targets in fold_targets.values()
+                for class_idx in np.unique(targets).tolist()
+            }
+        )
+        metadata_classes = sorted(class_display_names.keys())
+        classes = sorted(set(observed_classes) | set(metadata_classes))
+        if not classes:
+            continue
+
+        aggregate_counts = {class_idx: 0 for class_idx in classes}
+        for fold_name, targets in fold_targets.items():
+            total = int(targets.size)
+            counts = {class_idx: int(np.sum(targets == class_idx)) for class_idx in classes}
+            for class_idx, count in counts.items():
+                aggregate_counts[class_idx] += count
+                fold_records.append(
+                    {
+                        "experiment_id": experiment_id,
+                        "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
+                        "cv_strategy": cv_strategy,
+                        "source_model": str(source_row["model"]),
+                        "split": "test",
+                        "fold": fold_name,
+                        "class_index": class_idx,
+                        "class_name": class_display_names.get(class_idx, str(class_idx)),
+                        "count": count,
+                        "total": total,
+                        "proportion": float(count / total) if total else np.nan,
+                    }
+                )
+
+        aggregate_total = int(sum(aggregate_counts.values()))
+        for class_idx, count in aggregate_counts.items():
+            aggregate_records.append(
+                {
+                    "experiment_id": experiment_id,
+                    "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
+                    "cv_strategy": cv_strategy,
+                    "source_model": str(source_row["model"]),
+                    "split": "test",
+                    "class_index": class_idx,
+                    "class_name": class_display_names.get(class_idx, str(class_idx)),
+                    "count": count,
+                    "total": aggregate_total,
+                    "proportion": float(count / aggregate_total) if aggregate_total else np.nan,
+                }
+            )
+
+    return pd.DataFrame(fold_records), pd.DataFrame(aggregate_records)
+
+
+def _plot_label_distribution(
+    aggregate_distribution: pd.DataFrame,
+    output_dir: Path,
+    y_column: str,
+    output_name: str,
+    ylabel: str,
+) -> Path | None:
+    """Save one aggregate class-balance plot."""
+    if aggregate_distribution.empty or y_column not in aggregate_distribution.columns:
+        return None
+
+    plot_df = aggregate_distribution.copy()
+    plot_df[y_column] = pd.to_numeric(plot_df[y_column], errors="coerce")
+    plot_df = plot_df.dropna(subset=[y_column])
+    if plot_df.empty:
+        return None
+
+    group_keys = ["experiment_id", "cv_strategy"]
+    groups = list(plot_df[group_keys].drop_duplicates().itertuples(index=False, name=None))
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / output_name
+
+    fig, axes = plt.subplots(
+        len(groups),
+        1,
+        figsize=(10, max(3.5, 2.8 * len(groups))),
+        squeeze=False,
+    )
+    for idx, (experiment_id, cv_strategy) in enumerate(groups):
+        ax = axes[idx, 0]
+        group_df = plot_df[
+            (plot_df["experiment_id"] == experiment_id)
+            & (plot_df["cv_strategy"] == cv_strategy)
+        ].copy()
+        sns.barplot(
+            data=group_df,
+            x="class_name",
+            y=y_column,
+            color="#4C78A8",
+            ax=ax,
+        )
+        experiment_name = EXPERIMENT_DISPLAY_NAMES.get(str(experiment_id), str(experiment_id))
+        ax.set_title(f"{experiment_name} Label Distribution - {cv_strategy}")
+        ax.set_xlabel("class")
+        ax.set_ylabel(ylabel)
+        if y_column == "proportion":
+            ax.set_ylim(0.0, 1.0)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def _save_label_distribution_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
+    """Save class-balance CSV tables and aggregate distribution figures."""
+    fold_distribution, aggregate_distribution = _build_label_distribution_tables(rows)
+    if fold_distribution.empty and aggregate_distribution.empty:
+        return []
+
+    saved_paths: List[Path] = []
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    if not fold_distribution.empty:
+        fold_path = tables_dir / "label_distribution_by_fold.csv"
+        fold_distribution.to_csv(fold_path, index=False)
+        saved_paths.append(fold_path)
+    if not aggregate_distribution.empty:
+        aggregate_path = tables_dir / "label_distribution_aggregate.csv"
+        aggregate_distribution.to_csv(aggregate_path, index=False)
+        saved_paths.append(aggregate_path)
+
+    for plot_path in [
+        _plot_label_distribution(
+            aggregate_distribution=aggregate_distribution,
+            output_dir=output_dir,
+            y_column="count",
+            output_name="label_distribution_counts.png",
+            ylabel="count",
+        ),
+        _plot_label_distribution(
+            aggregate_distribution=aggregate_distribution,
+            output_dir=output_dir,
+            y_column="proportion",
+            output_name="label_distribution_proportions.png",
+            ylabel="proportion",
+        ),
+    ]:
+        if plot_path is not None:
+            saved_paths.append(plot_path)
+
+    return saved_paths
+
+
 def _save_combined_confusion_matrices(
     rows: Sequence[Dict[str, Any]],
     output_dir: Path,
@@ -1006,7 +1220,9 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     summary.to_csv(summary_path, index=False)
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
+    label_distribution_paths: List[Path] = []
     if not args.dry_run:
+        label_distribution_paths = _save_label_distribution_outputs(rows=rows, output_dir=output_dir)
         successful_pairs = list(
             dict.fromkeys(
                 (
@@ -1032,6 +1248,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     print(f"Saved quick comparison summary: {summary_path}")
     if ranking_path is not None:
         print(f"Saved ranking plot: {ranking_path}")
+    for label_distribution_path in label_distribution_paths:
+        print(f"Saved label distribution output: {label_distribution_path}")
     for confusion_path in confusion_paths:
         print(f"Saved confusion matrices: {confusion_path}")
     return output_dir

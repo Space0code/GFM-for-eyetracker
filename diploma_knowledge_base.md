@@ -1666,6 +1666,7 @@ Most important next steps:
   - `Random`: accuracy `0.3031`, balanced accuracy `0.3068`, macro-F1 `0.2895`, weighted-F1 `0.3201`, AUC `0.4812`.
   The command-level ranking plot and combined confusion matrices include `Random` and `Majority`.
 - 2026-05-11: The quick v1/v2 comparison runner supports multiple comma-separated CV strategies in one run, e.g. `--cv-strategy subject_loo,recording_loo` or `--cv-strategy subject_kfold,recording_kfold --n-splits 3`. The resulting summary includes `cv_strategy`, the model-ranking plot compares models separately per strategy, and multi-strategy confusion matrices are written per strategy as `figures/confusion_matrices_<strategy>.png`.
+- 2026-05-11: The quick v1/v2 comparison runner also writes class-balance diagnostics for completed runs: per-fold and aggregate CSV tables under `tables/`, plus aggregate count/proportion figures under `plots/`.
 
 ---
 
