@@ -107,6 +107,7 @@ def main():
             data_filepath=dataset_cfg.get('data_filepath'),
             filter_subjects=dataset_cfg.get('filter_subjects'),
             filter_recordings=dataset_cfg.get('filter_recordings'),
+            exclude_subjects=dataset_cfg.get('exclude_subjects'),
             file_list=dataset_cfg.get('file_list'),
             recursive=dataset_cfg['recursive'],
             ignore_dirs=dataset_cfg.get('ignore_dirs', []),
@@ -127,6 +128,7 @@ def main():
             data_filepath=dataset_cfg.get('data_filepath'),
             filter_subjects=dataset_cfg.get('filter_subjects'),
             filter_recordings=dataset_cfg.get('filter_recordings'),
+            exclude_subjects=dataset_cfg.get('exclude_subjects'),
             file_list=dataset_cfg.get('file_list'),
             window_length=dataset_cfg.get('window_length', 10),
             dropping_emotion_threshold=dataset_cfg.get('dropping_emotion_threshold', -1)

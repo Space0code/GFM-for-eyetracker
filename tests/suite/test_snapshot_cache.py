@@ -48,6 +48,7 @@ def _dataset_cfg() -> dict:
         "dropping_emotion_threshold": -1.0,
         "filter_subjects": None,
         "filter_recordings": None,
+        "exclude_subjects": None,
     }
 
 
@@ -153,3 +154,38 @@ def test_snapshot_cache_key_is_stable_for_filter_order(tmp_path: Path) -> None:
 
     assert first.manifest["cache"]["cache_key"] == second.manifest["cache"]["cache_key"]
     assert second.manifest["cache"]["cache_hit"] is True
+
+
+def test_snapshot_cache_invalidates_on_excluded_subject_change(tmp_path: Path) -> None:
+    source_root = tmp_path / "data" / "processed" / "hci-tagging"
+    _write_emotion_scope_csv(source_root / "emotion-elicitation" / "sample.csv")
+    cache_dir = tmp_path / "snapshot_cache"
+
+    cfg_all = _dataset_cfg()
+    cfg_excluded = deepcopy(cfg_all)
+    cfg_excluded["exclude_subjects"] = ["P2"]
+
+    all_subjects = build_clean_snapshot_dataframe(
+        source_data_root=str(source_root),
+        scope="emotion-elicitation",
+        dataset_cfg=cfg_all,
+        target_columns=["emotion-valence"],
+        experiment_id="exp_all",
+        threshold_description={"threshold": "mean"},
+        use_cache=True,
+        cache_dir=str(cache_dir),
+    )
+    excluded = build_clean_snapshot_dataframe(
+        source_data_root=str(source_root),
+        scope="emotion-elicitation",
+        dataset_cfg=cfg_excluded,
+        target_columns=["emotion-valence"],
+        experiment_id="exp_excluded",
+        threshold_description={"threshold": "mean"},
+        use_cache=True,
+        cache_dir=str(cache_dir),
+    )
+
+    assert excluded.manifest["cache"]["cache_hit"] is False
+    assert all_subjects.manifest["cache"]["cache_key"] != excluded.manifest["cache"]["cache_key"]
+    assert set(excluded.dataframe["subject"].unique().tolist()) == {"P1"}

@@ -357,6 +357,29 @@ Preliminary processed data:
 - 3,214,000 labeled rows,
 - 583,165 unlabeled baseline/neutral rows.
 
+Verified on the current local copy in `data/` on 2026-05-11:
+
+- raw `Sessions/` contains 3,193 session folders across 4 experiment types:
+  - 943 emotion elicitation,
+  - 750 video tagging,
+  - 750 image tagging 1,
+  - 750 image tagging 2;
+- local raw copy contains 25 unique subjects overall, but emotion elicitation contains 24 subjects;
+- one raw emotion session (`session_id=1984`, subject `16`) is incomplete (`mediaFile` missing) and does not appear in the converted CSVs, so converted emotion data contains 942 session IDs;
+- in the converted emotion cache:
+  - 470 labeled `ok` stimulus sessions,
+  - 472 unlabeled `not-reported` baseline sessions;
+- `recording` means video file / clip name such as `111.avi`, while `session-id` means one trial in the raw MAHNOB session structure;
+- the current training pipeline groups by `(subject, recording)`, so repeated unlabeled baseline sessions for the same subject and clip collapse to 96 repeated subject-recording pairs, while labeled emotion trials remain 470 unique `(subject, recording)` groups;
+- row counts through the current local pipeline:
+  - raw-one-format emotion CSVs: 3,814,946 rows,
+  - processed emotion cache after confidence trimming/interpolation prep: 3,797,165 rows,
+  - labeled `ok` rows: 3,214,000,
+  - training-ready rows after dropping missing core gaze/pupil signals: 3,018,447;
+- with 10-second non-overlapping windows and `min_samples_per_window = 3`, the base emotion pipeline yields 5,551 usable windows; the current suite config with additional q01-q99 signal outlier filtering yields 5,530 usable windows.
+- The local paper copy states that `P9`, `P12`, and `P15` were excluded from paper analysis. It explicitly says `P9` and `P15` were incomplete due to technical problems and `P12` was missing physiological responses. Because the original full dataset package is no longer accessible and the local copy is ET-focused/reduced, the current repo now conservatively excludes `P9`, `P12`, and `P15` by default in HCI configs via `dataset.exclude_subjects`.
+- Under this new default exclusion, current HCI emotion training uses 22 subjects, 436 labeled `(subject, recording)` groups, 2,814,005 training-ready rows before suite outlier filtering, and 2,639,048 rows after the suite q01-q99 signal filter, yielding 5,158 usable 10-second windows.
+
 Label coverage:
 
 - 9 emotion classes,

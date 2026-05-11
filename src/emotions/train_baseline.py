@@ -157,6 +157,7 @@ def drop_pairs_with_emotions_below_threshold(df: pd.DataFrame,
 
 def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                          filter_subjects: list = None, filter_recordings: list = None,
+                         exclude_subjects: list = None,
                          file_list: Optional[List[str]] = None, 
                          window_length: int = 10, 
                          window_overlap: float = 0.0,
@@ -177,6 +178,7 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         data_filepath: Single CSV file with all data (mutually exclusive with data_dir)
         filter_subjects: List of subject IDs to include (only with data_filepath)
         filter_recordings: List of recording IDs to include (only with data_filepath)
+        exclude_subjects: List of subject IDs to exclude
         file_list: Optional list of specific file names to load (only with data_dir)
         window_length: Window size in seconds
         dropping_emotion_threshold: Drop pairs where all emotions <= this value
@@ -210,6 +212,8 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             df = df[df[experiment_type_column].isin(allowed_experiment_types)]
         if label_quality_column and allowed_label_quality_values and label_quality_column in df.columns:
             df = df[df[label_quality_column].isin(allowed_label_quality_values)]
+        if exclude_subjects is not None and "subject" in df.columns:
+            df = df[~df["subject"].isin(exclude_subjects)]
         return df.reset_index(drop=True)
 
     def _clean_and_dropna(df: pd.DataFrame) -> pd.DataFrame:
@@ -272,7 +276,6 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             df = df[df['subject'].isin(filter_subjects)]
         if filter_recordings is not None:
             df = df[df['recording'].isin(filter_recordings)]
-        
         if len(df) == 0:
             raise ValueError("No data remaining after applying filters")
         

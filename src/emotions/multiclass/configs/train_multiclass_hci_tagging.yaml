@@ -29,6 +29,9 @@ multiclass_task:
 dataset:
   data_filepath: "data/processed/cached_hci_tagging_emotion.csv"
   label_mapping_spec_path: "specifications/hci_to_GFM_spec.yaml"
+  # Conservative default: exclude paper-flagged problematic participants.
+  # P15 is already absent from the local ET copy, but we keep it listed for clarity.
+  exclude_subjects: [P9, P12, P15]
   # filter_subjects: [P1, P8, P5, P4, P28, P2, P27]
   recursive: true
   ignore_dirs: []

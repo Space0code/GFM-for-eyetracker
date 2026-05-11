@@ -43,6 +43,7 @@ global_overrides:
     graph_version: v2
     edge_weight_mode: learned_signed
     filter_subjects: null
+    exclude_subjects: [P9, P12, P15]
     filter_recordings: null
     target_aggregation: mean
     signal_outlier_filter:

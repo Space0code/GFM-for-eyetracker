@@ -42,6 +42,7 @@ global_overrides:
     edge_weight_mode: learned_signed
     # Set these to lists for quick subset runs, e.g. [P1, P8, P5] and [69.avi, 55.avi].
     filter_subjects: null
+    exclude_subjects: [P9, P12, P15]
     filter_recordings: null
     target_aggregation: mean
     signal_outlier_filter:

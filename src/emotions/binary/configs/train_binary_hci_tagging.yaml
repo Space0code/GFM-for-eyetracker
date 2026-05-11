@@ -18,7 +18,8 @@ dataset:
   # Choose ONE of the following:
   # Option 1: Single CSV file (NEW - recommended)
   data_filepath: "data/processed/cached_hci_tagging_emotion.csv"
-  filter_subjects: [P1, P8, P5, P4, P28, P2, P27] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
+  exclude_subjects: [P9, P12, P15]
+  # filter_subjects: [P1, P8, P5, P4, P28, P2, P27] # Optional: list of subject IDs to include, e.g., [1, 2, 12, 21]
   # filter_recordings: [1, 2, 3] # Optional: list of recording IDs to include, e.g., [1, 2, 3]
   
   # Option 2: Directory with multiple CSV files (OLD - for backward compatibility)

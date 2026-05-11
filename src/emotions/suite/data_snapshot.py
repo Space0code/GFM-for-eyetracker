@@ -74,6 +74,10 @@ def _apply_global_row_filters(df: pd.DataFrame, dataset_cfg: Dict[str, Any]) -> 
     if filter_subjects is not None and "subject" in df.columns:
         df = df[df["subject"].isin(filter_subjects)]
 
+    exclude_subjects = dataset_cfg.get("exclude_subjects")
+    if exclude_subjects is not None and "subject" in df.columns:
+        df = df[~df["subject"].isin(exclude_subjects)]
+
     filter_recordings = dataset_cfg.get("filter_recordings")
     if filter_recordings is not None and "recording" in df.columns:
         df = df[df["recording"].isin(filter_recordings)]
@@ -178,6 +182,7 @@ def _dataset_affecting_cache_payload(dataset_cfg: Dict[str, Any]) -> Dict[str, A
         "dropna_columns": _normalize_sequence_for_key(dataset_cfg.get("dropna_columns")),
         "filter_subjects": _normalize_sequence_for_key(dataset_cfg.get("filter_subjects")),
         "filter_recordings": _normalize_sequence_for_key(dataset_cfg.get("filter_recordings")),
+        "exclude_subjects": _normalize_sequence_for_key(dataset_cfg.get("exclude_subjects")),
         "experiment_type_column": dataset_cfg.get("experiment_type_column", "experiment-type"),
         "allowed_experiment_types": _normalize_sequence_for_key(dataset_cfg.get("allowed_experiment_types")),
         "label_quality_column": dataset_cfg.get("label_quality_column"),
@@ -459,6 +464,7 @@ def build_clean_snapshot_dataframe(
         "dataset_filters": {
             "filter_subjects": dataset_cfg.get("filter_subjects"),
             "filter_recordings": dataset_cfg.get("filter_recordings"),
+            "exclude_subjects": dataset_cfg.get("exclude_subjects"),
             "allowed_experiment_types": dataset_cfg.get("allowed_experiment_types"),
             "label_quality_column": dataset_cfg.get("label_quality_column"),
             "allowed_label_quality_values": dataset_cfg.get("allowed_label_quality_values"),

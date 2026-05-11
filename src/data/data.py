@@ -33,13 +33,20 @@ def load_csv_files(self, root_dir, recursive, ignore_dirs, file_list):
         search_type = "recursively" if recursive else "in root directory"
         raise FileNotFoundError(f"No CSVs found {search_type} in {root_dir}")
 
-def load_single_csv_file(self, data_filepath, filter_subjects=None, filter_recordings=None):
+def load_single_csv_file(
+    self,
+    data_filepath,
+    filter_subjects=None,
+    filter_recordings=None,
+    exclude_subjects=None,
+):
     """Load data from a single CSV file containing all subjects and recordings.
     
     Args:
         data_filepath: Path to the single CSV file
         filter_subjects: Optional list of subject IDs to include
         filter_recordings: Optional list of recording IDs to include
+        exclude_subjects: Optional list of subject IDs to exclude
     """
     if not os.path.exists(data_filepath):
         raise FileNotFoundError(f"Data file not found: {data_filepath}")
@@ -55,6 +62,8 @@ def load_single_csv_file(self, data_filepath, filter_subjects=None, filter_recor
         df = df[df['subject'].isin(filter_subjects)]
     if filter_recordings is not None:
         df = df[df['recording'].isin(filter_recordings)]
+    if exclude_subjects is not None:
+        df = df[~df['subject'].isin(exclude_subjects)]
     
     if len(df) == 0:
         raise ValueError("No data remaining after applying filters")
@@ -165,6 +174,7 @@ class SpacioTemporalDataset(Dataset):
     def __init__(
             self, root_dir: str = None, data_filepath: str = None, 
             filter_subjects: list = None, filter_recordings: list = None,
+            exclude_subjects: list = None,
             recursive: bool = False, ignore_dirs: list = None, file_list: list = None, 
             kt: int = 5, ks: int = 10, use_edge_weights: bool = True, tau: float = 0.05,
             graph_version: str = "v2", edge_weight_mode: str = "learned_signed",
@@ -185,6 +195,7 @@ class SpacioTemporalDataset(Dataset):
         - data_filepath: path to single CSV file with all data (mutually exclusive with root_dir)
         - filter_subjects: list of subject IDs to include (only with data_filepath)
         - filter_recordings: list of recording IDs to include (only with data_filepath)
+        - exclude_subjects: list of subject IDs to exclude
         - recursive: search recursively (bool)
         - ignore_dirs: list of directories with data to ignore
         - file_list: list of csv files relative root_dir to be loaded (exclusively these)
@@ -239,6 +250,7 @@ class SpacioTemporalDataset(Dataset):
         self.use_single_file = data_filepath is not None
         self.filter_subjects = filter_subjects
         self.filter_recordings = filter_recordings
+        self.exclude_subjects = exclude_subjects
 
         # Setup cache directory
         if cache_dir is None:
@@ -253,7 +265,7 @@ class SpacioTemporalDataset(Dataset):
         if use_cache:
             cache_path = self._get_cache_path(
                 root_dir, data_filepath, filter_subjects, filter_recordings,
-                recursive, ignore_dirs, file_list
+                exclude_subjects, recursive, ignore_dirs, file_list
             )
             if os.path.exists(cache_path):
                 print(f"Loading dataset from cache: {cache_path}")
@@ -270,7 +282,13 @@ class SpacioTemporalDataset(Dataset):
 
         # Process dataset from scratch
         if data_filepath is not None:
-            load_single_csv_file(self, data_filepath, filter_subjects, filter_recordings)
+            load_single_csv_file(
+                self,
+                data_filepath,
+                filter_subjects,
+                filter_recordings,
+                exclude_subjects,
+            )
         else:
             load_csv_files(self, root_dir, recursive, ignore_dirs, file_list)
         
@@ -325,6 +343,7 @@ class SpacioTemporalDataset(Dataset):
     
     def _get_cache_path(self, root_dir: str, data_filepath: str, 
                        filter_subjects: list, filter_recordings: list,
+                       exclude_subjects: list,
                        recursive: bool, ignore_dirs: list, file_list: list) -> str:
         """
         Generate a unique cache filename based on dataset parameters.
@@ -347,10 +366,15 @@ class SpacioTemporalDataset(Dataset):
             except OSError:
                 # If stat fails, path string still participates in keying.
                 pass
-            config_str += f"_subj={filter_subjects}_rec={filter_recordings}"
+            config_str += (
+                f"_subj={filter_subjects}_rec={filter_recordings}_exsubj={exclude_subjects}"
+            )
         else:
             abs_root_dir = os.path.abspath(root_dir) if root_dir is not None else None
-            config_str += f"_root={abs_root_dir}_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+            config_str += (
+                f"_root={abs_root_dir}_rec={recursive}_ignore={ignore_dirs}_files={file_list}"
+                f"_exsubj={exclude_subjects}"
+            )
         config_str += f"_feat={self.feature_columns}_targets={self.target_columns}_dropna={self.dropna_columns}"
         config_str += f"_expcol={self.experiment_type_column}_expvals={self.allowed_experiment_types}"
         config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
@@ -402,6 +426,9 @@ class SpacioTemporalDataset(Dataset):
             and self.label_quality_column in df.columns
         ):
             df = df[df[self.label_quality_column].isin(self.allowed_label_quality_values)].reset_index(drop=True)
+
+        if self.exclude_subjects and "subject" in df.columns:
+            df = df[~df["subject"].isin(self.exclude_subjects)].reset_index(drop=True)
 
         if len(df) == 0:
             return df
