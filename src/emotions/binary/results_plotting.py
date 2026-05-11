@@ -454,7 +454,7 @@ def generate_and_save_binary_results_plots(
     models_for_cm: Sequence[str] | None = None,
     embedding_method: str = "pca",
     summary_file: str = "summary.csv",
-    figures_dir_name: str = "figures",
+    figures_dir_name: str = "plots",
     candidate_metrics: Sequence[str] = ("accuracy", "balanced_accuracy", "f1", "auc", "precision", "recall"),
     preferred_baseline_order: Sequence[str] = ("Mean", "SVM", "LightGBM", "MLP", "GNN"),
 ) -> List[Path]:

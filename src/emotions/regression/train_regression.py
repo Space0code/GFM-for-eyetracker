@@ -488,7 +488,7 @@ def _generate_regression_plots(
     if not metrics:
         return
 
-    figures_dir = run_path / "figures"
+    figures_dir = run_path / "plots"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, len(strategy_dirs), figsize=(6 * len(strategy_dirs), 4), sharey=True)

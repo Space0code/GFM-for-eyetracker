@@ -18,7 +18,8 @@ global_overrides:
   cross_validation:
     strategies:
       - "subject_kfold"
-    n_splits: 5
+      - "recording_kfold"
+    n_splits: 3
     val_size: 1
     random_state: 42
   gnn:

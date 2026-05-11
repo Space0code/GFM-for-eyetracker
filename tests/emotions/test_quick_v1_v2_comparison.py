@@ -13,6 +13,7 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     build_variant,
     _build_payload,
     _ordered_models,
+    _parse_cv_strategies,
     _parse_models,
     _save_combined_confusion_matrices,
     _save_group_model_ranking,
@@ -79,6 +80,12 @@ def test_quick_model_parser_accepts_common_aliases() -> None:
     assert parsed == ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 
 
+def test_quick_cv_parser_accepts_multiple_strategies() -> None:
+    parsed = _parse_cv_strategies("subject_loo,recording_loo,subject_kfold,recording_kfold")
+
+    assert parsed == ["subject_loo", "recording_loo", "subject_kfold", "recording_kfold"]
+
+
 def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
     ordered = _ordered_models(["LightGBM", "GNN_v2", "Random", "MLP", "Majority", "SVM", "GNN_v1"])
 
@@ -109,7 +116,7 @@ def test_fixed_overrides_only_include_explicit_cli_overrides() -> None:
     args = Namespace(
         output_root="results/test_quick",
         seed=7,
-        cv_strategy="recording_kfold",
+        cv_strategy="subject_kfold,recording_kfold",
         n_splits=2,
         val_size=1,
         num_epochs=3,
@@ -120,7 +127,7 @@ def test_fixed_overrides_only_include_explicit_cli_overrides() -> None:
     assert overrides["suite"]["seed"] == 7
     assert overrides["global_overrides"]["cross_validation"] == {
         "random_state": 7,
-        "strategies": ["recording_kfold"],
+        "strategies": ["subject_kfold", "recording_kfold"],
         "n_splits": 2,
         "val_size": 1,
     }
@@ -240,12 +247,14 @@ def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path)
     rows = [
         {
             "model": "Random",
+            "cv_strategy": "subject_loo",
             "status": "success",
             "suite_run_dir": str(suite_run_dir),
             "summary_model_name": "Random",
         },
         {
             "model": "Majority",
+            "cv_strategy": "subject_loo",
             "status": "success",
             "suite_run_dir": str(suite_run_dir),
             "summary_model_name": "Majority",
@@ -256,7 +265,46 @@ def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path)
         rows=rows,
         output_dir=tmp_path,
         cv_strategy="subject_loo",
+        use_strategy_suffix=False,
     )
 
     assert output_path == tmp_path / "figures" / "confusion_matrices.png"
+    assert output_path.exists()
+
+
+def test_combined_confusion_matrices_can_use_strategy_suffix(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "recording_loo" / "fold_0"
+    model_dir = strategy_dir / "baselines" / "Random"
+    model_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    np.save(model_dir / "test_targets.npy", np.asarray([0, 1]))
+    np.save(model_dir / "test_predictions.npy", np.asarray([[1.0, 0.0], [0.0, 1.0]]))
+
+    output_path = _save_combined_confusion_matrices(
+        rows=[
+            {
+                "model": "Random",
+                "cv_strategy": "recording_loo",
+                "status": "success",
+                "suite_run_dir": str(suite_run_dir),
+                "summary_model_name": "Random",
+            }
+        ],
+        output_dir=tmp_path,
+        cv_strategy="recording_loo",
+        use_strategy_suffix=True,
+    )
+
+    assert output_path == tmp_path / "figures" / "confusion_matrices_recording_loo.png"
     assert output_path.exists()

@@ -54,6 +54,7 @@ AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
 PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
+VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 MODEL_ALIASES = {
     "random": "Random",
     "rand": "Random",
@@ -148,8 +149,10 @@ def parse_args() -> argparse.Namespace:
         "--cv-strategy",
         type=str,
         default=None,
-        choices=["subject_loo", "recording_loo", "recording_kfold", "subject_kfold"],
-        help="Optional CV strategy override. By default, use the YAML config.",
+        help=(
+            "Optional CV strategy override. Use one strategy or a comma-separated list, "
+            "for example subject_loo,recording_loo. By default, use the YAML config."
+        ),
     )
     parser.add_argument(
         "--use-torch-compile",
@@ -226,6 +229,17 @@ def _parse_models(raw_models: str) -> List[str]:
     return models
 
 
+def _parse_cv_strategies(raw_strategies: str) -> List[str]:
+    """Parse and validate one or more comma-separated CV strategies."""
+    strategies = [token.strip() for token in raw_strategies.split(",") if token.strip()]
+    unknown = sorted(set(strategies) - VALID_CV_STRATEGIES)
+    if unknown:
+        raise ValueError(f"Unknown CV strategy/strategies: {unknown}. Allowed: {sorted(VALID_CV_STRATEGIES)}")
+    if not strategies:
+        raise ValueError("At least one CV strategy must be requested.")
+    return strategies
+
+
 def _ordered_models(model_names: Iterable[str]) -> List[str]:
     """Return model names in the preferred quick-comparison display order."""
     unique_models = list(dict.fromkeys(model_names))
@@ -277,7 +291,7 @@ def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None 
         overrides["suite"]["seed"] = int(args.seed)
         global_overrides.setdefault("cross_validation", {})["random_state"] = int(args.seed)
     if args.cv_strategy is not None:
-        global_overrides.setdefault("cross_validation", {})["strategies"] = [str(args.cv_strategy)]
+        global_overrides.setdefault("cross_validation", {})["strategies"] = _parse_cv_strategies(str(args.cv_strategy))
     if args.n_splits is not None:
         global_overrides.setdefault("cross_validation", {})["n_splits"] = int(args.n_splits)
     if args.val_size is not None:
@@ -405,15 +419,20 @@ def _build_run_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any]
     return payload
 
 
-def _get_primary_cv_strategy(payload: Dict[str, Any]) -> str:
-    """Return the first configured CV strategy from the merged suite payload."""
+def _get_cv_strategies(payload: Dict[str, Any]) -> List[str]:
+    """Return configured CV strategies from the merged suite payload."""
     cv_cfg = payload.get("global_overrides", {}).get("cross_validation", {})
     strategies = cv_cfg.get("strategies")
     if isinstance(strategies, list) and strategies:
-        return str(strategies[0])
+        return [str(strategy) for strategy in strategies]
     if isinstance(strategies, str) and strategies:
-        return strategies
+        return [strategies]
     raise ValueError("No cross-validation strategy configured in the merged YAML payload.")
+
+
+def _get_primary_cv_strategy(payload: Dict[str, Any]) -> str:
+    """Return the first configured CV strategy from the merged suite payload."""
+    return _get_cv_strategies(payload)[0]
 
 
 def _resolve_repo_path(path_value: str, anchor_path: Path | None = None) -> Path:
@@ -495,7 +514,7 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
     total_subjects, total_recordings = _load_all_subject_recording_counts(trainer_cfg, base_config_path)
 
     return {
-        "cv_strategy": _get_primary_cv_strategy(payload),
+        "cv_strategies": ",".join(_get_cv_strategies(payload)),
         "n_splits": str(cv_cfg.get("n_splits", "not configured")),
         "val_size": str(cv_cfg.get("val_size", "not configured")),
         "num_epochs": str(gnn_training_cfg.get("num_epochs", "not configured")),
@@ -568,8 +587,9 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     df = pd.DataFrame(list(rows))
     if df.empty:
         return df
-    sort_cols = [col for col in ["status", "balanced_accuracy", "macro_f1", "model"] if col in df.columns]
-    ascending = [True] + [False] * (len(sort_cols) - 1)
+    sort_cols = [col for col in ["status", "cv_strategy", "balanced_accuracy", "macro_f1", "model"] if col in df.columns]
+    descending_metric_cols = {"balanced_accuracy", "macro_f1"}
+    ascending = [col not in descending_metric_cols for col in sort_cols]
     return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
 
 
@@ -587,8 +607,13 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
         return None
 
     model_order = _ordered_models(plot_df["model"].astype(str).tolist())
+    strategy_order = (
+        list(dict.fromkeys(plot_df["cv_strategy"].astype(str).tolist()))
+        if "cv_strategy" in plot_df.columns
+        else ["all"]
+    )
     long_df = plot_df.melt(
-        id_vars=["model"],
+        id_vars=[col for col in ["cv_strategy", "model"] if col in plot_df.columns],
         value_vars=available_metrics,
         var_name="metric",
         value_name="value",
@@ -600,21 +625,34 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     plots_dir.mkdir(parents=True, exist_ok=True)
     output_path = plots_dir / "classification_group_model_ranking.png"
 
-    fig, ax = plt.subplots(figsize=(12, max(4.5, 0.6 * len(plot_df))))
-    sns.barplot(
-        data=long_df,
-        x="value",
-        y="model",
-        hue="metric",
-        order=model_order,
-        ax=ax,
-        orient="h",
+    fig, axes = plt.subplots(
+        len(strategy_order),
+        1,
+        figsize=(12, max(4.5, 0.65 * len(model_order)) * len(strategy_order)),
+        squeeze=False,
     )
-    ax.set_title("Quick Table-6 Arousal Model Ranking")
-    ax.set_xlabel("metric value")
-    ax.set_ylabel("model")
-    ax.set_xlim(0.0, 1.0)
-    ax.legend(loc="lower right", title="metric")
+    for row_idx, strategy in enumerate(strategy_order):
+        ax = axes[row_idx, 0]
+        strategy_df = (
+            long_df[long_df["cv_strategy"].astype(str) == strategy]
+            if "cv_strategy" in long_df.columns
+            else long_df
+        )
+        sns.barplot(
+            data=strategy_df,
+            x="value",
+            y="model",
+            hue="metric",
+            order=model_order,
+            ax=ax,
+            orient="h",
+        )
+        title_suffix = f" - {strategy}" if "cv_strategy" in long_df.columns else ""
+        ax.set_title(f"Quick Table-6 Arousal Model Ranking{title_suffix}")
+        ax.set_xlabel("metric value")
+        ax.set_ylabel("model")
+        ax.set_xlim(0.0, 1.0)
+        ax.legend(loc="lower right", title="metric")
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -679,9 +717,14 @@ def _save_combined_confusion_matrices(
     rows: Sequence[Dict[str, Any]],
     output_dir: Path,
     cv_strategy: str,
+    use_strategy_suffix: bool = True,
 ) -> Path | None:
     """Save confusion matrices comparing all successful quick-run model types."""
-    row_by_model = {str(row["model"]): row for row in rows if row.get("status") == "success"}
+    row_by_model = {
+        str(row["model"]): row
+        for row in rows
+        if row.get("status") == "success" and str(row.get("cv_strategy")) == cv_strategy
+    }
     model_names = _ordered_models(row_by_model.keys())
     if not model_names:
         return None
@@ -715,7 +758,8 @@ def _save_combined_confusion_matrices(
 
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
-    output_path = figures_dir / "confusion_matrices.png"
+    filename = f"confusion_matrices_{cv_strategy}.png" if use_strategy_suffix else "confusion_matrices.png"
+    output_path = figures_dir / filename
 
     n_models = len(collected)
     fig, axes = plt.subplots(n_models, 2, figsize=(10, 4 * n_models))
@@ -786,7 +830,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     rows: List[Dict[str, Any]] = []
     for quick_run in quick_runs:
         payload = _build_run_payload(base_cfg=base_cfg, fixed_overrides=fixed_overrides, quick_run=quick_run)
-        cv_strategy = _get_primary_cv_strategy(payload)
+        cv_strategies = _get_cv_strategies(payload)
         config_path = generated_dir / f"{quick_run.run_name}.yaml"
         _write_yaml(config_path, payload)
 
@@ -795,81 +839,97 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
             "description": quick_run.description,
             "wrapper_config_path": str(config_path),
             "suite_run_dir": "",
-            "cv_strategy": cv_strategy,
             "runtime_seconds": np.nan,
             "error": "",
         }
         if args.dry_run:
-            for model_name in quick_run.model_names:
-                rows.append(
-                    {
-                        **base_row,
-                        "model": model_name,
-                        "summary_model_name": quick_run.summary_model_names[model_name],
-                        "status": "dry_run",
-                    }
-                )
-            print(f"dry-run | {quick_run.run_name} | models={','.join(quick_run.model_names)} | {config_path}")
+            for cv_strategy in cv_strategies:
+                for model_name in quick_run.model_names:
+                    rows.append(
+                        {
+                            **base_row,
+                            "cv_strategy": cv_strategy,
+                            "model": model_name,
+                            "summary_model_name": quick_run.summary_model_names[model_name],
+                            "status": "dry_run",
+                        }
+                    )
+            print(
+                f"dry-run | {quick_run.run_name} | models={','.join(quick_run.model_names)} "
+                f"| cv={','.join(cv_strategies)} | {config_path}"
+            )
             continue
 
         started = time.time()
         try:
             suite_run_dir = Path(run_suite(str(config_path)))
             runtime_seconds = round(time.time() - started, 3)
-            for model_name in quick_run.model_names:
-                row: Dict[str, Any] = {
-                    **base_row,
-                    "model": model_name,
-                    "summary_model_name": quick_run.summary_model_names[model_name],
-                    "suite_run_dir": str(suite_run_dir),
-                    "runtime_seconds": runtime_seconds,
-                    "status": "success",
-                }
-                try:
-                    row.update(
-                        _collect_metrics(
-                            suite_run_dir=suite_run_dir,
-                            cv_strategy=cv_strategy,
-                            summary_model_name=quick_run.summary_model_names[model_name],
-                        )
-                    )
-                except Exception as metric_exc:
-                    row["status"] = "failed"
-                    row["error"] = f"{metric_exc}\n{traceback.format_exc()}"
-                rows.append(row)
-        except Exception as exc:
-            runtime_seconds = round(time.time() - started, 3)
-            for model_name in quick_run.model_names:
-                rows.append(
-                    {
+            for cv_strategy in cv_strategies:
+                for model_name in quick_run.model_names:
+                    row: Dict[str, Any] = {
                         **base_row,
+                        "cv_strategy": cv_strategy,
                         "model": model_name,
                         "summary_model_name": quick_run.summary_model_names[model_name],
+                        "suite_run_dir": str(suite_run_dir),
                         "runtime_seconds": runtime_seconds,
-                        "status": "failed",
-                        "error": f"{exc}\n{traceback.format_exc()}",
+                        "status": "success",
                     }
-                )
+                    try:
+                        row.update(
+                            _collect_metrics(
+                                suite_run_dir=suite_run_dir,
+                                cv_strategy=cv_strategy,
+                                summary_model_name=quick_run.summary_model_names[model_name],
+                            )
+                        )
+                    except Exception as metric_exc:
+                        row["status"] = "failed"
+                        row["error"] = f"{metric_exc}\n{traceback.format_exc()}"
+                    rows.append(row)
+        except Exception as exc:
+            runtime_seconds = round(time.time() - started, 3)
+            for cv_strategy in cv_strategies:
+                for model_name in quick_run.model_names:
+                    rows.append(
+                        {
+                            **base_row,
+                            "cv_strategy": cv_strategy,
+                            "model": model_name,
+                            "summary_model_name": quick_run.summary_model_names[model_name],
+                            "runtime_seconds": runtime_seconds,
+                            "status": "failed",
+                            "error": f"{exc}\n{traceback.format_exc()}",
+                        }
+                    )
 
-        for row in rows[-len(quick_run.model_names) :]:
-            print(f"{row['status']} | {row['model']} | balanced_accuracy={row.get('balanced_accuracy', np.nan)}")
+        for row in rows[-(len(quick_run.model_names) * len(cv_strategies)) :]:
+            print(
+                f"{row['status']} | {row['cv_strategy']} | {row['model']} "
+                f"| balanced_accuracy={row.get('balanced_accuracy', np.nan)}"
+            )
 
     summary = _rows_to_dataframe(rows)
     summary_path = output_dir / "quick_comparison_summary.csv"
     summary.to_csv(summary_path, index=False)
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
-    confusion_path = None
+    confusion_paths: List[Path] = []
     if not args.dry_run:
-        confusion_cv_strategy = str(rows[0]["cv_strategy"]) if rows else _get_primary_cv_strategy(base_cfg)
-        confusion_path = _save_combined_confusion_matrices(
-            rows=rows,
-            output_dir=output_dir,
-            cv_strategy=confusion_cv_strategy,
-        )
+        successful_strategies = list(dict.fromkeys(str(row["cv_strategy"]) for row in rows))
+        use_strategy_suffix = len(successful_strategies) > 1
+        for cv_strategy in successful_strategies:
+            confusion_path = _save_combined_confusion_matrices(
+                rows=rows,
+                output_dir=output_dir,
+                cv_strategy=cv_strategy,
+                use_strategy_suffix=use_strategy_suffix,
+            )
+            if confusion_path is not None:
+                confusion_paths.append(confusion_path)
     print(f"Saved quick comparison summary: {summary_path}")
     if ranking_path is not None:
         print(f"Saved ranking plot: {ranking_path}")
-    if confusion_path is not None:
+    for confusion_path in confusion_paths:
         print(f"Saved confusion matrices: {confusion_path}")
     return output_dir
 
