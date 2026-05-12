@@ -1015,6 +1015,287 @@ def _save_label_distribution_outputs(rows: Sequence[Dict[str, Any]], output_dir:
     return saved_paths
 
 
+def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Collect available fold-level GNN and MLP training histories."""
+    records: List[pd.DataFrame] = []
+    successful_rows = [row for row in rows if row.get("status") == "success"]
+
+    for row in successful_rows:
+        model_name = str(row.get("model", ""))
+        summary_model_name = str(row.get("summary_model_name", ""))
+        if summary_model_name != "GNN" and model_name != "MLP":
+            continue
+
+        experiment_id = str(row.get("experiment_id", ""))
+        cv_strategy = str(row.get("cv_strategy", ""))
+        suite_run_dir = Path(str(row.get("suite_run_dir", "")))
+        try:
+            trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+        except Exception:
+            continue
+
+        strategy_dir = trainer_run_dir / cv_strategy
+        if not strategy_dir.exists():
+            continue
+
+        for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+            if summary_model_name == "GNN":
+                history_path = fold_dir / "gnn_training_history.csv"
+                history_kind = "gnn"
+            elif model_name == "MLP":
+                history_path = fold_dir / "baselines" / "MLP" / "mlp_training_history.csv"
+                history_kind = "mlp"
+            else:
+                continue
+
+            if not history_path.exists():
+                continue
+
+            history = pd.read_csv(history_path)
+            if history.empty or "epoch" not in history.columns:
+                continue
+
+            history.insert(0, "history_kind", history_kind)
+            history.insert(0, "history_path", str(history_path))
+            history.insert(0, "trainer_run_dir", str(trainer_run_dir))
+            history.insert(0, "suite_run_dir", str(suite_run_dir))
+            history.insert(0, "fold_id", fold_dir.name)
+            history.insert(0, "model", model_name)
+            history.insert(0, "summary_model_name", summary_model_name)
+            history.insert(0, "cv_strategy", cv_strategy)
+            history.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
+            history.insert(0, "experiment_id", experiment_id)
+            records.append(history)
+
+    if not records:
+        return pd.DataFrame()
+    return pd.concat(records, ignore_index=True)
+
+
+def _plot_training_curve_grid(
+    history: pd.DataFrame,
+    output_dir: Path,
+    metric_columns: Sequence[str],
+    output_name: str,
+    ylabel: str,
+    ylim: tuple[float, float] | None = None,
+) -> Path | None:
+    """Save mean training curves with standard deviation bands."""
+    available_metrics = [metric for metric in metric_columns if metric in history.columns]
+    if history.empty or not available_metrics:
+        return None
+
+    plot_df = history.copy()
+    plot_df["epoch"] = pd.to_numeric(plot_df["epoch"], errors="coerce")
+    for metric in available_metrics:
+        plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+
+    id_vars = [
+        "experiment_id",
+        "experiment_display_name",
+        "cv_strategy",
+        "model",
+        "fold_id",
+        "epoch",
+    ]
+    long_df = plot_df.melt(
+        id_vars=[column for column in id_vars if column in plot_df.columns],
+        value_vars=available_metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["epoch", "value"])
+    if long_df.empty:
+        return None
+
+    groups = list(
+        long_df[["experiment_id", "experiment_display_name", "cv_strategy"]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+    if not groups:
+        return None
+
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / output_name
+
+    fig, axes = plt.subplots(
+        len(groups),
+        1,
+        figsize=(12, max(4.0, 3.5 * len(groups))),
+        squeeze=False,
+    )
+    palette = sns.color_palette("tab10", n_colors=max(1, long_df["model"].nunique()))
+    model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
+    color_by_model = {model: palette[idx % len(palette)] for idx, model in enumerate(model_order)}
+    line_styles = {
+        "train_loss": "-",
+        "val_loss": "--",
+        "val_balanced_accuracy": "-",
+        "val_macro_f1": "--",
+    }
+
+    for row_idx, (experiment_id, experiment_name, cv_strategy) in enumerate(groups):
+        ax = axes[row_idx, 0]
+        group_df = long_df[
+            (long_df["experiment_id"].astype(str) == str(experiment_id))
+            & (long_df["cv_strategy"].astype(str) == str(cv_strategy))
+        ]
+        curve_stats = (
+            group_df.groupby(["model", "metric", "epoch"], as_index=False)["value"]
+            .agg(["mean", "std"])
+            .reset_index()
+        )
+        for model_name in model_order:
+            model_stats = curve_stats[curve_stats["model"].astype(str) == model_name]
+            if model_stats.empty:
+                continue
+            for metric in available_metrics:
+                metric_stats = model_stats[model_stats["metric"] == metric].sort_values("epoch")
+                if metric_stats.empty:
+                    continue
+                x = metric_stats["epoch"].to_numpy(dtype=float)
+                y = metric_stats["mean"].to_numpy(dtype=float)
+                std = metric_stats["std"].fillna(0.0).to_numpy(dtype=float)
+                label = f"{model_name} {metric}"
+                color = color_by_model.get(model_name)
+                ax.plot(
+                    x,
+                    y,
+                    label=label,
+                    color=color,
+                    linestyle=line_styles.get(metric, "-"),
+                    linewidth=1.8,
+                )
+                ax.fill_between(x, y - std, y + std, color=color, alpha=0.12)
+
+        ax.set_title(f"{experiment_name} Training Progress - {cv_strategy}")
+        ax.set_xlabel("epoch")
+        ax.set_ylabel(ylabel)
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+        ax.grid(alpha=0.2)
+        ax.legend(loc="best", fontsize="small")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def _plot_best_epoch_distribution(history: pd.DataFrame, output_dir: Path) -> Path | None:
+    """Save GNN best-epoch distributions by task and CV strategy."""
+    required_columns = {"history_kind", "best_epoch", "experiment_id", "experiment_display_name", "cv_strategy", "model", "fold_id"}
+    if history.empty or not required_columns.issubset(history.columns):
+        return None
+
+    best_df = history[history["history_kind"] == "gnn"].copy()
+    best_df["best_epoch"] = pd.to_numeric(best_df["best_epoch"], errors="coerce")
+    best_df = best_df.dropna(subset=["best_epoch"])
+    if best_df.empty:
+        return None
+
+    best_df = best_df[
+        [
+            "experiment_id",
+            "experiment_display_name",
+            "cv_strategy",
+            "model",
+            "fold_id",
+            "best_epoch",
+        ]
+    ].drop_duplicates()
+    if best_df.empty:
+        return None
+
+    groups = list(
+        best_df[["experiment_id", "experiment_display_name", "cv_strategy"]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / "best_epoch_distribution.png"
+
+    fig, axes = plt.subplots(
+        len(groups),
+        1,
+        figsize=(10, max(3.5, 3.0 * len(groups))),
+        squeeze=False,
+    )
+    model_order = _ordered_models(best_df["model"].astype(str).unique().tolist())
+    for row_idx, (experiment_id, experiment_name, cv_strategy) in enumerate(groups):
+        ax = axes[row_idx, 0]
+        group_df = best_df[
+            (best_df["experiment_id"].astype(str) == str(experiment_id))
+            & (best_df["cv_strategy"].astype(str) == str(cv_strategy))
+        ]
+        sns.boxplot(
+            data=group_df,
+            x="model",
+            y="best_epoch",
+            order=model_order,
+            color="#D9EAF7",
+            ax=ax,
+        )
+        sns.stripplot(
+            data=group_df,
+            x="model",
+            y="best_epoch",
+            order=model_order,
+            color="#1F4E79",
+            size=4,
+            jitter=0.15,
+            ax=ax,
+        )
+        ax.set_title(f"{experiment_name} Best Epoch - {cv_strategy}")
+        ax.set_xlabel("model")
+        ax.set_ylabel("best epoch")
+        ax.grid(axis="y", alpha=0.2)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
+    """Save command-level training-history table and plots."""
+    history = _collect_training_history(rows)
+    if history.empty:
+        return []
+
+    saved_paths: List[Path] = []
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+    history_path = tables_dir / "training_history.csv"
+    history.to_csv(history_path, index=False)
+    saved_paths.append(history_path)
+
+    for plot_path in [
+        _plot_training_curve_grid(
+            history=history,
+            output_dir=output_dir,
+            metric_columns=["train_loss", "val_loss"],
+            output_name="training_progress_loss.png",
+            ylabel="loss",
+        ),
+        _plot_training_curve_grid(
+            history=history,
+            output_dir=output_dir,
+            metric_columns=["val_balanced_accuracy", "val_macro_f1"],
+            output_name="training_progress_validation_metrics.png",
+            ylabel="validation metric",
+            ylim=(0.0, 1.0),
+        ),
+        _plot_best_epoch_distribution(history=history, output_dir=output_dir),
+    ]:
+        if plot_path is not None:
+            saved_paths.append(plot_path)
+
+    return saved_paths
+
+
 def _save_combined_confusion_matrices(
     rows: Sequence[Dict[str, Any]],
     output_dir: Path,
@@ -1235,8 +1516,10 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
     label_distribution_paths: List[Path] = []
+    training_history_paths: List[Path] = []
     if not args.dry_run:
         label_distribution_paths = _save_label_distribution_outputs(rows=rows, output_dir=output_dir)
+        training_history_paths = _save_training_history_outputs(rows=rows, output_dir=output_dir)
         successful_pairs = list(
             dict.fromkeys(
                 (
@@ -1264,6 +1547,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
         print(f"Saved ranking plot: {ranking_path}")
     for label_distribution_path in label_distribution_paths:
         print(f"Saved label distribution output: {label_distribution_path}")
+    for training_history_path in training_history_paths:
+        print(f"Saved training history output: {training_history_path}")
     for confusion_path in confusion_paths:
         print(f"Saved confusion matrices: {confusion_path}")
     return output_dir

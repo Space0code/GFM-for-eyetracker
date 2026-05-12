@@ -613,10 +613,21 @@ def _train_gnn_fold(
 
     best_val_loss = float("inf")
     best_epoch = 0
+    no_improve_epochs = 0
+    early_stopped = False
     start_time = time.time()
+    history_rows: List[Dict[str, Any]] = []
+    early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
+    early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
+    early_stopping_min_delta = float(training_cfg.get("early_stopping_min_delta", 0.0))
+    early_stopping_restore_best = bool(training_cfg.get("early_stopping_restore_best", True))
+
+    if early_stopping_enabled and early_stopping_patience < 1:
+        raise ValueError("gnn.training.early_stopping_patience must be >= 1 when early stopping is enabled.")
 
     print(f"Training multiclass GNN for {test_name}...")
     for epoch in range(int(training_cfg["num_epochs"])):
+        epoch_start_time = time.time()
         train_loss = _train_gnn_epoch(
             model=model,
             loader=train_loader,
@@ -632,19 +643,60 @@ def _train_gnn_fold(
             class_labels=class_labels,
         )
 
+        val_aggregated = val_metrics["standard"]["aggregated"]
+        val_balanced_accuracy = val_aggregated.get("balanced_accuracy", np.nan)
+        val_macro_f1 = val_aggregated.get("macro_f1", np.nan)
+        epoch_runtime_seconds = round(time.time() - epoch_start_time, 3)
+
         if verbose and ((epoch + 1) % 10 == 0 or epoch == 0 or epoch + 1 == int(training_cfg["num_epochs"])):
-            val_acc = val_metrics["standard"]["aggregated"].get("accuracy", np.nan)
+            val_acc = val_aggregated.get("accuracy", np.nan)
             print(
                 f"  Epoch {epoch + 1}/{training_cfg['num_epochs']}: "
                 f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
             )
 
-        if val_loss < best_val_loss:
+        if val_loss < (best_val_loss - early_stopping_min_delta):
             best_val_loss = val_loss
             best_epoch = epoch
+            no_improve_epochs = 0
             torch.save(model.state_dict(), os.path.join(fold_dir, "best_model.pt"))
+        else:
+            no_improve_epochs += 1
+
+        history_rows.append(
+            {
+                "epoch": epoch + 1,
+                "train_loss": float(train_loss),
+                "val_loss": float(val_loss),
+                "val_balanced_accuracy": float(val_balanced_accuracy),
+                "val_macro_f1": float(val_macro_f1),
+                "epoch_runtime_seconds": epoch_runtime_seconds,
+            }
+        )
+
+        if early_stopping_enabled and no_improve_epochs >= early_stopping_patience:
+            early_stopped = True
+            if verbose:
+                print(
+                    f"  Early stopping at epoch {epoch + 1}: "
+                    f"no val_loss improvement for {early_stopping_patience} epoch(s)."
+                )
+            break
+
+    for row in history_rows:
+        row["is_best_epoch"] = int(int(row["epoch"]) == best_epoch + 1)
+        row["best_epoch"] = best_epoch + 1
+        row["best_val_loss"] = float(best_val_loss)
+    pd.DataFrame(history_rows).to_csv(os.path.join(fold_dir, "gnn_training_history.csv"), index=False)
 
     print(f"  Best model at epoch {best_epoch + 1}")
+    if early_stopped:
+        print("  Early stopping triggered.")
+    if not early_stopping_restore_best and verbose:
+        print(
+            "  NOTE: early_stopping_restore_best=false requested, "
+            "but evaluation still uses the best checkpoint for comparability."
+        )
     print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
 
     model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
@@ -663,6 +715,24 @@ def _train_gnn_fold(
         print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
 
     return test_metrics
+
+
+def _save_mlp_training_history(model: Any, output_path: str) -> None:
+    """Save sklearn MLP training loss history when the fitted model exposes it."""
+    estimator = getattr(model, "model", None)
+    loss_curve = getattr(estimator, "loss_curve_", None)
+    if loss_curve is None:
+        return
+
+    rows = [
+        {
+            "epoch": epoch_idx + 1,
+            "train_loss": float(loss_value),
+        }
+        for epoch_idx, loss_value in enumerate(loss_curve)
+    ]
+    if rows:
+        pd.DataFrame(rows).to_csv(output_path, index=False)
 
 
 def _prepare_baseline_split(
@@ -794,6 +864,11 @@ def _train_baselines_fold(
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, message=".*Stochastic Optimizer.*")
             model.fit(X_train, y_train)
+        if model_name == "MLP":
+            _save_mlp_training_history(
+                model=model,
+                output_path=os.path.join(model_dir, "mlp_training_history.csv"),
+            )
 
         test_metrics = model.evaluate(
             X=X_test,
