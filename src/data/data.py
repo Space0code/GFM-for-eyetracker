@@ -317,11 +317,12 @@ class SpacioTemporalDataset(Dataset):
             # generate window slices based on time
             for window_slice in self._generate_window_slices(df):
                 if (window_slice.stop - window_slice.start) < self.min_samples_per_window:
-                    print(
-                        f"Window {window_slice} too small for min_samples_per_window="
-                        f"{self.min_samples_per_window}. "
-                        f"[path={path}]. Skipping... "
-                    )
+                    # remove spammy warning about small windows, just skip them silently
+                    # print(
+                    #     f"Window {window_slice} too small for min_samples_per_window="
+                    #     f"{self.min_samples_per_window}. "
+                    #     f"[path={path}]. Skipping... "
+                    # )
                     continue
                 graph = self._load_one(df, window_slice)
                 # Store source file information
