@@ -109,7 +109,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--base-config",
         type=str,
-        default="src/emotions/suite/configs/run_hci_experiment_suite_table6_3class.yaml",
+        default=(
+            "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/"
+            "run_hci_experiment_suite_table6_3class.yaml"
+        ),
         help="Base suite wrapper config.",
     )
     parser.add_argument(
@@ -289,9 +292,9 @@ def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None 
                     "use_torch_compile": bool(getattr(args, "use_torch_compile", False)),
                     # Quick runs favor robustness over throughput because some PyG/CUDA
                     # combinations intermittently fail in worker pin-memory threads.
-                    "num_workers": 0,
-                    "pin_memory": False,
-                    "persistent_workers": False,
+                    # "num_workers": 0,
+                    # "pin_memory": False,
+                    # "persistent_workers": False,
                 }
             }
         },
@@ -555,8 +558,8 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
     trainer_base_cfg = _load_multiclass_base_config(base_cfg, base_config_path)
     trainer_cfg = merge_many(trainer_base_cfg, payload.get("global_overrides", {}))
     cv_cfg = trainer_cfg.get("cross_validation", {})
-    dataset_cfg = trainer_cfg.get("dataset", {})
     gnn_training_cfg = trainer_cfg.get("gnn", {}).get("training", {})
+    gnn_model_cfg = trainer_cfg.get("gnn", {}).get("model", {})
     total_subjects, total_recordings, used_subjects, used_recordings = _load_subject_recording_usage(
         trainer_cfg,
         base_config_path,
@@ -582,6 +585,11 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
             else "unknown/unknown"
         ),
         "experiments": ",".join(_get_enabled_experiment_ids(payload)),
+        "models": ",".join(args.models.split(",")),
+        "GNN conv_type": str(gnn_model_cfg.get("conv_type", "not configured")),
+        "relation_pooling": str(gnn_model_cfg.get("relation_pooling", "not configured")),
+        "graph_pooling": str(gnn_model_cfg.get("graph_pooling", "not configured")),
+        "head_pooling": str(gnn_model_cfg.get("head_pooling", "not configured")),
     }
 
 

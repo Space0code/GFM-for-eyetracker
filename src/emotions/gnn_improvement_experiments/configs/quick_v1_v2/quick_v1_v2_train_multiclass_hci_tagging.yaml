@@ -109,7 +109,7 @@ gnn:
     dropout_gnn: 0.1
     dropout_head: 0.1
     aggr: mean
-    conv_type: GATConv
+    conv_type: GCNConv
   training:
     num_epochs: 35
     batch_size: 64

@@ -65,7 +65,7 @@ dataset:
 cross_validation:
   strategies:
     - subject_kfold
-    # - recording_kfold
+    - recording_kfold
   n_splits: 5
   val_size: 1
   random_state: 42

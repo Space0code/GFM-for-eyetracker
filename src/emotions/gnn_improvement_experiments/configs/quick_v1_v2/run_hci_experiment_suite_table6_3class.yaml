@@ -1,10 +1,8 @@
-# Wrapper config focused on Table-6 three-class multiclass experiments.
-# Deprecated for quick v1/v2 runs: prefer
-# src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml
+# Wrapper config focused on Table-6 three-class multiclass experiments for quick v1/v2 comparison.
 #
 # Usage:
-#   python src/emotions/suite/run_hci_experiment_suite.py \
-#       --config src/emotions/suite/configs/run_hci_experiment_suite_table6_3class.yaml
+#   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
+#       --base-config src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml
 
 suite:
   results_dir: "results/suite"

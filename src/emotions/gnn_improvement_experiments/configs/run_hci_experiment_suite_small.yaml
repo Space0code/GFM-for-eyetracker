@@ -11,9 +11,9 @@ suite:
   seed: 42
   source_data_root: "data/processed/hci-tagging"
   base_configs:
-    binary: "src/emotions/binary/configs/train_binary_hci_tagging.yaml"
-    multiclass: "src/emotions/multiclass/configs/train_multiclass_hci_tagging.yaml"
-    regression: "src/emotions/regression/configs/train_regression_hci_tagging.yaml"
+    binary: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_binary_hci_tagging.yaml"
+    multiclass: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_multiclass_hci_tagging.yaml"
+    regression: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_regression_hci_tagging.yaml"
 
 global_overrides:
   cross_validation:
@@ -33,13 +33,13 @@ global_overrides:
       relation_pooling: mlp
       pooling: attention
       num_layers: 2
-      conv_type: GCNConv
+      conv_type: GATConv
     training:
-      num_epochs: 20
-      num_workers: 0
-      persistent_workers: false
-      use_torch_compile: false
-      early_stopping_enabled: false
+      num_epochs: 30
+      num_workers: 8
+      persistent_workers: true
+      use_torch_compile: true
+      early_stopping_enabled: true
       early_stopping_patience: 7
       early_stopping_min_delta: 0.0
       early_stopping_restore_best: true
