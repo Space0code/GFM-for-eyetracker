@@ -26,6 +26,9 @@ global_overrides:
   gnn:
     model:
       model_version: v2
+      head_pooling: attention
+      graph_pooling: attention
+      relation_pooling: mlp
       pooling: attention
       num_layers: 10
     training:

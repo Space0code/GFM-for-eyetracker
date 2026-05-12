@@ -97,6 +97,9 @@ gnn:
     model_version: v2
     in_channels: 4
     hidden_channels: 128
+    head_pooling: attention
+    graph_pooling: attention
+    relation_pooling: mlp
     use_preprocess_mlp: true
     add_self_loops: true
     dropout_mlp: 0.1

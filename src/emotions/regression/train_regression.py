@@ -271,6 +271,12 @@ def _train_gnn_fold(
         "pooling": model_cfg.get("pooling", "attention" if model_version == "v2" else "mean_max"),
     }
     if model_version == "v2":
+        model_kwargs["head_pooling"] = model_cfg.get("head_pooling")
+        model_kwargs["graph_pooling"] = model_cfg.get(
+            "graph_pooling",
+            model_cfg.get("head_pooling", model_cfg.get("pooling", "attention")),
+        )
+        model_kwargs["relation_pooling"] = model_cfg.get("relation_pooling", "mlp")
         model_kwargs["edge_weight_mode"] = model_cfg.get(
             "edge_weight_mode",
             config["dataset"].get("edge_weight_mode", "learned_signed"),

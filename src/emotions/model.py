@@ -170,15 +170,26 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
             dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
             aggr: str = "mean", conv_type: str = "GCNConv",
-            num_layers: int = 2, pooling: str = "attention",
+            num_layers: int = 2, pooling: str = "attention", graph_pooling: str | None = None,
+            head_pooling: str | None = None, relation_pooling: str = "mlp",
             edge_weight_mode: str = "learned_signed",
             ):
         nn.Module.__init__(self)
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
-        if pooling not in {"mean", "mean_max", "attention"}:
+        resolved_graph_pooling = (
+            graph_pooling if graph_pooling is not None
+            else head_pooling if head_pooling is not None
+            else pooling
+        )
+        if resolved_graph_pooling not in {"mean", "mean_max", "attention"}:
             raise ValueError(
-                f"Unsupported pooling: {pooling}. Choose 'mean', 'mean_max', or 'attention'."
+                "Unsupported graph pooling: "
+                f"{resolved_graph_pooling}. Choose 'mean', 'mean_max', or 'attention'."
+            )
+        if relation_pooling not in {"mlp", "attention"}:
+            raise ValueError(
+                f"Unsupported relation_pooling: {relation_pooling}. Choose 'mlp' or 'attention'."
             )
         if edge_weight_mode not in {"handcrafted", "learned_signed"}:
             raise ValueError(
@@ -214,10 +225,12 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
 
         self.relations = ("spatial", "temporal_forward", "temporal_backward")
         self.num_layers = num_layers
-        self.pooling = pooling
+        self.pooling = resolved_graph_pooling
+        self.relation_pooling = relation_pooling
 
         self.relation_convs = nn.ModuleList()
         self.relation_fusion_mlps = nn.ModuleList()
+        self.relation_attention_mlps = nn.ModuleList()
         self.layer_norms = nn.ModuleList()
         for layer_idx in range(num_layers):
             layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
@@ -234,6 +247,14 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
                     nn.GELU(),
                     nn.Dropout(p=dropout_gnn),
                     nn.Linear(hidden_channels, hidden_channels),
+                )
+            )
+            self.relation_attention_mlps.append(
+                nn.Sequential(
+                    nn.Linear(hidden_channels, hidden_channels),
+                    nn.GELU(),
+                    nn.Dropout(p=dropout_gnn),
+                    nn.Linear(hidden_channels, 1),
                 )
             )
             self.layer_norms.append(nn.LayerNorm(hidden_channels))
@@ -260,11 +281,11 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             nn.Linear(2, 1),
         )
 
-        if pooling == "mean":
+        if self.pooling == "mean":
             head_in_channels = hidden_channels
-        elif pooling == "mean_max":
+        elif self.pooling == "mean_max":
             head_in_channels = 2 * hidden_channels
-        elif pooling == "attention":
+        elif self.pooling == "attention":
             head_in_channels = hidden_channels
             self.attention_pool = nn.Sequential(
                 nn.Linear(hidden_channels, hidden_channels),
@@ -273,7 +294,9 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
                 nn.Linear(hidden_channels, 1),
             )
         else:
-            raise ValueError(f"Unsupported pooling: {pooling}. Choose 'mean', 'mean_max', or 'attention'.")
+            raise ValueError(
+                f"Unsupported pooling: {self.pooling}. Choose 'mean', 'mean_max', or 'attention'."
+            )
 
         self.head = nn.Sequential(
             nn.Linear(head_in_channels, hidden_channels),
@@ -392,7 +415,19 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
                 )
                 relation_outputs.append(self.gnn_activation(relation_out))
 
-            fused = self.relation_fusion_mlps[layer_idx](torch.cat(relation_outputs, dim=1))
+            if self.relation_pooling == "mlp":
+                fused = self.relation_fusion_mlps[layer_idx](torch.cat(relation_outputs, dim=1))
+            elif self.relation_pooling == "attention":
+                stacked_rel = torch.stack(relation_outputs, dim=1)  # [num_nodes, num_relations, hidden]
+                rel_scores = self.relation_attention_mlps[layer_idx](
+                    stacked_rel.reshape(-1, stacked_rel.shape[-1])
+                ).reshape(stacked_rel.shape[0], stacked_rel.shape[1], 1)
+                rel_alpha = torch.softmax(rel_scores, dim=1)
+                fused = (rel_alpha * stacked_rel).sum(dim=1)
+            else:
+                raise ValueError(
+                    f"Unsupported relation_pooling: {self.relation_pooling}. Choose 'mlp' or 'attention'."
+                )
 
             if layer_idx == 0:
                 residual = self.input_residual_proj(x0_node)

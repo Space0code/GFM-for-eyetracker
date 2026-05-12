@@ -340,7 +340,10 @@ def build_variant(model_name: str) -> QuickVariant:
     if model_name == "GNN_v2":
         return QuickVariant(
             model_name=model_name,
-            description="Current v2 GNN with split temporal edges, attention pooling, and learned signed weights.",
+            description=(
+                "Current v2 GNN with split temporal edges, attention graph/head pooling, "
+                "MLP relation pooling, and learned signed weights."
+            ),
             summary_model_name="GNN",
             overrides={
                 "global_overrides": {
@@ -353,6 +356,9 @@ def build_variant(model_name: str) -> QuickVariant:
                     "gnn": {
                         "model": {
                             "model_version": "v2",
+                            "head_pooling": "attention",
+                            "graph_pooling": "attention",
+                            "relation_pooling": "mlp",
                             "pooling": "attention",
                             "edge_weight_mode": "learned_signed",
                         }

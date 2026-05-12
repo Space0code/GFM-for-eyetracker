@@ -60,6 +60,9 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
         conv_type: str = "GCNConv",
         num_layers: int = 2,
         pooling: str = "attention",
+        graph_pooling: str | None = None,
+        head_pooling: str | None = None,
+        relation_pooling: str = "mlp",
         edge_weight_mode: str = "learned_signed",
     ) -> None:
         super().__init__(
@@ -77,5 +80,8 @@ class MulticlassSpatioTemporalGNN(SpatioTemporalHeteroGNN):
             conv_type=conv_type,
             num_layers=num_layers,
             pooling=pooling,
+            graph_pooling=graph_pooling,
+            head_pooling=head_pooling,
+            relation_pooling=relation_pooling,
             edge_weight_mode=edge_weight_mode,
         )

@@ -545,12 +545,20 @@ def train_gnn_fold(
         if model_version == "v1":
             model_cls = BinarySpatioTemporalGNNV1
             model_kwargs.pop("edge_weight_mode", None)
+            model_kwargs.pop("graph_pooling", None)
+            model_kwargs.pop("relation_pooling", None)
         elif model_version == "v2":
             model_cls = BinarySpatioTemporalGNN
             model_kwargs.setdefault(
                 "edge_weight_mode",
                 config["dataset"].get("edge_weight_mode", "learned_signed"),
             )
+            model_kwargs.setdefault("head_pooling", model_kwargs.get("head_pooling"))
+            model_kwargs.setdefault(
+                "graph_pooling",
+                model_kwargs.get("head_pooling", model_kwargs.get("pooling", "attention")),
+            )
+            model_kwargs.setdefault("relation_pooling", "mlp")
         else:
             raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
         model = model_cls(**model_kwargs).to(device)
