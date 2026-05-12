@@ -321,11 +321,14 @@ def build_variant(model_name: str) -> QuickVariant:
     if model_name == "GNN_v1":
         return QuickVariant(
             model_name=model_name,
-            description="Frozen v1 GNN with old handcrafted edge weights enabled.",
+            description="Frozen v1 GNN with old graph schema and handcrafted edge attributes.",
             summary_model_name="GNN",
             overrides={
                 "global_overrides": {
                     "run_experiments": {"baselines": False, "gnn": True},
+                    # Keep the variant override limited to what makes v1 v1.
+                    # Architecture knobs such as conv_type, pooling, depth, and
+                    # hidden size belong in YAML so v1/v2 comparisons share them.
                     "dataset": {
                         "graph_version": "v1",
                         "edge_weight_mode": "handcrafted",
@@ -334,7 +337,6 @@ def build_variant(model_name: str) -> QuickVariant:
                     "gnn": {
                         "model": {
                             "model_version": "v1",
-                            "pooling": "mean_max",
                         }
                     },
                 }
@@ -344,13 +346,15 @@ def build_variant(model_name: str) -> QuickVariant:
         return QuickVariant(
             model_name=model_name,
             description=(
-                "Current v2 GNN with split temporal edges, attention graph/head pooling, "
-                "MLP relation pooling, and learned signed weights."
+                "Current v2 GNN with split temporal edges and learned signed edge attributes."
             ),
             summary_model_name="GNN",
             overrides={
                 "global_overrides": {
                     "run_experiments": {"baselines": False, "gnn": True},
+                    # Keep the variant override limited to what makes v2 v2.
+                    # Shared architecture choices are configured in the wrapper
+                    # YAML, which keeps GNN_v1/GNN_v2 comparisons fair by default.
                     "dataset": {
                         "graph_version": "v2",
                         "edge_weight_mode": "learned_signed",
@@ -359,10 +363,6 @@ def build_variant(model_name: str) -> QuickVariant:
                     "gnn": {
                         "model": {
                             "model_version": "v2",
-                            "head_pooling": "attention",
-                            "graph_pooling": "attention",
-                            "relation_pooling": "mlp",
-                            "pooling": "attention",
                             "edge_weight_mode": "learned_signed",
                         }
                     },

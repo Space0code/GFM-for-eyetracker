@@ -1668,6 +1668,8 @@ Most important next steps:
 - 2026-05-11: The quick v1/v2 comparison runner supports multiple comma-separated CV strategies in one run, e.g. `--cv-strategy subject_loo,recording_loo` or `--cv-strategy subject_kfold,recording_kfold --n-splits 3`. The resulting summary includes `cv_strategy`, the model-ranking plot compares models separately per strategy, and multi-strategy confusion matrices are written per strategy as `figures/confusion_matrices_<strategy>.png`.
 - 2026-05-11: The quick v1/v2 comparison runner also writes class-balance diagnostics for completed runs: per-fold and aggregate CSV tables under `tables/`, plus aggregate count/proportion figures under `plots/`.
 - 2026-05-12: Consolidated quick v1/v2 runner configs into one location: `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`. The runner default `--base-config` now points to `run_hci_experiment_suite_table6_3class.yaml` in that folder, with local quick trainer base configs (`quick_v1_v2_train_binary_hci_tagging.yaml`, `quick_v1_v2_train_multiclass_hci_tagging.yaml`, `quick_v1_v2_train_regression_hci_tagging.yaml`) to avoid cross-folder config ambiguity.
+- 2026-05-12: Simplified quick v1/v2 comparison configuration. Shared architecture settings now live in the quick wrapper YAML, and the Python runner only applies variant-identity overrides. For fair GNN_v1/GNN_v2 convolution comparisons, change `global_overrides.gnn.model.conv_type` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml` to either `GCNConv` or `GATConv`. `GATConv` ignores scalar edge weights in the model code.
+- 2026-05-12: Active quick v1/v2 Table-6 comparison wrapper is set to `GATConv` for the next run.
 
 ---
 

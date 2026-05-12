@@ -50,9 +50,13 @@ class SpatioTemporalHeteroGNNV1(nn.Module):
         if conv_type == "GCNConv":
             ConvLayer = GCNConv
             conv_kwargs = {"add_self_loops": add_self_loops}
+            self.supports_scalar_edge_weights = True
         elif conv_type == "GATConv":
             ConvLayer = GATConv
             conv_kwargs = {"add_self_loops": add_self_loops}
+            # GATConv computes attention coefficients internally and does not
+            # consume the scalar edge weights used by the GCN configuration.
+            self.supports_scalar_edge_weights = False
         else:
             raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
@@ -109,7 +113,7 @@ class SpatioTemporalHeteroGNNV1(nn.Module):
         # data is a HeteroData from your SpacioTemporalDataset
         x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
         edge_weight_dict = None
-        if self.use_edge_weights:
+        if self.use_edge_weights and self.supports_scalar_edge_weights:
             edge_weight_dict = {k: data[k].edge_attr for k in edge_index_dict.keys() if hasattr(data[k], 'edge_attr')}
         
         # Preprocess raw input with MLP
@@ -215,11 +219,16 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         if conv_type == "GCNConv":
             ConvLayer = GCNConv
             conv_kwargs = {"add_self_loops": add_self_loops}
+            self.supports_scalar_edge_weights = True
             if edge_weight_mode == "learned_signed":
                 conv_kwargs = {"add_self_loops": False, "normalize": False}
         elif conv_type == "GATConv":
             ConvLayer = GATConv
             conv_kwargs = {"add_self_loops": add_self_loops}
+            # GATConv ignores the learned scalar edge-weight branch. Keeping
+            # dataset.use_edge_weights enabled still allows the same graph/cache
+            # construction as GCNConv comparison runs.
+            self.supports_scalar_edge_weights = False
         else:
             raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
@@ -370,7 +379,7 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
     def forward(self, data, return_graph_embedding: bool = False):
         x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
         edge_weight_dict = None
-        if self.use_edge_weights:
+        if self.use_edge_weights and self.supports_scalar_edge_weights:
             edge_weight_dict = {
                 k: data[k].edge_attr
                 for k in edge_index_dict.keys()

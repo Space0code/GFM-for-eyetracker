@@ -1,5 +1,9 @@
-# Multiclass classification configuration for Mahnob-HCI Table-6 three-class
-# arousal classification experiments.
+# Multiclass trainer base for quick v1/v2 experiments on MAHNOB-HCI-TAGGING.
+#
+# "hci_tagging" in this filename refers to the source dataset name, not to
+# implicit/image/video tagging tasks. The quick Table-6 wrapper uses this base
+# with scope: emotion-elicitation and overrides the concrete task to arousal or
+# valence as needed.
 
 run_experiments:
   baselines: true
@@ -109,6 +113,8 @@ gnn:
     dropout_gnn: 0.1
     dropout_head: 0.1
     aggr: mean
+    # Trainer fallback. The quick v1/v2 wrapper overrides this so GNN_v1 and
+    # GNN_v2 share the same convolution in comparison runs.
     conv_type: GCNConv
   training:
     num_epochs: 35

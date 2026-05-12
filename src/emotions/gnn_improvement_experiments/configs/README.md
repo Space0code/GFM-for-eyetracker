@@ -21,5 +21,12 @@ This directory is the canonical config home for scripts under
 ## Notes
 
 - Keep quick-run and ablation configs here to avoid cross-folder path ambiguity.
+- In filenames, `hci_tagging` means the MAHNOB-HCI-TAGGING dataset. It does
+  not mean the image/video/pooled tagging experiment scopes unless the wrapper
+  explicitly selects those scopes.
 - If you update trainer defaults for quick/ablation runs, update files in
   `quick_v1_v2/` first.
+- For quick v1/v2 comparison runs, shared architecture choices belong in the
+  wrapper config `quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`
+  under `global_overrides.gnn.model`. In particular, switch both GNN_v1 and
+  GNN_v2 between GCN and GAT by changing only `conv_type` there.

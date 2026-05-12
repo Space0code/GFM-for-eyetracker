@@ -46,6 +46,23 @@ def test_quick_variants_set_expected_gnn_versions() -> None:
     assert v2.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "v2"
 
 
+def test_quick_gnn_variants_do_not_override_shared_architecture_knobs() -> None:
+    shared_knobs = {
+        "conv_type",
+        "hidden_channels",
+        "num_layers",
+        "pooling",
+        "head_pooling",
+        "graph_pooling",
+        "relation_pooling",
+    }
+
+    for model_name in ["GNN_v1", "GNN_v2"]:
+        model_cfg = build_variant(model_name).overrides["global_overrides"]["gnn"]["model"]
+
+        assert not (shared_knobs & set(model_cfg))
+
+
 def test_quick_payload_enables_table6_arousal_and_valence() -> None:
     base_cfg = {
         "experiments": {
