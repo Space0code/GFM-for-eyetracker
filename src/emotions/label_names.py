@@ -79,7 +79,7 @@ def resolve_multiclass_label_name_mapping(
     if task_name == "table6-arousal-3class":
         return {
             0: "Calm",
-            1: "Medium arousal",
+            1: "Medium aroused",
             2: "Excited/Activated",
         }
     if task_name == "table6-valence-3class":

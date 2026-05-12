@@ -4,9 +4,11 @@ This script generates focused suite-wrapper configs and optionally runs them
 sequentially with the dataset, cross-validation, and training parameters from
 the selected YAML suite config. By default it compares frozen
 `Random`, `Majority`, frozen `GNN_v1`, current `GNN_v2`, and `LightGBM` on the
-Table-6 three-class arousal and valence tasks with proper k-fold splitting. Requested
-baseline models are grouped into one suite invocation so they share the same
-loaded dataset and CV splits.
+Table-6 three-class arousal and/or valence tasks with proper k-fold splitting.
+Select tasks in the wrapper config with `quick_comparison.table6_tasks`, for
+example `[arousal]`, `[valence]`, or `[arousal, valence]`. Requested baseline
+models are grouped into one suite invocation so they share the same loaded
+dataset and CV splits.
 
 Example:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
@@ -53,6 +55,14 @@ from emotions.suite.run_hci_experiment_suite import run_suite
 AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
 VALENCE_EXPERIMENT_ID = "multiclass_table6_valence_3class"
 QUICK_EXPERIMENT_IDS = [AROUSAL_EXPERIMENT_ID, VALENCE_EXPERIMENT_ID]
+TABLE6_TASK_TO_EXPERIMENT_ID = {
+    "arousal": AROUSAL_EXPERIMENT_ID,
+    "table6-arousal-3class": AROUSAL_EXPERIMENT_ID,
+    AROUSAL_EXPERIMENT_ID: AROUSAL_EXPERIMENT_ID,
+    "valence": VALENCE_EXPERIMENT_ID,
+    "table6-valence-3class": VALENCE_EXPERIMENT_ID,
+    VALENCE_EXPERIMENT_ID: VALENCE_EXPERIMENT_ID,
+}
 EXPERIMENT_DISPLAY_NAMES = {
     AROUSAL_EXPERIMENT_ID: "Table-6 Arousal",
     VALENCE_EXPERIMENT_ID: "Table-6 Valence",
@@ -259,18 +269,59 @@ def _ordered_models(model_names: Iterable[str]) -> List[str]:
     )
 
 
+def _resolve_quick_table6_experiment_ids(wrapper_cfg: Dict[str, Any]) -> List[str]:
+    """Resolve requested quick Table-6 experiment IDs from wrapper config."""
+    quick_cfg = wrapper_cfg.get("quick_comparison", {})
+    if quick_cfg is None:
+        quick_cfg = {}
+    if not isinstance(quick_cfg, dict):
+        raise ValueError("quick_comparison must be a dictionary when configured.")
+
+    task_spec = quick_cfg.get("table6_tasks", quick_cfg.get("tasks", QUICK_EXPERIMENT_IDS))
+    if isinstance(task_spec, str):
+        normalized = task_spec.strip().lower().replace("_", "-")
+        if normalized in {"both", "all", "arousal-valence", "valence-arousal"}:
+            requested_tasks = ["arousal", "valence"]
+        else:
+            requested_tasks = [task_spec]
+    elif isinstance(task_spec, list):
+        requested_tasks = task_spec
+    else:
+        raise ValueError(
+            "quick_comparison.table6_tasks must be a string or list, e.g. "
+            "[arousal], [valence], or [arousal, valence]."
+        )
+
+    experiment_ids: List[str] = []
+    for raw_task in requested_tasks:
+        normalized = str(raw_task).strip().lower().replace("_", "-")
+        experiment_id = TABLE6_TASK_TO_EXPERIMENT_ID.get(normalized)
+        if experiment_id is None:
+            raise ValueError(
+                f"Unknown quick Table-6 task '{raw_task}'. "
+                "Allowed values: arousal, valence, both."
+            )
+        experiment_ids.append(experiment_id)
+
+    unique_experiment_ids = list(dict.fromkeys(experiment_ids))
+    if not unique_experiment_ids:
+        raise ValueError("quick_comparison.table6_tasks must select at least one task.")
+    return unique_experiment_ids
+
+
 def _enable_quick_table6_tasks(wrapper_cfg: Dict[str, Any]) -> None:
-    """Enable only the quick-comparison Table-6 tasks in a suite wrapper config."""
+    """Enable only the selected quick-comparison Table-6 tasks in a suite wrapper config."""
+    selected_experiment_ids = set(_resolve_quick_table6_experiment_ids(wrapper_cfg))
     experiments = wrapper_cfg.get("experiments")
     if isinstance(experiments, dict):
         for experiment_id, experiment_cfg in experiments.items():
             if isinstance(experiment_cfg, dict):
-                experiment_cfg["enabled"] = experiment_id in QUICK_EXPERIMENT_IDS
+                experiment_cfg["enabled"] = experiment_id in selected_experiment_ids
         return
     if isinstance(experiments, list):
         for experiment_cfg in experiments:
             if isinstance(experiment_cfg, dict):
-                experiment_cfg["enabled"] = str(experiment_cfg.get("id", "")) in QUICK_EXPERIMENT_IDS
+                experiment_cfg["enabled"] = str(experiment_cfg.get("id", "")) in selected_experiment_ids
         return
     raise ValueError("Unsupported experiments format; expected dict or list.")
 

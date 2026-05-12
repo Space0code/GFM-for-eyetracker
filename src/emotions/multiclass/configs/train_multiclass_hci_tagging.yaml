@@ -12,7 +12,7 @@ multiclass_task:
   drop_unmapped_labels: true
   class_name_mapping:
     0: Calm
-    1: Medium arousal
+    1: Medium aroused
     2: Excited/Activated
   table6_class_mapping:
     0: 0

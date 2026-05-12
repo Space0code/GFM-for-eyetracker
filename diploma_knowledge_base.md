@@ -1671,6 +1671,7 @@ Most important next steps:
 - 2026-05-12: Simplified quick v1/v2 comparison configuration. Shared architecture settings now live in the quick wrapper YAML, and the Python runner only applies variant-identity overrides. For fair GNN_v1/GNN_v2 convolution comparisons, change `global_overrides.gnn.model.conv_type` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml` to either `GCNConv` or `GATConv`. `GATConv` ignores scalar edge weights in the model code.
 - 2026-05-12: Active quick v1/v2 Table-6 comparison wrapper is set to `GATConv` for the next run.
 - 2026-05-12: Quick v1/v2 comparison now records training-progress artifacts for multiclass runs. GNN folds save `gnn_training_history.csv`; MLP folds save sklearn `loss_curve_` as `mlp_training_history.csv` when available. The quick runner aggregates these into `tables/training_history.csv` and plots loss curves, validation balanced accuracy/macro-F1 curves, and best-epoch distributions under `plots/`.
+- 2026-05-12: Quick v1/v2 Table-6 task selection is now controlled by `quick_comparison.table6_tasks` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`. Valid values include `[arousal]`, `[valence]`, and `[arousal, valence]`. Table-6 arousal class 1 display name now uses the MAHNOB paper wording `Medium aroused`.
 
 ---
 

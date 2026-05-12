@@ -253,7 +253,7 @@ def _resolve_task_definition(
             if task_name == "table6-arousal-3class":
                 raw_label_names = {
                     0: "Calm",
-                    1: "Medium arousal",
+                    1: "Medium aroused",
                     2: "Excited/Activated",
                 }
             else:
