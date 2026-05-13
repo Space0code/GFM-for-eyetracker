@@ -46,6 +46,38 @@ Use one main dataset and a minimal but rigorous experiment set:
 4. report complexity and practical feasibility,
 5. discuss limitations and future extension toward broader graph-based eye-tracking representation learning.
 
+### Current research questions
+
+As of the 2026-05-13 mentor meeting, the mentors agreed that the current
+research questions are well posed. Keep them for now. They may later be shortened
+or merged if the diploma becomes too broad to write clearly. Explicit hypotheses
+are not required.
+
+Main research question:
+
+**RV1:** Ali lahko prostorsko-časovna grafovska predstavitev podatkov sledilnika
+pogleda izboljša klasifikacijo čustvenih stanj v primerjavi z ne-grafovskimi
+modeli na enakih vhodnih oknih?
+
+Subquestions:
+
+**PV1:** Kako podatke sledilnika pogleda predstaviti kot prostorsko-časovni graf?
+
+**PV2:** Kakšen je vpliv časovnih povezav, prostorskih povezav, uteži povezav,
+informacije o velikosti zenice in informacije smeri pogleda na uspešnost modela?
+
+**PV3:** Katere komponente končnega modela statistično značilno izboljšajo
+rezultate inference?
+
+**PV4:** Kako se grafovski modeli primerjajo s klasičnimi modeli strojnega
+učenja in predstavnikom SOTA?
+
+**PV5:** Kako se rezultati razlikujejo med delitvijo po subjektih in delitvijo
+po posnetkih?
+
+**PV6:** Kako se napovedna uspešnost modelov razlikuje med 3-razredno
+klasifikacijo valence in 3-razredno klasifikacijo vzburjenosti?
+
 ---
 
 ## 1. Timeline and project decisions
@@ -758,9 +790,75 @@ The thesis should include scale estimates:
 
 This supports the design argument and prevents the architecture section from being purely qualitative.
 
+## 4.4 Mentor meeting 2026-05-13: architecture and experiment plan
+
+### Architecture updates
+
+Mentors confirmed the current incremental GNN direction, with one important
+pooling correction:
+
+- separate forward and backward temporal connections explicitly;
+- keep node-level MLP pooling/fusion of relation-specific spatial and temporal
+  node representations;
+- replace graph-level mean pooling with attention pooling, not MLP pooling;
+- use learned edge weights of the form
+  $w_{ij} = \operatorname{MLP}(\ldots)$.
+
+This supersedes the earlier 2026-05-05 wording that suggested MLP-based
+node-to-graph pooling. MLP fusion is useful at node level; graph-level pooling
+should currently be attention-based.
+
+### Convergence checks
+
+Current training curves suggest the GNN may not be converging cleanly:
+validation loss is noisy, and some runs show unstable or worsening validation
+behavior. Before interpreting architecture differences too strongly, run a
+focused convergence check:
+
+1. use more folds, not only 3-fold CV;
+2. plot train, validation, and held-out test loss;
+3. draw curves separately for each left-out fold or split, and also an
+   aggregate plot with uncertainty bands if useful;
+4. reduce the learning rate by 10x or 100x and train more slowly for more epochs;
+5. if convergence is still poor, test stabilizing alternatives such as DropEdge,
+   PairNorm, and GraphNorm instead of BatchNorm/LayerNorm.
+
+### Current experimental interpretation
+
+Recent results support these working conclusions:
+
+- depth comparison suggests reducing the GNN depth from 10 layers to about 3
+  layers;
+- learned or explicit edge weights appear to help slightly in the `GCN + w`
+  versus unweighted GCN comparison;
+- do not over-interpret small architecture differences until convergence plots
+  and fold-level behavior are clearer.
+
+### Additional signals: eye-tracker distance and fixation ID
+
+MAHNOB-HCI contains two additional signals not yet used in the current main
+model: eye-tracker-to-eyes distance and fixation ID.
+
+Reasons to try them:
+
+- they may improve model performance;
+- using them makes the comparison with the original MAHNOB dataset paper more
+  complete, because that paper used gaze-distance and fixation/scan-behavior
+  features among its handcrafted eye-gaze features.
+
+Reason to avoid overcommitting to them:
+
+- the broader post-diploma model should remain general across eye-tracking
+  datasets where such signals may not always be available.
+
+Decision: try both at least preliminarily. If they improve results, include them
+in the final experiment story or ablations. If they do not help or make results
+worse, discard them from the main model and mention in the diploma that they were
+preliminarily tested and then omitted.
+
 ---
 
-## 4.4 Spatio-temporal GNN block variants
+## 4.5 Spatio-temporal GNN block variants
 
 ### Variant 1 — current heterograph message passing
 
