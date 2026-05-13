@@ -55,7 +55,7 @@ Regression tasks (`recording_loo`, aggregated):
 
 ## 4. Ablation findings (focused valence/arousal subset)
 
-Source: `results/gnn_improvement_experiments/gnn_improvement_summary.md`
+Source: historical focused ablation run summarized in `docs/journal.md` and `docs/experiment_log.md`.
 
 Baseline variant (`baseline_default`):
 - valence balanced accuracy: 0.5139

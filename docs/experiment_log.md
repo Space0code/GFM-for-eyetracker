@@ -149,11 +149,10 @@ Consolidated quick-comparison config ownership under:
 `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`
 
 That wrapper and `run_hci_experiment_suite_small.yaml` both point to local quick
-trainer configs:
+trainer configs for the task types they run:
 
 - `quick_v1_v2_train_binary_hci_tagging.yaml`;
-- `quick_v1_v2_train_multiclass_hci_tagging.yaml`;
-- `quick_v1_v2_train_regression_hci_tagging.yaml`.
+- `quick_v1_v2_train_multiclass_hci_tagging.yaml`.
 
 Archived unused legacy config:
 

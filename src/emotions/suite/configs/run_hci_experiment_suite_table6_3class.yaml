@@ -14,7 +14,6 @@ suite:
   base_configs:
     binary: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_binary_hci_tagging.yaml"
     multiclass: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_multiclass_hci_tagging.yaml"
-    regression: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_regression_hci_tagging.yaml"
 
 global_overrides:
   cross_validation:

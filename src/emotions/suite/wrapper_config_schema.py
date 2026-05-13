@@ -135,45 +135,6 @@ def load_and_normalize_wrapper_config(config_path: str) -> Dict[str, Any]:
 
     suite = _ensure_dict(raw.get("suite"), "suite")
     base_configs = _ensure_dict(suite.get("base_configs"), "suite.base_configs")
-
-    missing_base = [key for key in ["binary", "multiclass", "regression"] if key not in base_configs]
-    if missing_base:
-        raise WrapperConfigError(
-            f"Missing suite.base_configs entries: {missing_base}"
-        )
-
-    suite_results_dir = _remap_deprecated_results_path(
-        str(suite.get("results_dir", "results/suite"))
-    )
-    snapshot_cache_default = str(Path(suite_results_dir) / "_snapshot_cache")
-    snapshot_cache_dir = _remap_deprecated_results_path(
-        str(suite.get("snapshot_cache_dir", snapshot_cache_default))
-    )
-
-    normalized_suite = {
-        "results_dir": suite_results_dir,
-        "seed": int(suite.get("seed", 42)),
-        "source_data_root": str(suite.get("source_data_root", "data/processed/hci-tagging")),
-        "snapshot_cache_dir": snapshot_cache_dir,
-        "base_configs": {
-            "binary": str(base_configs["binary"]),
-            "multiclass": str(base_configs["multiclass"]),
-            "regression": str(base_configs["regression"]),
-        },
-    }
-
-    global_overrides = deepcopy(raw.get("global_overrides", {}))
-    if global_overrides is None:
-        global_overrides = {}
-    if not isinstance(global_overrides, dict):
-        raise WrapperConfigError("'global_overrides' must be a dictionary if provided.")
-
-    cv_cfg = global_overrides.setdefault("cross_validation", {})
-    if not isinstance(cv_cfg, dict):
-        raise WrapperConfigError("global_overrides.cross_validation must be a dictionary.")
-    cv_cfg.setdefault("strategies", ["subject_kfold"])
-    cv_cfg.setdefault("n_splits", 5)
-
     raw_experiments = raw.get("experiments")
     if raw_experiments is None:
         raise WrapperConfigError("Missing required 'experiments' section.")
@@ -200,6 +161,51 @@ def load_and_normalize_wrapper_config(config_path: str) -> Dict[str, Any]:
             )
     else:
         raise WrapperConfigError("'experiments' must be a dictionary or list.")
+
+    required_base_configs = sorted(
+        {
+            str(experiment_cfg["task_type"])
+            for experiment_cfg in normalized_experiments
+            if experiment_cfg.get("enabled", True)
+        }
+    )
+    missing_base = [key for key in required_base_configs if key not in base_configs]
+    if missing_base:
+        raise WrapperConfigError(
+            f"Missing suite.base_configs entries for enabled task types: {missing_base}"
+        )
+
+    suite_results_dir = _remap_deprecated_results_path(
+        str(suite.get("results_dir", "results/suite"))
+    )
+    snapshot_cache_default = str(Path(suite_results_dir) / "_snapshot_cache")
+    snapshot_cache_dir = _remap_deprecated_results_path(
+        str(suite.get("snapshot_cache_dir", snapshot_cache_default))
+    )
+
+    normalized_suite = {
+        "results_dir": suite_results_dir,
+        "seed": int(suite.get("seed", 42)),
+        "source_data_root": str(suite.get("source_data_root", "data/processed/hci-tagging")),
+        "snapshot_cache_dir": snapshot_cache_dir,
+        "base_configs": {
+            key: str(value)
+            for key, value in base_configs.items()
+            if key in _VALID_TASK_TYPES
+        },
+    }
+
+    global_overrides = deepcopy(raw.get("global_overrides", {}))
+    if global_overrides is None:
+        global_overrides = {}
+    if not isinstance(global_overrides, dict):
+        raise WrapperConfigError("'global_overrides' must be a dictionary if provided.")
+
+    cv_cfg = global_overrides.setdefault("cross_validation", {})
+    if not isinstance(cv_cfg, dict):
+        raise WrapperConfigError("global_overrides.cross_validation must be a dictionary.")
+    cv_cfg.setdefault("strategies", ["subject_kfold"])
+    cv_cfg.setdefault("n_splits", 5)
 
     return {
         "suite": normalized_suite,

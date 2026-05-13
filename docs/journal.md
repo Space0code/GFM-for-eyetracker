@@ -582,7 +582,7 @@ For run `results/suite/RETAIN_2026-03-05_13-04-55/suite_classification_gnn_compa
 - GNN is competitive but not consistently best: in several tasks, LightGBM/MLP slightly beats it on balanced accuracy.
 
 ### GNN ablation suite (on top of HCI suite)
-We then ran focused one-factor-at-a-time GNN ablations in `src/emotions/gnn_improvement_experiments/` (fixed small subset, only binary valence/arousal, 3-fold recording split), summarized in `results/gnn_improvement_experiments/gnn_improvement_summary.md`.
+We then ran focused one-factor-at-a-time GNN ablations in `src/emotions/gnn_improvement_experiments/` (fixed small subset, only binary valence/arousal, 3-fold recording split). The high-signal conclusions are retained here and in `docs/experiment_log.md` so the repo does not depend on ignored result artifacts.
 
 Key findings:
 - Baseline (`baseline_default`): valence `0.5139`, arousal `0.5223` (balanced accuracy).

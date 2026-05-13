@@ -14,5 +14,5 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["emotions*", "data*", "gnext*"]
+include = ["emotions*", "data*"]
 namespaces = true

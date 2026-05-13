@@ -19,7 +19,8 @@ Graph Foundation Model (GFM) research codebase for eye-tracking signals, focused
 - Primary dataset now: **MAHNOB-HCI-TAGGING (emotion-elicitation scope)**.
 - Historical dataset: **eSEEd_v2** (important for understanding what failed and why).
 - Main benchmark run to reference: `results/suite/RETAIN_2026-03-05_13-04-55` (complete suite run).
-- Key recent ablation finding (valence/arousal ablation subset): depth/early stopping had the largest deltas; `kt/ks`, edge weights, and target aggregation were small in that tested setup.
+- Current Table-6 GNN v2 defaults: `GCNConv`, `relation_pooling: mlp`, attention graph/head pooling, `num_layers: 3`, and validation-loss early stopping.
+- Current cleanest target for the diploma story: low/high Table-6 valence, supported by stronger model scores and lower label-noise mismatch than arousal.
 
 ---
 
@@ -38,17 +39,18 @@ Core blocks:
 |---|---|
 | Input node features | 4 features per node: `x-avg`, `y-avg`, `pupil-size-left-avg`, `pupil-size-right-avg` |
 | Optional preprocess MLP | `Linear -> GELU -> LayerNorm -> Dropout -> Linear -> LayerNorm` |
-| Message passing (N layers) | Heterogeneous conv over two edge types: temporal + spatial (`GCNConv` or `GATConv`) |
+| Message passing (N layers) | Heterogeneous conv over spatial plus temporal-forward/backward relations (`GCNConv` or `GATConv`) |
+| Relation fusion | V2 can fuse relation-specific node representations with concat+MLP (`relation_pooling: mlp`) |
 | Residual + normalization | Residual connection each layer + `LayerNorm` + dropout |
-| Graph pooling | `mean` or `mean_max` pooling |
+| Graph pooling | `mean`, `mean_max`, or attention pooling |
 | Head MLP | Graph-level prediction head |
 
 ### 1.2 Graph construction idea
 
 - Node = one time sample in a window.
-- Temporal edges connect nearby timesteps (radius `kt`).
+- Temporal edges connect nearby timesteps (radius `kt`); v2 splits them into forward and backward relations.
 - Spatial edges connect `ks` nearest neighbors in `(x, y)` gaze space.
-- Optional edge weight on both edge types: `w = exp(-|Δt|/tau)`.
+- Optional edge weights can be handcrafted or learned signed weights from relation features such as `[t_i, t_j, delta_t, delta_x, delta_y, distance]`.
 
 ### 1.3 Training logic
 
@@ -66,6 +68,7 @@ Cross-validation options (shared splitter system):
 - `subject_loo`
 - `recording_loo`
 - `combined_loo`
+- `subject_kfold`
 - `recording_kfold`
 
 Model selection:
@@ -176,18 +179,17 @@ Primary narrative source: `docs/journal.md` + `results/*`.
 | HCI suite | Full binary/multiclass/regression suite | Binary competitive on some tasks; multiclass and regression weak |
 | GNN ablations | Focused one-factor-at-a-time variants | Depth/early stopping most impactful in tested regime |
 
-### 4.2 What changed performance (from ablation summary)
+### 4.2 What changed performance
 
-Source: `results/gnn_improvement_experiments/gnn_improvement_summary.md`
+Sources: `docs/experiment_log.md`, `docs/journal.md`, and `diploma_knowledge_base.md`.
 
 | Finding | Signal |
 |---|---|
-| `num_layers=10` improved valence best | +4.35 pp balanced accuracy vs baseline variant |
-| Early stopping improved arousal best | +2.01 pp on arousal but reduced valence |
-| `kt/ks` changes | Small effect in tested setup |
-| Edge weights on/off | Near no-change in tested setup |
-| `target_aggregation` mean vs last | Near no-change in tested setup |
-| Too deep can hurt | e.g., 5 layers degraded strongly on valence |
+| Low/high Table-6 valence is the cleanest current target | 7-fold subject-kfold balanced accuracy reached `GNN_v2=0.6646`, ahead of local baselines |
+| Label-noise proxy favors low/high valence | Table-6/self-report mismatch was `3.3%` for low/high valence, much lower than arousal variants |
+| V2 depth sweep favors 3 layers | Focused 3-class valence checks favored `num_layers: 3` over 1, 5, and 10 layers |
+| Weighted GCN is the current default | Learned weighted `GCNConv` slightly beat unweighted GCN/GAT in the focused v2 architecture check |
+| Early stopping remains important | Long fixed-epoch runs overfit; train loss can decrease while validation loss worsens |
 
 ### 4.3 Main benchmark suite snapshot (complete run)
 
@@ -288,12 +290,6 @@ Loss by task:
 ### Binary confusion matrices example
 
 ![Binary confusion matrices (valence experiment)](results/suite/RETAIN_2026-03-05_13-04-55/binary_emotion_valence_emotion-elicitation_2026-03-05_13-05-10/figures/confusion_matrices.png)
-
-### Ablation heatmap example
-
-![Ablation run balanced-accuracy heatmap](results/gnn_improvement_experiments/2026-03-05_14-46-47/plots/classification_heatmap_balanced_accuracy.png)
-
----
 
 ## Deep-Dive Appendices
 

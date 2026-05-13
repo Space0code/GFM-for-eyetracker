@@ -7,6 +7,10 @@ import pandas as pd
 import yaml
 
 from emotions.suite.run_hci_experiment_suite import run_suite
+from emotions.suite.wrapper_config_schema import (
+    WrapperConfigError,
+    load_and_normalize_wrapper_config,
+)
 
 
 def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
@@ -181,6 +185,63 @@ def _create_scope_csv(path: Path, scope: str) -> None:
             }
         )
     df.to_csv(path, index=False)
+
+
+def test_wrapper_config_requires_only_enabled_task_base_configs(tmp_path: Path) -> None:
+    wrapper_config = {
+        "suite": {
+            "results_dir": str(tmp_path / "suite_results"),
+            "source_data_root": str(tmp_path / "source"),
+            "base_configs": {"multiclass": "multiclass.yaml"},
+        },
+        "experiments": {
+            "table6_valence": {
+                "enabled": True,
+                "task_type": "multiclass",
+                "scope": "emotion-elicitation",
+                "target_column": "emotion-id",
+            },
+            "future_regression": {
+                "enabled": False,
+                "task_type": "regression",
+                "scope": "emotion-elicitation",
+                "target_column": "emotion-valence",
+            },
+        },
+    }
+    wrapper_path = tmp_path / "wrapper.yaml"
+    _write_yaml(wrapper_path, wrapper_config)
+
+    normalized = load_and_normalize_wrapper_config(str(wrapper_path))
+
+    assert normalized["suite"]["base_configs"] == {"multiclass": "multiclass.yaml"}
+
+
+def test_wrapper_config_rejects_missing_enabled_task_base_config(tmp_path: Path) -> None:
+    wrapper_config = {
+        "suite": {
+            "results_dir": str(tmp_path / "suite_results"),
+            "source_data_root": str(tmp_path / "source"),
+            "base_configs": {"multiclass": "multiclass.yaml"},
+        },
+        "experiments": {
+            "regression_valence": {
+                "enabled": True,
+                "task_type": "regression",
+                "scope": "emotion-elicitation",
+                "target_column": "emotion-valence",
+            },
+        },
+    }
+    wrapper_path = tmp_path / "wrapper.yaml"
+    _write_yaml(wrapper_path, wrapper_config)
+
+    try:
+        load_and_normalize_wrapper_config(str(wrapper_path))
+    except WrapperConfigError as exc:
+        assert "regression" in str(exc)
+    else:
+        raise AssertionError("Expected missing regression base config to fail.")
 
 
 def test_suite_smoke_runs_selected_experiments(monkeypatch, tmp_path: Path) -> None:
