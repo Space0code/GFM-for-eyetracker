@@ -63,11 +63,11 @@
 |---------------|---------|--------|----------|----------|-----------|
 | subject_loo   | 12.2358 | 2.9737 | 3.1599   | -0.5041  | 0.3185    |
 | recording_loo | 13.5568 | 3.1660 | 3.2017   | -1.0884  | 0.0446    |
-| combined_loo  | 13.5180 | 3.1524 | 2.5973   | -3.5471  | 0.0040    | 
+| combined_loo  | 13.5180 | 3.1524 | 2.5973   | -3.5471  | 0.0040    |
 
-#### Parameter search 
+#### Parameter search
 
-29.12.2025 
+29.12.2025
 
 Doing parameter search over 50 random samples for the following params:
 - window_length: [5, 10, 30, 60]  # Random choice from list
@@ -181,7 +181,7 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
 
 #### Spatio Temporal Hetero GCN
 - subject LOO
-    - predictions correctly bounded to 0-10 
+    - predictions correctly bounded to 0-10
     - not normally distributed, but quite a "smooth" distribution
     - peak aruond 3-4 for all but tenderness
 - recording LOO
@@ -207,9 +207,9 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
     - sadness and disgust seem quite random
 - average emotion per recording
     - recordings 4 and 5 are completely missmatched (reported vs intended emotion)
-    - recordings 8, 7, 6 are somewhat matched with intended 
+    - recordings 8, 7, 6 are somewhat matched with intended
 - scatter plots of x vs y colored by emotion
-    - don't indicate any obvious position-related bias 
+    - don't indicate any obvious position-related bias
 - average emotion intensity by pupil size bins
     - sadness average emotion is the same for all bins
     - disgust average intensity drops with large or small pupil size
@@ -230,7 +230,7 @@ For all models except Gaussian NB, the models regress the intensity (float). Gau
 - recording outliers
     - 2, 5 - tenderness high, other low - intended for 2, not for 5
 
-Idea: remove data with "bad" emotion reports. -- What is bad? 
+Idea: remove data with "bad" emotion reports. -- What is bad?
 
 ## Which metrics to use and why?
 - MAE for absolute errors
@@ -312,7 +312,7 @@ The data is labelled with intensities (0-10) for 4 distinct emotions. We contemp
 Simplify the problem as much as possible. Advance to the next step only when the current step works!
 
 0. Drop all NaNs, maybe interpolate the short sections. Combine GNN and baseline training to run both always (because baseline is fairly inexpensive and we are currently changing inputs a lot). Pick only the best few baselines: Mean, SVM, LightGBM. Check big pupil size differences!
-1. Simplify to one emotion only (e.g., anger), drop other emotions. 
+1. Simplify to one emotion only (e.g., anger), drop other emotions.
 2. Binary classification: 0 vs. >0 (for only one emotion).
 3. "something" on labels 1-10. Figure out that "something". Is it regression, ordinal regression, classification, ...?
 4. Two-stage model:
@@ -366,7 +366,7 @@ Remaining subjects: 1, 2, 4, 9, 10, 11, 12, 14, 18, 19, 20, 21, 22, 23, 25, 26, 
 The results show the problem is still difficult. Majority baseline is rarely beaten. GNN has a serious issue - it collapses to always predicting 1 in all experiments (all emotions, both LOOs).
 
 ## GNN collapse
-Debugging embedding collapse. 
+Debugging embedding collapse.
 #### Embedding Statistics (Batch 2/10, size=176)
 
 | Stage | var_mean | cos_mean | L2_mean | within_var | Status |
@@ -403,13 +403,13 @@ Downstream, pooled graph embeddings (`pool_g2`) retain some variance, but the he
 
 Overall, the results point to two interacting problems: (i) **early collapse** (either in the preprocess MLP when enabled, or in conv1 when preprocessing is disabled), and (ii) a **low-variance head regime** that yields near-constant outputs. This motivates focusing mitigation on the first collapsing step (feature normalization and/or residualized/normed preprocessing; reduced mixing strength/attention/weighted edges for conv1), rather than tuning later layers.
 
-### What we tried 
-What we tried in order. Each next step includes all previous steps unless stated otherwise. All were tried with and without preprocess mlp. 
+### What we tried
+What we tried in order. Each next step includes all previous steps unless stated otherwise. All were tried with and without preprocess mlp.
 1. z-score normalization of all 5 features (time, x, y, pupil-l, pupil-r)
     - the normalization was done per subject on all data (not on train and test separately) in order to do quick testing
 2. drop time from nodes => we have only 4 features in nodes (and no edge weights)
 3. add dt as edge weights (both edge types)
-    - w = exp(-dt / tau) 
+    - w = exp(-dt / tau)
     - tau = 0.05 (meaning w0 = 1, w1 = 0.82, w2 = 0.67, ...)
     - note: internal self loops in pyg take care of w0 = 1 (always)
 4. added LayerNorm to preprocess MLP
@@ -425,21 +425,21 @@ We assessed embeddings with `debug_embedding_collapse.py` - we log var_mean, std
 
 Results (embedding behavior) didn't change much until ... (still waiting)
 
-## Transitioning to MAHNOB-HCI-TAGGING DATABASE 
+## Transitioning to MAHNOB-HCI-TAGGING DATABASE
 ### Papers using it
 More references for this dataset than for eSEEd_v2 - more hope :)
-- A Multimodal Database for Affect Recognition and Implicit Tagging 
-    - Mohammad Soleymani; Jeroen Lichtenauer; Thierry Pun; Maja Pantic 
-    - https://ibug.doc.ic.ac.uk/media/uploads/documents/taffcsi-2010-11-0112-2.pdf 
-- Emotion recognition using eye gaze based on shallow CNN with identity mapping 
-    - Shan Jin; Chunmei Qing; Xiangmin Xu; Yang Wang 
-    - https://link.springer.com/chapter/10.1007/978-3-030-39431-8_7 
-- Implicit Affective Video Tagging Using Pupillary Response 
-    - Dongdong Gui; Sheng-hua Zhong; Ming Zhong 
-    - https://link.springer.com/chapter/10.1007/978-3-319-73600-6_15 
-- Multimodal insights into granger causality connectivity: Integrating physiological signals and gated eye-tracking data for emotion recognition using convolutional neural network 
-    - Javid Farhadi Sedehi; Nader Jafarnia Dabanloo; Keivan Maghooli; Ali Sheikhani 
-    - https://www.cell.com/heliyon/fulltext/S2405-8440%2824%2912442-5 
+- A Multimodal Database for Affect Recognition and Implicit Tagging
+    - Mohammad Soleymani; Jeroen Lichtenauer; Thierry Pun; Maja Pantic
+    - https://ibug.doc.ic.ac.uk/media/uploads/documents/taffcsi-2010-11-0112-2.pdf
+- Emotion recognition using eye gaze based on shallow CNN with identity mapping
+    - Shan Jin; Chunmei Qing; Xiangmin Xu; Yang Wang
+    - https://link.springer.com/chapter/10.1007/978-3-030-39431-8_7
+- Implicit Affective Video Tagging Using Pupillary Response
+    - Dongdong Gui; Sheng-hua Zhong; Ming Zhong
+    - https://link.springer.com/chapter/10.1007/978-3-319-73600-6_15
+- Multimodal insights into granger causality connectivity: Integrating physiological signals and gated eye-tracking data for emotion recognition using convolutional neural network
+    - Javid Farhadi Sedehi; Nader Jafarnia Dabanloo; Keivan Maghooli; Ali Sheikhani
+    - https://www.cell.com/heliyon/fulltext/S2405-8440%2824%2912442-5
 
 ### EDA
 - Ran quick EDA on `data/processed/hci-tagging/emotion-elicitation` (`942` sections, `24` subjects, `3,797,165` rows).
@@ -449,7 +449,7 @@ More references for this dataset than for eSEEd_v2 - more hope :)
 - Pupil left/right consistency is strong (`corr=0.902`), with moderate subject-specific asymmetry outliers (largest mean abs diff: `P28=0.590`).
 - Overall, this HCI emotion data looks much cleaner and more usable than eSEEd_v2 (better label availability and fewer severe preprocessing/pathology issues).
 
-### Dataset paper 
+### Dataset paper
 Link: https://ibug.doc.ic.ac.uk/media/uploads/documents/taffcsi-2010-11-0112-2.pdf
 
 #### Basic info
@@ -559,7 +559,7 @@ All the models perform similarly well, all beating the majority classifier, mean
 | MLP      | 0.592    | 0.550     | 0.562  | 0.514 | 0.425 | recording_loo  |
 | GNN      | 0.598    | 0.552     | 0.582  | 0.530 | 0.430 | recording_loo  |
 
-#### Comparison of binary classifications 
+#### Comparison of binary classifications
 We compared the aforementioned binary classifications: high vs low valence/arousal/predictability/control.
 We experimented with a subset of data - only participants [P1, P8, P5, P4, P28, P2, P27].
 We conducted only recording LOO.
@@ -592,7 +592,7 @@ Key findings:
 - Depth is sensitive: 3-10 layers helped valence in some runs; 5 layers (and especially 50 for valence) could degrade performance noticeably.
 
 ### Review of work so far and definition of the next steps
-Review of the important stuff - PPT presentation for the AMI meeting on 2. 4. 2026: https://docs.google.com/presentation/d/1dEbUNYaNxrRl0MMtLY5JA7oWOS8n1YYwa70WHSkh_TA/edit?slide=id.p#slide=id.p 
+Review of the important stuff - PPT presentation for the AMI meeting on 2. 4. 2026: https://docs.google.com/presentation/d/1dEbUNYaNxrRl0MMtLY5JA7oWOS8n1YYwa70WHSkh_TA/edit?slide=id.p#slide=id.p
 
 #### Next steps
 - [ ] prepare subject and recording k-fold for fast iterations (use subject 5-fold by default)
@@ -654,14 +654,14 @@ RoPE could maybe be useful since it encodes position and we can define position 
 
 #### Potentially useful papers:
 - **RoFormer**
-    - https://arxiv.org/pdf/2104.09864 
-    - the RoPE paper 
+    - https://arxiv.org/pdf/2104.09864
+    - the RoPE paper
 - **Benchmarking Graph Neural Networks**
-    - https://jmlr.org/papers/volume24/22-0567/22-0567.pdf 
+    - https://jmlr.org/papers/volume24/22-0567/22-0567.pdf
     - has nice, concise explanations and visualisations in the appendix for different message passing mechanisms (GCN, GraphSage, GAT, ...)
     - for molecules, GatedGCN seems to work best and is not among most expensive to run
 - **Recipe for a General, Powerful, Scalable Graph Transformer**
-    - https://arxiv.org/pdf/2205.12454 
+    - https://arxiv.org/pdf/2205.12454
     - explains local, global, and relative PE and SE
     - I assume we want to focus on global SEs
 - **Rotary Position Encodings for Graphs**
@@ -728,3 +728,65 @@ Note: Citation counts are snapshots and may differ by index/database.
 - Archived items include old code, configs, results, conversion/EDA artifacts, legacy visualisation scripts, and related historical analysis files.
 - We intentionally kept active HCI-tagging training/suite pipeline files in their original locations to avoid breaking current work.
 - After moving, we updated key references/defaults so the current HCI workflow still points to active configs and entrypoints.
+
+## May 2026: GNN v2 upgrades and Table-6 experiment set
+
+Around 2026-05-12 we ran a new focused experiment set on MAHNOB-HCI Table-6 targets. The immediate goal was to turn the previous architecture ideas into a modular `GNN_v2`, compare it against the frozen `GNN_v1` and tabular baselines, and identify which upgrades are worth keeping for the diploma experiments.
+
+### Architecture updates
+
+The main architectural changes were:
+
+- temporal edges are now split into forward and backward relations, alongside spatial edges;
+- spatial, temporal-forward, and temporal-backward node representations can be fused at node level with concat + MLP relation pooling;
+- graph-level mean pooling was replaced by attention pooling; I did not use MLP graph pooling for now because the number of nodes $N$ varies between graph windows;
+- learned edge weights were updated to relation-feature MLPs:
+  - spatial weights use features such as $[t_i, t_j, \Delta t, \Delta x, \Delta y, d_{ij}]$;
+  - temporal weights additionally encode direction, so the temporal MLP sees a signed direction feature as well;
+  - temporal forward and backward relations share the temporal edge-weight MLP.
+
+The current (updated by experimental testing) Table-6 configs now use `GCNConv`, `relation_pooling: mlp`, attention graph/head pooling, `num_layers: 3`, and `early_stopping_patience: 20`. For experiments we used `num_layers: 10` and `early_stopping_patience: 7`, unless specified otherwise.
+
+### Subject-kfold Table-6 experiments
+
+The experiments below use subject k-fold evaluation. The main metric reported here is balanced accuracy unless noted otherwise.
+
+1. **Do the models learn at all?**
+   Yes, the GNNs learn some signal and outperform MLP, LightGBM, and simple baselines on the 3-class Table-6 setup. However, training curves are not cleanly convergent: validation loss is noisy and often does not decrease in the expected way, even when train loss keeps improving. Based on the train/validation loss plots, I would not describe the current training dynamics as fully stable convergence.
+
+2. **GNN v2 depth sweep on 3-class valence.**
+   Tested depths: 1, 3, 5, and 10 message-passing layers. Ranking from best to worst was `3 > 5 > 1 > 10` in the user-facing summary; the saved matrix gives very close values for 1 and 5 layers, with 3 layers clearly best. In the focused valence matrix, 3 layers reached balanced accuracy `0.5285`, while 10 layers reached `0.5120`, about `+1.65 pp` better for 3 layers in balanced accuracy. In plain accuracy, the gap between 3 and 10 layers was about `+3.0 pp`.
+
+3. **GNN v2 architecture/edge-weight comparison.**
+   Compared weighted GCN, unweighted GCN, and unweighted GAT. Weighted GCN was best but only modestly: balanced accuracy `0.5107` vs `0.4960` for unweighted GCN and `0.4967` for unweighted GAT. This suggests the new edge weights help, but the effect is currently small rather than decisive.
+
+4. **Training length without early stopping.**
+   Tested fixed runs of 1, 5, 10, 30, 50, and 200 epochs without early stopping. Ranking by balanced accuracy was `50 > 10 > 200 > 5 > 30 > 1` in the saved matrix, and the pattern looks unstable rather than monotonic. Extra-long training did not provide a clear benefit; 200 epochs was not convincingly better. We should keep validation-loss early stopping for the main experiments.
+
+5. **Low-vs-high binary classification from Table-6 labels.**
+   We dropped the middle class and kept only low/high classes, for both arousal and valence. On arousal, models barely beat or effectively learn the majority pattern because the original low/high split is strongly imbalanced: standard accuracy is around the majority level, while balanced accuracy stays near chance. On valence, models learn clearer patterns:
+
+   | Target | Best models / balanced accuracy |
+   |---|---|
+   | Low-vs-high arousal | `GNN_v1=0.5211`, `MLP=0.5144`, `LightGBM=0.5046`, `GNN_v2=0.5000` |
+   | Low-vs-high valence | `GNN_v1=0.6507`, `GNN_v2=0.6234`, `LightGBM=0.6052`, `MLP=0.5890` |
+
+   This suggests valence is currently the easier and more promising target. Arousal is likely hurt strongly by class imbalance.
+
+6. **Balanced low-vs-high arousal follow-up.**
+   We downsampled the low-arousal majority class to match the high-arousal class before CV. Counts changed from `{0: 2360, 2: 928}` to `{0: 928, 2: 928}` windows, i.e. about 1856 graphs total. Results improved slightly, but remained weak:
+
+   | Model | Balanced accuracy |
+   |---|---:|
+   | GNN_v1 | 0.5472 |
+   | MLP | 0.5424 |
+   | GNN_v2 | 0.5348 |
+   | LightGBM | 0.5278 |
+
+   This may simply be too little data for a more complex GNN v2, and it reinforces that arousal is currently harder than valence in this setup.
+
+### Diploma direction
+
+At the beginning of May 2026 I started writing the diploma in Overleaf, including motivation, related work, and theory sections. The practical diploma goal is now narrower and realistic: complete a core experiment set on MAHNOB-HCI, improve the GNN enough that it beats the local classical baselines, and try to improve over the eye-gaze results reported in the MAHNOB dataset paper. More sophisticated work, such as multiple datasets, broader model families, and a larger GFM-style study, should be kept for a post-diploma paper.
+
+There is a mentor meeting on 2026-05-13 to decide the next concrete steps.

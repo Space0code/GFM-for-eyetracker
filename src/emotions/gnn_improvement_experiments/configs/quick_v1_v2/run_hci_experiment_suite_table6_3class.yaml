@@ -37,7 +37,7 @@ global_overrides:
       #   conv_type: GATConv
       # GATConv ignores scalar edge weights in the model code, while GCNConv
       # consumes them when dataset.use_edge_weights is true.
-      conv_type: GATConv
+      conv_type: GCNConv
       model_version: v2
       head_pooling: attention
       graph_pooling: attention
@@ -46,10 +46,10 @@ global_overrides:
       # V2 uses graph_pooling/head_pooling above, so this does not disable
       # attention graph pooling for GNN_v2.
       pooling: mean_max
-      num_layers: 10
+      num_layers: 3
     training:
       early_stopping_enabled: true
-      early_stopping_patience: 7
+      early_stopping_patience: 20
       early_stopping_min_delta: 0.0
       early_stopping_restore_best: true
   dataset:

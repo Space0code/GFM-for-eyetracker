@@ -31,10 +31,10 @@ global_overrides:
       graph_pooling: attention
       relation_pooling: mlp
       pooling: attention
-      num_layers: 10
+      num_layers: 3
     training:
       early_stopping_enabled: true
-      early_stopping_patience: 7
+      early_stopping_patience: 20
       early_stopping_min_delta: 0.0
       early_stopping_restore_best: true
   dataset:

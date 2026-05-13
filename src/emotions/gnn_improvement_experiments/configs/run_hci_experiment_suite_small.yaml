@@ -33,7 +33,7 @@ global_overrides:
       relation_pooling: mlp
       pooling: attention
       num_layers: 2
-      conv_type: GATConv
+      conv_type: GCNConv
     training:
       num_epochs: 30
       num_workers: 8
