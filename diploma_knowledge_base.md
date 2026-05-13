@@ -4,6 +4,12 @@
 **Purpose:** compressed project source for future ChatGPT conversations and diploma writing.  
 **Scope:** combines uploaded `.md` notes, attachment-image content converted to text, and the available `journal.md` context. Later notes are weighted more strongly than early brainstorming.
 
+Canonical source for thesis-facing synthesis: framing, architecture rationale,
+literature notes, and writing structure. Keep current working state in
+`MEMORY.md`, detailed MAHNOB-HCI inventory in `MAHNOB_dataset_report.md`, and
+detailed experiment/config history in `docs/experiment_log.md`. Non-central
+reference notes moved out of this file live in `docs/diploma_reference_archive.md`.
+
 ---
 
 ## 0. Current thesis focus
@@ -349,36 +355,28 @@ Emotion experiment facts:
 
 ### Project EDA on MAHNOB-HCI
 
-Preliminary processed data:
+Use `MAHNOB_dataset_report.md` as the canonical source for exact local counts,
+pipeline stages, subject exclusions, and unresolved dataset uncertainties.
 
-- 942 sections,
-- 24 subjects,
-- 3,797,165 rows,
-- 3,214,000 labeled rows,
-- 583,165 unlabeled baseline/neutral rows.
+Most important thesis-facing facts from the 2026-05-11 local audit:
 
-Verified on the current local copy in `data/` on 2026-05-11:
-
-- raw `Sessions/` contains 3,193 session folders across 4 experiment types:
-  - 943 emotion elicitation,
-  - 750 video tagging,
-  - 750 image tagging 1,
-  - 750 image tagging 2;
-- local raw copy contains 25 unique subjects overall, but emotion elicitation contains 24 subjects;
-- one raw emotion session (`session_id=1984`, subject `16`) is incomplete (`mediaFile` missing) and does not appear in the converted CSVs, so converted emotion data contains 942 session IDs;
-- in the converted emotion cache:
-  - 470 labeled `ok` stimulus sessions,
-  - 472 unlabeled `not-reported` baseline sessions;
-- `recording` means video file / clip name such as `111.avi`, while `session-id` means one trial in the raw MAHNOB session structure;
-- the current training pipeline groups by `(subject, recording)`, so repeated unlabeled baseline sessions for the same subject and clip collapse to 96 repeated subject-recording pairs, while labeled emotion trials remain 470 unique `(subject, recording)` groups;
-- row counts through the current local pipeline:
-  - raw-one-format emotion CSVs: 3,814,946 rows,
-  - processed emotion cache after confidence trimming/interpolation prep: 3,797,165 rows,
-  - labeled `ok` rows: 3,214,000,
-  - training-ready rows after dropping missing core gaze/pupil signals: 3,018,447;
-- with 10-second non-overlapping windows and `min_samples_per_window = 3`, the base emotion pipeline yields 5,551 usable windows; the current suite config with additional q01-q99 signal outlier filtering yields 5,530 usable windows.
-- The local paper copy states that `P9`, `P12`, and `P15` were excluded from paper analysis. It explicitly says `P9` and `P15` were incomplete due to technical problems and `P12` was missing physiological responses. Because the original full dataset package is no longer accessible and the local copy is ET-focused/reduced, the current repo now conservatively excludes `P9`, `P12`, and `P15` by default in HCI configs via `dataset.exclude_subjects`.
-- Under this new default exclusion, current HCI emotion training uses 22 subjects, 436 labeled `(subject, recording)` groups, 2,814,005 training-ready rows before suite outlier filtering, and 2,639,048 rows after the suite q01-q99 signal filter, yielding 5,158 usable 10-second windows.
+- the repository contains a reduced local eye-tracking-focused copy, not a fully
+  verifiable copy of the original full multimodal release;
+- raw `Sessions/` contains 3,193 session folders across four experiment types,
+  including 943 emotion-elicitation sessions;
+- emotion elicitation contains 24 local subjects and 942 converted emotion
+  session IDs; one raw emotion session (`session_id=1984`, subject `16`) has
+  incomplete metadata and does not survive conversion;
+- `recording` means video file / clip name, while `session-id` means one raw
+  MAHNOB trial folder; the current training pipeline groups by
+  `(subject, recording)`;
+- the local paper copy says `P9`, `P12`, and `P15` were excluded from paper
+  analysis. Because the original full package is unavailable and the local copy
+  is reduced, the repository now conservatively excludes `P9`, `P12`, and `P15`
+  by default via `dataset.exclude_subjects`;
+- under this default, current emotion training uses 22 subjects, 436 labeled
+  `(subject, recording)` groups, 20 emotional recordings, 2,639,048 suite-default
+  rows after q01-q99 signal filtering, and 5,158 usable 10-second windows.
 
 Label coverage:
 
@@ -1371,163 +1369,20 @@ Not needed for first diploma implementation unless graph size becomes prohibitiv
 
 ## 10. Converted attachment images
 
-This section records content that was previously stored only in attachment images.
+Detailed content converted from old attachment images was moved to
+`docs/diploma_reference_archive.md` to keep this knowledge base focused.
 
-### 10.1 Variational graph representation equation
+The archived material includes:
 
-\[
-p(\mathbf{h}_v \mid \mathcal{G}) =
-\int
-p(\mathbf{h}_v \mid \mathbf{z}_v, \mathcal{G})
-\cdot
-p(\mathbf{z}_v \mid \mathcal{G})
-\, d\mathbf{z}_v
-\]
+- a variational graph representation equation;
+- a CLIP-style graph-language alignment loss;
+- a graph notation table;
+- the standard attention formula;
+- a time-series graph methods comparison table;
+- a graph foundation model timeline.
 
-Interpretation:
-
-- node representation \(\mathbf{h}_v\) is marginalized over latent variable \(\mathbf{z}_v\);
-- relevant to probabilistic graph representation learning;
-- likely not central to the diploma unless uncertainty/probabilistic embeddings are used.
-
-### 10.2 CLIP-style graph-language alignment loss
-
-\[
-\mathcal{L}_{clip}
-=
--
-\sum_{(v_i,v_j)\in\mathcal{P}}
-\log
-\frac{
-\exp(
-\operatorname{sim}(
-\mathbf{h}^{GNN}_{v_i},
-\mathbf{h}^{LLM}_{v_j}
-)/\tau)
-}{
-\sum_{w\in\mathcal{V}}
-\exp(
-\operatorname{sim}(
-\mathbf{h}^{GNN}_{v_i},
-\mathbf{h}^{LLM}_{w}
-)/\tau)
-}
-\]
-
-Interpretation:
-
-- aligns GNN node embeddings with LLM/text embeddings;
-- relevant to graph-language foundation models;
-- not needed for current diploma;
-- keep for future GFM paper.
-
-### 10.3 Graph notation table
-
-| Symbol | Description |
-|---|---|
-| \(\mathcal{G}\) | graph |
-| \(\mathcal{V}, \mathcal{E}\) | node and edge sets |
-| \(N, M\) | number of nodes and edges |
-| \(v_i \in \mathcal{V}\) | node in graph |
-| \(e_{ij} \in \mathcal{E}\) | edge in graph |
-| \(\mathbf{X} \in \mathbb{R}^{N \times D}\) | node attribute matrix |
-| \(\mathbf{x}_i \in \mathbb{R}^{D}\) | feature vector for node \(v_i\) |
-| \(\mathbf{E} \in \mathbb{R}^{M \times D}\) | edge attribute matrix |
-| \(\mathbf{e}_{ij} \in \mathbb{R}^{D}\) | feature vector for edge \(e_{ij}\) |
-| \(\mathbf{A} \in \{0,1\}^{N \times N}\) | adjacency matrix |
-| \(\mathbf{D}\) | textual information on graphs |
-| \(\mathbf{d}_{v_i}\) | text description associated with node \(v_i\) |
-| \(\mathbf{d}_{e_{ij}}\) | text description associated with edge \(e_{ij}\) |
-| \(\mathbf{d}_{\mathcal{G}}\) | textual description associated with the whole graph |
-| \(\mathbf{Z} \in \mathbb{R}^{N \times D'}\) | learned node representations |
-| \(\mathbf{z}_i \in \mathbb{R}^{D'}\) | learned representation of node \(v_i\) |
-| \(\mathcal{N}_v\) | neighborhood of node \(v\) |
-| \(\mathcal{T}\) | set of augmentation functions |
-| \(\mathbf{W}, \Theta, w, \theta\) | learnable parameters |
-| \(t \sim \mathcal{T}\) | augmentation sampled from \(\mathcal{T}\) |
-| \(|\cdot|\) | set cardinality |
-| \(\Vert\) | concatenation |
-| \(\operatorname{GNN}(\cdot)\) | graph neural network encoder |
-| \(\operatorname{LLM}(\cdot)\) | large language model encoder |
-
-### 10.4 Attention formula
-
-\[
-\operatorname{Attention}(Q,K,V)
-=
-\operatorname{softmax}
-\left(
-\frac{QK^T}{\sqrt{d_k}}
-\right)V
-\]
-
-Use in background section only if graph transformers are discussed.
-
-### 10.5 Time-series graph methods table
-
-Converted summary from image.
-
-| Approach | Year | Venue | Task | Conversion | Spatial module | Temporal module | Missing values | Input graph | Learned relations | Graph heuristics |
-|---|---:|---|---|---|---|---|---|---|---|---|
-| MTPool | 2021 | NN | M | - | Spatial GNN | T-C | No | NR | S | - |
-| Time2Graph+ | 2021 | IEEE TKDE | U | Series-as-Graph | Spatial GNN | - | No | R | - | PS |
-| RainDrop | 2022 | ICLR | M | - | Spatial GNN | T-A | Yes | NR | S | - |
-| SimTSC | 2022 | SDM | U+M | Series-as-Node | Spatial GNN | T-C | No | R | - | PS |
-| LB-SimTSC | 2023 | arXiv | U+M | Series-as-Node | Spatial GNN | T-C | No | R | - | PS |
-| TodyNet | 2023 | arXiv | M | - | Spatial GNN | T-C | No | NR | D | - |
-| EC-GCN | 2023 | Comput. Netw. | U | Series-as-Graph | Spatial GNN | T-C | No | R | D | PS |
-| MTS2Graph | 2024 | Pattern Recognit. | M | Series-as-Graph | Spatial GNN | T-C | No | NR | - | - |
-
-Legend inferred from table:
-- `U`: univariate,
-- `M`: multivariate,
-- `T-C`: temporal convolution,
-- `T-A`: temporal attention,
-- `R`: required graph,
-- `NR`: graph not required or not explicitly required,
-- `S`: static learned relations,
-- `D`: dynamic learned relations,
-- `PS`: predefined/heuristic graph structure.
-
-Use as background for graph-based time-series classification. Verify exact paper names before formal citation.
-
-### 10.6 Graph foundation model timeline
-
-Converted description:
-
-Graph-learning development can be summarized as increasing task-solving capacity:
-
-1. **Pre-2010s: statistical methods**
-   - spectral methods,
-   - graph kernels,
-   - feature engineering,
-   - heuristic-driven,
-   - assist with specific graph tasks.
-
-2. **Around 2010: graph embeddings**
-   - DeepWalk,
-   - matrix factorization,
-   - shallow graph embeddings,
-   - n-grams on random walks,
-   - solve structure-aware tasks.
-
-3. **Around 2016: graph neural networks**
-   - GCN,
-   - GAT,
-   - graph transformer,
-   - message passing,
-   - end-to-end training,
-   - solve semantic-aware graph tasks.
-
-4. **Around 2023: graph foundation models**
-   - OFA,
-   - GFT,
-   - UniGraph,
-   - pretrain + adaptation,
-   - cross-domain and cross-task generalization,
-   - goal: solve various graph tasks more universally.
-
-Use as conceptual background only. Do not include the image unless needed for presentation.
+For thesis writing, use those notes only as background scaffolding. Prefer citing
+the original papers rather than the archived screenshot-derived material.
 
 ---
 
@@ -1642,46 +1497,22 @@ These are valuable for future work and a later article, but the diploma needs a 
 
 ## 13. Immediate action list
 
-Most important next steps:
+Current next steps:
 
-1. finalize the exact MAHNOB-HCI classification target;
-2. fix train/test-safe preprocessing;
-3. run quick Table-6 arousal comparison for `GNN_v1`, `GNN_v2`, and `LightGBM`;
-4. inspect whether v2 learns better than v1/LightGBM before starting ablations;
-5. compute graph/model scale statistics;
-6. start writing chapters 1–4 immediately;
-7. treat GFM as future work, not as the diploma’s central claim.
+1. center the next core experiment story on the cleanest target: low/high Table-6
+   valence;
+2. use current v2 defaults: `GCNConv`, `relation_pooling: mlp`, attention
+   graph/head pooling, `num_layers: 3`, and validation-loss early stopping;
+3. compare against strong local baselines and report training stability, not only
+   final scores;
+4. compute graph/model scale statistics for the methods chapter;
+5. keep writing chapters 1-4 while experiments continue;
+6. treat GFM as future work, not as the diploma's central claim.
 
-### 13.1 Experiment runner notes
+Detailed runner/config history and exact run paths are maintained in
+`docs/experiment_log.md`.
 
-- 2026-05-07: A quick Table-6 arousal run failed during `loss.backward()` with a PyTorch Inductor `torch.compile` backward-graph assertion on dynamic PyG graph batches. This is treated as a compiler/runtime issue, not evidence of an invalid model objective. The quick v1/v2 runner disables `use_torch_compile` by default and logs each command to `quick_v1_v2_comparison.log` inside the timestamped results folder.
-- 2026-05-07: Completed a LOSO Table-6 arousal comparison with command:
-  `python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py --models GNN_v1,GNN_v2,LightGBM,random,majority --num-epochs 30 --cv-strategy subject_loo`.
-  Results folder: `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
-  Aggregated standard metrics:
-  - `GNN_v2`: accuracy `0.5562`, balanced accuracy `0.4740`, macro-F1 `0.4462`, weighted-F1 `0.5233`, AUC `0.7113`;
-  - `GNN_v1`: accuracy `0.5416`, balanced accuracy `0.4603`, macro-F1 `0.4297`, weighted-F1 `0.5038`, AUC `0.6950`;
-  - `LightGBM`: accuracy `0.4707`, balanced accuracy `0.3854`, macro-F1 `0.3505`, weighted-F1 `0.4288`, AUC `0.6041`;
-  - `Majority`: accuracy `0.4771`, balanced accuracy `0.3333`, macro-F1 `0.2139`, weighted-F1 `0.3125`, AUC `0.5000`;
-  - `Random`: accuracy `0.3031`, balanced accuracy `0.3068`, macro-F1 `0.2895`, weighted-F1 `0.3201`, AUC `0.4812`.
-  The command-level ranking plot and combined confusion matrices include `Random` and `Majority`.
-- 2026-05-11: The quick v1/v2 comparison runner supports multiple comma-separated CV strategies in one run, e.g. `--cv-strategy subject_loo,recording_loo` or `--cv-strategy subject_kfold,recording_kfold --n-splits 3`. The resulting summary includes `cv_strategy`, the model-ranking plot compares models separately per strategy, and multi-strategy confusion matrices are written per strategy as `figures/confusion_matrices_<strategy>.png`.
-- 2026-05-11: The quick v1/v2 comparison runner also writes class-balance diagnostics for completed runs: per-fold and aggregate CSV tables under `tables/`, plus aggregate count/proportion figures under `plots/`.
-- 2026-05-12: Consolidated quick v1/v2 runner configs into one location: `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`. The runner default `--base-config` now points to `run_hci_experiment_suite_table6_3class.yaml` in that folder, with local quick trainer base configs (`quick_v1_v2_train_binary_hci_tagging.yaml`, `quick_v1_v2_train_multiclass_hci_tagging.yaml`, `quick_v1_v2_train_regression_hci_tagging.yaml`) to avoid cross-folder config ambiguity.
-- 2026-05-12: Simplified quick v1/v2 comparison configuration. Shared architecture settings now live in the quick wrapper YAML, and the Python runner only applies variant-identity overrides. For fair GNN_v1/GNN_v2 convolution comparisons, change `global_overrides.gnn.model.conv_type` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml` to either `GCNConv` or `GATConv`. `GATConv` ignores scalar edge weights in the model code.
-- 2026-05-12: Active quick v1/v2 Table-6 comparison wrapper was temporarily set to `GATConv` for a focused architecture check. After the valence matrix, the active Table-6 configs were returned to `GCNConv`.
-- 2026-05-12: Quick v1/v2 comparison now records training-progress artifacts for multiclass runs. GNN folds save `gnn_training_history.csv`; MLP folds save sklearn `loss_curve_` as `mlp_training_history.csv` when available. The quick runner aggregates these into `tables/training_history.csv` and plots loss curves, validation balanced accuracy/macro-F1 curves, and best-epoch distributions under `plots/`.
-- 2026-05-12: Quick v1/v2 Table-6 task selection is now controlled by `quick_comparison.table6_tasks` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`. Valid values include `[arousal]`, `[valence]`, and `[arousal, valence]`. Table-6 arousal class 1 display name now uses the MAHNOB paper wording `Medium aroused`.
-- 2026-05-12: Fixed held-out test loss visibility for multiclass quick comparisons. Multiclass summaries now include `loss`, quick comparison outputs can save `plots/test_loss_by_model.png`, and the training-history/test-loss plot path has tests.
-- 2026-05-12: Focused Table-6 valence subject-kfold experiment matrix completed with conservative runtime settings (`num_workers=0`, no persistent workers, no torch compile, LightGBM `n_jobs=4`). Results directory: `results/table6_valence_v2_checks/2026-05-12_16-09-19`. All 16 variants succeeded; summary table: `matrix_summary.csv`; aggregated training curves: `plots/training_progress_loss.png`, `plots/training_progress_validation_metrics.png`, `plots/best_epoch_distribution.png`, and `plots/test_loss_by_model.png`.
-- 2026-05-12: Table-6 valence findings from the focused matrix: convergence comparison standard balanced accuracy was `GNN_v1=0.5237`, current 10-layer weighted-GCN `GNN_v2=0.4983`, `LightGBM=0.4358`, and `MLP=0.4175`. GNN v2 depth sweep favored `3` layers (`0.5285`) over `1` (`0.5180`), `5` (`0.5175`), and `10` (`0.5120`). Architecture sweep favored weighted `GCNConv` (`0.5107`) over unweighted `GATConv` (`0.4967`) and unweighted `GCNConv` (`0.4960`). Fixed-epoch no-early-stopping sweep favored `50` epochs (`0.5320`), followed by `10` (`0.5233`), `200` (`0.5203`), `5` (`0.5071`), `30` (`0.4986`), and `1` (`0.4943`).
-- 2026-05-12: Convergence interpretation from the valence matrix: GNN training losses generally decrease, but long no-early-stopping runs overfit. Mean validation loss at final epoch rose to about `2.05` for 30 epochs, `2.24` for 50 epochs, and `6.05` for 200 epochs, while mean best epochs were early (`4.0`, `14.7`, and `9.3` respectively). Use validation-loss early stopping for long GNN v2 runs and prioritize shallower v2 depths (especially 3 layers) for the next iteration.
-- 2026-05-12: Low-vs-high only Table-6 subject-kfold comparison completed by dropping the medium class from the Table-6 mappings. Config: `results/quick_v1_v2_comparison/generated_low_high_configs/table6_low_high_arousal_valence_subject_kfold.yaml`; results: `results/quick_v1_v2_comparison/2026-05-12_18-14-03`. The run confirmed raw labels `{0,2}` only in the model label mapping. Standard balanced accuracy: arousal `GNN_v1=0.5211`, `MLP=0.5144`, `LightGBM=0.5046`, `GNN_v2=0.5000`; valence `GNN_v1=0.6507`, `GNN_v2=0.6234`, `LightGBM=0.6052`, `MLP=0.5890`. Test-loss plot, training-history plots, label-distribution plots, and confusion-matrix figures were saved in the result directory.
-- 2026-05-13: Arousal low-vs-high subject-kfold rerun with low arousal randomly downsampled to match the total high-arousal window count completed. Implemented optional Table-6 multiclass pre-CV class downsampling in the trainer so GNN and tabular baselines can use balanced mapped-label populations. Config: `results/quick_v1_v2_comparison/generated_low_high_configs/table6_low_high_arousal_downsample_low_subject_kfold.yaml`; results: `results/quick_v1_v2_comparison/2026-05-13_08-48-31`. Class mapping raw `{0,2}` -> encoded `{0,1}`; counts before downsampling `{0: 2360, 2: 928}`, after `{0: 928, 2: 928}`. Standard balanced accuracy: `GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`.
-- 2026-05-13: Regenerated the focused valence v2 matrix plots in `results/quick_v1_v2_comparison/2026-05-12_16-09-19_table6_valence_v2_checks/plots` from saved factual inputs (`matrix_summary.csv` and `tables/training_history.csv`). Training-progress legends were moved to separate images, crowded x-ticks were rotated, old versions were backed up under `plots/previous_unreadable_versions/`, and the redundant `matrix_summary_partial.csv` was deleted after confirming it matched the final summary. `matrix_summary.csv` now places metric columns near the front for readability.
-- 2026-05-13: The Table-6 GNN v2 defaults were updated after the focused valence matrix: `GCNConv`, `relation_pooling: mlp`, attention graph/head pooling, `num_layers: 3`, and `early_stopping_patience: 20` in both the quick v1/v2 wrapper config and the main suite Table-6 config.
-
-### 13.2 May 2026 experiment interpretation for diploma
+### 13.1 May 2026 experiment interpretation for diploma
 
 The 2026-05-12/13 experiment set supports the following current thesis narrative:
 
@@ -1690,7 +1521,8 @@ The 2026-05-12/13 experiment set supports the following current thesis narrative
 - On focused 3-class Table-6 valence subject-kfold checks, 3-layer GNN v2 is the best v2 depth tested (`balanced_accuracy=0.5285`), ahead of 1, 5, and 10 layers. This justifies making 3 layers the current default.
 - Weighted `GCNConv` slightly outperforms unweighted `GCNConv` and unweighted `GATConv` in the v2 architecture check (`0.5107` vs about `0.496`). The learned edge weights appear useful but not yet a large breakthrough.
 - Fixed no-early-stopping epoch sweeps are not monotonic (`50 > 10 > 200 > 5 > 30 > 1` by balanced accuracy in the valence matrix). Very long training does not clearly solve the task and can overfit.
-- Low-vs-high Table-6 valence is currently the clearest learnable target: `GNN_v1=0.6507`, `GNN_v2=0.6234`, `LightGBM=0.6052`, `MLP=0.5890` balanced accuracy. Low-vs-high arousal is much weaker and seems dominated by class imbalance.
+- Low-vs-high Table-6 valence is currently the clearest learnable target: the 7-fold subject-kfold run reached balanced accuracy `GNN_v2=0.6646`, `GNN_v1=0.6473`, `LightGBM=0.6104`, and `MLP=0.6003`.
+- Label-noise proxy analysis strongly supports this target choice: mismatch between emotion-id-derived labels and self-report rating buckets is only `3.3%` for low/high valence, versus `27.5%` for 3-class valence, `29.7%` for low/high arousal, and `48.6%` for 3-class arousal.
 - Downsampling low arousal to match high arousal produces a balanced low-vs-high arousal set of 928 + 928 windows. Results improve only modestly (`GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`), suggesting either limited signal, too little data after balancing, or both.
 
 For diploma writing, the immediate framing should be conservative: the thesis should present a careful MAHNOB-HCI GNN study with strong local baselines, document which architectural choices help, and avoid claiming a full general eye-tracking foundation model. Broader multi-dataset comparisons and larger model families should be positioned as post-diploma paper work.

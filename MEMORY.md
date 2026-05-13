@@ -1,65 +1,91 @@
 # Project Memory
 
-This file is the persistent working memory for Codex sessions in this repository. Read it at the beginning of every conversation before making assumptions about recent work, plans, or decisions. Update it whenever a conversation changes project direction, locks in a decision, discovers important experimental context, or creates a follow-up plan.
+This file is the persistent working memory for Codex sessions in this repository.
+Read it at the beginning of every conversation before making assumptions about
+recent work, plans, or decisions.
+
+## Source Map
+
+- `AGENTS.md`: stable repo instructions for assistants.
+- `MEMORY.md`: current state, locked decisions, recent high-signal context, and next actions.
+- `MAHNOB_dataset_report.md`: canonical local MAHNOB-HCI dataset inventory, exclusions, counts, and uncertainty notes.
+- `diploma_knowledge_base.md`: thesis-facing synthesis, architecture rationale, literature notes, and writing structure.
+- `docs/experiment_log.md`: detailed experiment/config/run history that should not clutter memory or the thesis knowledge base.
+- `docs/diploma_reference_archive.md`: non-central reference notes moved out of the main thesis knowledge base.
+- `docs/journal.md`: human-readable progress reports and experiment interpretation.
 
 ## How To Use This File
+
 - Keep entries concise and factual.
-- Prefer dated bullets with enough context to understand why the note matters.
-- Move outdated notes to `Archived Notes` instead of deleting useful history.
+- Store only current or high-signal context here; move detailed run history to `docs/experiment_log.md`.
 - Do not store secrets, credentials, private tokens, or sensitive subject-level data.
-- When updating this file, preserve existing notes unless they are clearly obsolete.
+- Update this file when a conversation changes project direction, locks in a decision, records important experimental context, or creates a follow-up plan.
 
 ## Current Focus
-- Build a general graph foundation model (GFM) for eye-tracking data that can infer physiological and psychological states.
-- Develop the model step by step, compare against classical ML baselines, and keep experiments reproducible.
-- Current diploma framing is narrower than the long-term GFM goal: develop and evaluate a spatio-temporal GNN for emotion/affective-state recognition from MAHNOB-HCI-TAGGING.
+
+- Long-term goal: build a general graph foundation model (GFM) for eye-tracking data.
+- Diploma scope: develop and evaluate a spatio-temporal GNN for emotion/affective-state recognition from MAHNOB-HCI-TAGGING.
+- Current practical aim: make the GNN strong and interpretable enough to beat local baselines and ideally approach or improve on the MAHNOB eye-gaze paper result.
+- Diploma writing has started in Overleaf, covering motivation, related work, and theory. Broader multi-dataset/GFM-style experiments are deferred to post-diploma work.
 
 ## Locked Decisions
+
 - Use the `gfm` conda environment for Python work.
 - Ignore files under `archive/`.
-- Treat `diploma_knowledge_base.md` as the live project knowledge base as of 2026-05-02; keep it updated when project direction, architecture decisions, experiment context, or writing plans change. The older `diploma_knowledge_base_02_05_2026.md` was renamed to `diploma_knowledge_base.md` in git.
-- Keep scripts configurable with sensible defaults and log final arguments at startup.
-- Normalize confusion-matrix rows to per-class percentages and use a fixed color scale from 0.0 to 1.0.
-- Use the `Blues` color scheme for heatmaps.
+- Treat `diploma_knowledge_base.md` as the live thesis/project knowledge base as of 2026-05-02.
+- Treat `MAHNOB_dataset_report.md` as the canonical source for local MAHNOB-HCI counts and subject-exclusion rationale.
+- Keep scripts configurable with sensible defaults; terminal scripts should run as `python <script_name>.py` where feasible and log final arguments at startup.
+- Normalize confusion-matrix rows to per-class percentages, use fixed color scale `[0.0, 1.0]`, and use the `Blues` color scheme for heatmaps.
+- For questions about recent experiments, trainings, models, or data, check the latest git commits and explicitly state the assumption that the user likely means the most recently modified experiment context.
 
-## Recent Notes
-- 2026-05-04: Created this memory file and added repo instructions to read it at the start of each conversation and update it when important project context changes.
-- 2026-05-05: User wants next model work to prioritize incremental, modular upgrades: MLP pooling/fusion of spatial and temporal node representations, MLP pooling of nodes into graph embeddings, separate temporal forward/backward/spatial edge types, and learned edge weights from `[t_i, t_j, x_i, x_j, y_i, y_j]` using an MLP with layers `6 -> 6 -> 4 -> 2 -> 1`.
-- 2026-05-05: Updated edge-weight plan for fastest path to a stronger working model: use relation features such as `[t_i, t_j, delta_t, delta_x, delta_y, distance]`; normalize edge weights per target node; use separate weight MLPs for spatial vs temporal edges; use the same temporal weight MLP for forward/backward edges with direction encoded.
-- 2026-05-05: Locked edge-weight details: allow signed weights, but normalize signed incoming weights per target node by signed score magnitude; use spatial MLP `6 -> 6 -> 4 -> 2 -> 1`; use temporal MLP `7 -> 6 -> 4 -> 2 -> 1` by adding a direction feature.
-- 2026-05-05: Implemented GNN v2 architecture in four commits: frozen `SpatioTemporalHeteroGNNV1`, v2 split temporal forward/backward graph schema, relation concat+MLP fusion, attention graph pooling, and learned signed normalized edge weights. Added quick Table-6 arousal comparison runner at `src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py`.
-- 2026-05-07: Quick v1/v2 comparison now includes `Random` and `Majority` multiclass baselines by default. Comparison plots use the fixed display order `Random`, `Majority`, `GNN_v1`, `GNN_v2`, `MLP`, then remaining trained models alphabetically.
-- 2026-05-07: Quick v1/v2 comparison is YAML-first: subjects, recordings, CV settings, graph settings, cache settings, and epochs should be controlled in the suite YAML by default. CLI flags only apply optional explicit overrides.
-- 2026-05-07: Quick v1/v2 comparison groups all requested baseline models into one suite/trainer invocation so baselines share one dataset load and one CV split construction. GNN v1 and GNN v2 remain separate invocations because their architecture configs differ.
-- 2026-05-07: Debugged quick v1/v2 comparison failure from PyTorch Inductor during `torch.compile` backward graph compilation on dynamic PyG batches. The quick runner now disables `use_torch_compile` by default, offers `--use-torch-compile` for explicit re-enable, and mirrors stdout/stderr to `quick_v1_v2_comparison.log` in each timestamped results folder.
-- 2026-05-07: Completed LOSO Table-6 arousal quick comparison with `--models GNN_v1,GNN_v2,LightGBM,random,majority --num-epochs 30 --cv-strategy subject_loo`. Results folder: `results/quick_v1_v2_comparison/2026-05-07_14-54-32`. Aggregated balanced accuracy: `GNN_v2=0.4740`, `GNN_v1=0.4603`, `LightGBM=0.3854`, `Majority=0.3333`, `Random=0.3068`.
-- 2026-05-11: Quick v1/v2 comparison now accepts multiple comma-separated CV strategies in one command, for example `--cv-strategy subject_loo,recording_loo` or `--cv-strategy subject_kfold,recording_kfold --n-splits 3`. The summary CSV stores one row per `(cv_strategy, model)`, ranking plots show one panel per strategy, and multi-strategy confusion matrices are saved as `figures/confusion_matrices_<strategy>.png`.
-- 2026-05-11: Quick v1/v2 comparison now saves label-distribution/class-balance outputs for completed runs: `tables/label_distribution_by_fold.csv`, `tables/label_distribution_aggregate.csv`, `plots/label_distribution_counts.png`, and `plots/label_distribution_proportions.png`.
-- 2026-05-11: Added explicit `dataset.exclude_subjects` support across snapshot building, graph loading, tabular sample building, and cache keys. Default HCI configs now conservatively exclude `P9`, `P12`, and `P15` to align with the MAHNOB paper's excluded participants under current uncertainty about the reduced local ET-only copy. Added root report `MAHNOB_dataset_report.md` with verified local counts and open uncertainties.
-- 2026-05-11: `dataset.min_samples_per_window` now controls both baseline window filtering and GNN graph-window filtering. Previously GNN still hardcoded the minimum to `max(kt, ks) + 1`; current HCI/Table-6 suite defaults were raised to `60`.
-- 2026-05-12: Added explicit dual pooling controls for GNN v2. `graph_pooling` now controls node-to-graph pooling (`mean`/`mean_max`/`attention`), and new `relation_pooling` controls per-layer spatial/temporal relation fusion (`attention` or `mlp`). Defaults are now attention for both in v2, while `pooling` is kept as a backward-compatible alias for graph pooling.
-- 2026-05-12: Updated pooling defaults per user preference for active v2 work: graph/head pooling defaults to attention, and relation pooling defaults to concat+MLP (`relation_pooling: mlp`). Added optional `head_pooling` config alias that maps to graph-level pooling for clearer intent, and wired these defaults into quick v1/v2 comparison overrides and base suite configs.
-- 2026-05-12: Consolidated quick-comparison config ownership under `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`. `run_quick_v1_v2_comparison.py` now defaults to `.../quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`; that wrapper and `run_hci_experiment_suite_small.yaml` both point to local quick trainer configs (`quick_v1_v2_train_binary|multiclass|regression_hci_tagging.yaml`). Archived unused legacy config `src/emotions/multiclass/configs/train_multiclass_hci_tagging_emotion_id_legacy.yaml` to `archive/src/emotions/multiclass/configs/`.
-- 2026-05-12: Simplified quick v1/v2 comparison config ownership: Python variant overrides now only select variant identity (`model_version`, `graph_version`, edge-weight mode, and baseline/GNN enable flags). Shared architecture knobs, especially `gnn.model.conv_type`, live in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`. Default v1/v2 comparison uses the same convolution; switch both between `GCNConv` and `GATConv` by changing that wrapper YAML. `GATConv` ignores scalar edge weights in both v1 and v2 model code.
-- 2026-05-12: Prepared the active quick v1/v2 Table-6 comparison wrapper for a GAT run by setting `global_overrides.gnn.model.conv_type: GATConv` in `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`.
-- 2026-05-12: Quick v1/v2 comparison training-progress tracking added for multiclass runs. GNN folds now save `gnn_training_history.csv` with train/validation loss, validation balanced accuracy/macro-F1, epoch runtime, best epoch, and best validation loss. MLP baseline folds save `mlp_training_history.csv` from sklearn `loss_curve_` when available. The quick runner aggregates histories to `tables/training_history.csv` and writes loss, validation-metric, and best-epoch plots under `plots/`.
-- 2026-05-12: Quick v1/v2 Table-6 comparison now selects arousal/valence tasks from wrapper YAML via `quick_comparison.table6_tasks` (`[arousal]`, `[valence]`, or `[arousal, valence]`). Updated Table-6 arousal class name from `Medium arousal` to the MAHNOB paper wording `Medium aroused`.
-- 2026-05-12: Fixed multiclass held-out test loss reporting/plotting for quick comparisons: `loss` is now appended to multiclass summary metrics, quick summaries can save `plots/test_loss_by_model.png`, and training-history/test-loss plotting is covered by tests. Also fixed quick Table-6 task parsing for normalized experiment IDs.
-- 2026-05-12: Ran focused Table-6 valence subject-kfold checks with conservative loading (`num_workers=0`, `persistent_workers=false`, `pin_memory=false`, LightGBM `n_jobs=4`) using `src/emotions/gnn_improvement_experiments/run_table6_valence_v2_checks.py`. Results: `results/table6_valence_v2_checks/2026-05-12_16-09-19`; all 16 variants succeeded and plots/tables were written.
-- 2026-05-12: Mirrored the full focused valence v2 check artifacts into the quick-comparison results tree for consistency: `results/quick_v1_v2_comparison/2026-05-12_16-09-19_table6_valence_v2_checks`. The original remains at `results/table6_valence_v2_checks/2026-05-12_16-09-19`.
-- 2026-05-12: Key valence subject-kfold findings from `results/table6_valence_v2_checks/2026-05-12_16-09-19`: convergence comparison balanced accuracy `GNN_v1=0.5237`, current `GNN_v2=0.4983`, `LightGBM=0.4358`, `MLP=0.4175`; GNN v2 depth sweep favored 3 layers (`0.5285`) over 1 (`0.5180`), 5 (`0.5175`), and 10 (`0.5120`); architecture sweep favored weighted GCN (`0.5107`) over GAT unweighted (`0.4967`) and GCN unweighted (`0.4960`); fixed-epoch no-early-stopping sweep favored 50 epochs (`0.5320`) over 10 (`0.5233`), 200 (`0.5203`), 5 (`0.5071`), 30 (`0.4986`), and 1 (`0.4943`). Training histories show train loss keeps decreasing for long runs while validation loss worsens strongly by 30/50/200 epochs, indicating overfitting and that early stopping is useful.
-- 2026-05-12: Ran low-vs-high only Table-6 arousal and valence subject-kfold comparison, dropping the medium class by omitting raw labels mapped to class `1`. Config: `results/quick_v1_v2_comparison/generated_low_high_configs/table6_low_high_arousal_valence_subject_kfold.yaml`; results: `results/quick_v1_v2_comparison/2026-05-12_18-14-03`. Label mapping was confirmed as raw `{0,2}` -> encoded `{0,1}`. Standard balanced accuracy: arousal `GNN_v1=0.5211`, `MLP=0.5144`, `LightGBM=0.5046`, `GNN_v2=0.5000`; valence `GNN_v1=0.6507`, `GNN_v2=0.6234`, `LightGBM=0.6052`, `MLP=0.5890`. Test-loss and training-history plots were produced.
-- 2026-05-13: Added optional Table-6 multiclass pre-CV class downsampling and ran arousal low-vs-high with low arousal downsampled to the total high-arousal window count. Config: `results/quick_v1_v2_comparison/generated_low_high_configs/table6_low_high_arousal_downsample_low_subject_kfold.yaml`; results: `results/quick_v1_v2_comparison/2026-05-13_08-48-31`. Mapping raw `{0,2}` -> encoded `{0,1}`; counts before `{0: 2360, 2: 928}`, after `{0: 928, 2: 928}`. Standard balanced accuracy: `GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`.
-- 2026-05-13: Regenerated the valence v2 matrix plots in `results/quick_v1_v2_comparison/2026-05-12_16-09-19_table6_valence_v2_checks/plots` from factual saved CSV inputs (`matrix_summary.csv` and `tables/training_history.csv`). Training-progress legends were moved to separate legend images; x-ticks were rotated for best-epoch/test-loss plots; previous versions were backed up under `plots/previous_unreadable_versions/`. `matrix_summary_partial.csv` was identical to `matrix_summary.csv` and was removed. `matrix_summary.csv` columns were reordered so performance metrics appear early after experiment/model identifiers.
-- 2026-05-13: Updated Table-6 GNN v2 default config after valence depth results: set `num_layers: 3` and `early_stopping_patience: 20` in both `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml` and `src/emotions/suite/configs/run_hci_experiment_suite_table6_3class.yaml`. Current GNN training code saves `best_model.pt` whenever validation loss improves and loads that checkpoint before test evaluation.
-- 2026-05-13: Updated `docs/journal.md` with a concise English report for the 2026-05-12/13 Table-6 experiment set. Main conclusions: current GNNs learn some signal but validation-loss convergence remains noisy; 3-layer v2 is preferred over deeper v2 variants; learned weighted GCN slightly beats unweighted GCN/GAT; long fixed training without early stopping is unstable; low-vs-high valence is much more learnable than arousal; downsampled arousal improves only modestly.
-- 2026-05-13: Diploma writing started in early May in Overleaf, currently covering motivation, related work, and theory. Diploma scope is now the core MAHNOB-HCI experiment set and a GNN strong enough to beat local baselines and ideally improve on the MAHNOB eye-gaze paper result; broader multi-dataset/GFM-style experiments are deferred to post-diploma paper work. Mentor meeting on 2026-05-13 should define next concrete steps.
+## Current Data Assumptions
+
+- MAHNOB-HCI-TAGGING is the main diploma dataset.
+- The repository uses a reduced local eye-tracking-focused copy, not a fully verifiable copy of the original full multimodal release.
+- Default HCI configs conservatively exclude `P9`, `P12`, and `P15` via `dataset.exclude_subjects`; in the current local emotion ET copy, `P15` is already absent, so the effective exclusions are `P9` and `P12`.
+- Current default training footprint after exclusion and suite filtering is documented in `MAHNOB_dataset_report.md`: 22 subjects, 436 labeled `(subject, recording)` groups, 20 emotional recordings, 2,639,048 suite-default rows, and 5,158 usable 10-second windows.
+- `dataset.min_samples_per_window` controls both baseline and GNN graph-window filtering; current HCI/Table-6 suite defaults use `60`.
+
+## Current Model Direction
+
+- Active GNN v2 work is incremental and modular:
+  - separate `temporal_forward`, `temporal_backward`, and `spatial` edge types;
+  - relation-specific node representations;
+  - relation fusion with concat+MLP (`relation_pooling: mlp`);
+  - graph/head pooling with attention by default;
+  - learned signed edge weights normalized per target node.
+- Preferred edge-weight features: `[t_i, t_j, delta_t, delta_x, delta_y, distance]`, with a direction feature for temporal edges.
+- Spatial edge-weight MLP: `6 -> 6 -> 4 -> 2 -> 1`.
+- Temporal edge-weight MLP: `7 -> 6 -> 4 -> 2 -> 1`; forward/backward temporal edges share this MLP.
+- Current Table-6 GNN v2 defaults after valence depth checks: `num_layers: 3`, `early_stopping_patience: 20`, validation-loss checkpointing via `best_model.pt`.
+
+## Recent High-Signal Results
+
+- 2026-05-07 LOSO Table-6 arousal quick comparison (`results/quick_v1_v2_comparison/2026-05-07_14-54-32`): balanced accuracy `GNN_v2=0.4740`, `GNN_v1=0.4603`, `LightGBM=0.3854`, `Majority=0.3333`, `Random=0.3068`.
+- 2026-05-12 focused Table-6 valence subject-kfold matrix (`results/table6_valence_v2_checks/2026-05-12_16-09-19`): convergence comparison balanced accuracy `GNN_v1=0.5237`, current 10-layer weighted-GCN `GNN_v2=0.4983`, `LightGBM=0.4358`, `MLP=0.4175`.
+- 2026-05-12 valence v2 matrix: depth sweep favored 3 layers (`0.5285`) over 1 (`0.5180`), 5 (`0.5175`), and 10 (`0.5120`); architecture sweep favored weighted GCN (`0.5107`) over unweighted GAT (`0.4967`) and unweighted GCN (`0.4960`).
+- 2026-05-12 valence convergence: long fixed training without early stopping overfits; training loss keeps decreasing while validation loss worsens. Use validation-loss early stopping and prioritize shallower v2 depths.
+- 2026-05-12 low-vs-high Table-6 subject-kfold (`results/quick_v1_v2_comparison/2026-05-12_18-14-03`): arousal balanced accuracy `GNN_v1=0.5211`, `MLP=0.5144`, `LightGBM=0.5046`, `GNN_v2=0.5000`; valence `GNN_v1=0.6507`, `GNN_v2=0.6234`, `LightGBM=0.6052`, `MLP=0.5890`.
+- 2026-05-13 arousal low-vs-high with low-class downsampling (`results/quick_v1_v2_comparison/2026-05-13_08-48-31`): raw `{0,2}` -> encoded `{0,1}`, counts before `{0: 2360, 2: 928}`, after `{0: 928, 2: 928}`, balanced accuracy `GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`.
+- 2026-05-13 low/high Table-6 valence 7-fold subject-kfold (`results/quick_v1_v2_comparison/2026-05-13_09-36-39`): balanced accuracy `GNN_v2=0.6646`, `GNN_v1=0.6473`, `LightGBM=0.6104`, `MLP=0.6003`.
+- 2026-05-13 label-noise proxy analysis (`results/label_noise_analysis/2026-05-13_table6_self_report_alignment`): mismatch between emotion-id-derived Table-6 targets and participant self-report rating buckets was arousal 3-class `48.6%`, arousal low/high `29.7%`, valence 3-class `27.5%`, valence low/high `3.3%`; this supports using low/high valence as the cleanest current target.
+
+## Current Config Context
+
+- Quick v1/v2 configs live under `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`.
+- The quick runner defaults to `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`.
+- Shared architecture settings, especially `gnn.model.conv_type`, live in the wrapper YAML; Python variant overrides should only select variant identity.
+- `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
+- Quick comparison supports multiple comma-separated CV strategies, class-balance diagnostics, multiclass training-history aggregation, task selection through `quick_comparison.table6_tasks`, and held-out test-loss plots.
 
 ## Open Plans
-- Next priority: inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`, then decide whether to tune v2 or broaden to ablations.
 
-## Experiment Context
-- For questions about recent experiments, trainings, models, or data, check the latest git commit(s) and explicitly state the assumption that the user likely means the most recently modified experiment context.
+- Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
+- Inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
+- Decide whether the next step is tuning v2 further, running clean ablations, or aligning the experiment story with diploma writing needs after the 2026-05-13 mentor meeting.
+- Keep detailed future run notes in `docs/experiment_log.md`; keep thesis-facing conclusions in `diploma_knowledge_base.md`.
 
 ## Archived Notes
-- None yet.
+
+- Detailed May 2026 quick-runner and Table-6 experiment history was moved to `docs/experiment_log.md` on 2026-05-13 to keep this memory file short.
+- Documentation source-of-truth cleanup on 2026-05-13 shortened `AGENTS.md`, `MEMORY.md`, and `diploma_knowledge_base.md` while preserving detailed run history in `docs/experiment_log.md`.
