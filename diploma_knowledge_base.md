@@ -1503,11 +1503,13 @@ Current next steps:
    valence;
 2. use current v2 defaults: `GCNConv`, `relation_pooling: mlp`, attention
    graph/head pooling, `num_layers: 3`, and validation-loss early stopping;
-3. compare against strong local baselines and report training stability, not only
+3. verify that preprocessing, normalization, label transforms, and
+   resampling/downsampling are train-fold-safe before final reported runs;
+4. compare against strong local baselines and report training stability, not only
    final scores;
-4. compute graph/model scale statistics for the methods chapter;
-5. keep writing chapters 1-4 while experiments continue;
-6. treat GFM as future work, not as the diploma's central claim.
+5. compute graph/model scale statistics for the methods chapter;
+6. keep writing chapters 1-4 while experiments continue;
+7. treat GFM as future work, not as the diploma's central claim.
 
 Detailed runner/config history and exact run paths are maintained in
 `docs/experiment_log.md`.

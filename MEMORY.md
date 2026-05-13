@@ -81,6 +81,7 @@ recent work, plans, or decisions.
 ## Open Plans
 
 - Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
+- Before final reported runs, verify that preprocessing, normalization, label transforms, and any resampling/downsampling are fitted or decided using train-fold information only where applicable.
 - Inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
 - Decide whether the next step is tuning v2 further, running clean ablations, or aligning the experiment story with diploma writing needs after the 2026-05-13 mentor meeting.
 - Keep detailed future run notes in `docs/experiment_log.md`; keep thesis-facing conclusions in `diploma_knowledge_base.md`.
