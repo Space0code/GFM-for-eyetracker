@@ -184,6 +184,7 @@ def _apply_task_to_trainer_config(
             "table6_class_mapping",
             "drop_unmapped_labels",
             "use_table6_3class_targets",
+            "class_downsampling",
         ]:
             if key in experiment_cfg:
                 trainer_config["multiclass_task"][key] = experiment_cfg[key]

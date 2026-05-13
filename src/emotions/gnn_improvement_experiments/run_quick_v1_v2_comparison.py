@@ -59,9 +59,11 @@ TABLE6_TASK_TO_EXPERIMENT_ID = {
     "arousal": AROUSAL_EXPERIMENT_ID,
     "table6-arousal-3class": AROUSAL_EXPERIMENT_ID,
     AROUSAL_EXPERIMENT_ID: AROUSAL_EXPERIMENT_ID,
+    AROUSAL_EXPERIMENT_ID.replace("_", "-"): AROUSAL_EXPERIMENT_ID,
     "valence": VALENCE_EXPERIMENT_ID,
     "table6-valence-3class": VALENCE_EXPERIMENT_ID,
     VALENCE_EXPERIMENT_ID: VALENCE_EXPERIMENT_ID,
+    VALENCE_EXPERIMENT_ID.replace("_", "-"): VALENCE_EXPERIMENT_ID,
 }
 EXPERIMENT_DISPLAY_NAMES = {
     AROUSAL_EXPERIMENT_ID: "Table-6 Arousal",
@@ -1310,6 +1312,72 @@ def _plot_best_epoch_distribution(history: pd.DataFrame, output_dir: Path) -> Pa
     return output_path
 
 
+def _plot_test_loss_summary(summary: pd.DataFrame, output_dir: Path) -> Path | None:
+    """Save final held-out test-loss comparison from quick-run summaries."""
+    required_columns = {"status", "loss", "experiment_id", "experiment_display_name", "cv_strategy", "model"}
+    if summary.empty or not required_columns.issubset(summary.columns):
+        return None
+
+    plot_df = summary[summary["status"] == "success"].copy()
+    plot_df["loss"] = pd.to_numeric(plot_df["loss"], errors="coerce")
+    plot_df = plot_df.dropna(subset=["loss"])
+    if plot_df.empty:
+        return None
+
+    groups = list(
+        plot_df[["experiment_id", "experiment_display_name", "cv_strategy"]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+    if not groups:
+        return None
+
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / "test_loss_by_model.png"
+
+    fig, axes = plt.subplots(
+        len(groups),
+        1,
+        figsize=(10, max(3.5, 3.0 * len(groups))),
+        squeeze=False,
+    )
+    model_order = _ordered_models(plot_df["model"].astype(str).unique().tolist())
+    for row_idx, (experiment_id, experiment_name, cv_strategy) in enumerate(groups):
+        ax = axes[row_idx, 0]
+        group_df = plot_df[
+            (plot_df["experiment_id"].astype(str) == str(experiment_id))
+            & (plot_df["cv_strategy"].astype(str) == str(cv_strategy))
+        ]
+        sns.barplot(
+            data=group_df,
+            x="model",
+            y="loss",
+            order=model_order,
+            color="#D9EAF7",
+            ax=ax,
+        )
+        sns.stripplot(
+            data=group_df,
+            x="model",
+            y="loss",
+            order=model_order,
+            color="#1F4E79",
+            size=4,
+            jitter=0.1,
+            ax=ax,
+        )
+        ax.set_title(f"{experiment_name} Held-out Test Loss - {cv_strategy}")
+        ax.set_xlabel("model")
+        ax.set_ylabel("test loss")
+        ax.grid(axis="y", alpha=0.2)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
 def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
     """Save command-level training-history table and plots."""
     history = _collect_training_history(rows)
@@ -1565,6 +1633,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     summary_path = output_dir / "quick_comparison_summary.csv"
     summary.to_csv(summary_path, index=False)
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
+    test_loss_path = _plot_test_loss_summary(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
     label_distribution_paths: List[Path] = []
     training_history_paths: List[Path] = []
@@ -1596,6 +1665,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     print(f"Saved quick comparison summary: {summary_path}")
     if ranking_path is not None:
         print(f"Saved ranking plot: {ranking_path}")
+    if test_loss_path is not None:
+        print(f"Saved test loss plot: {test_loss_path}")
     for label_distribution_path in label_distribution_paths:
         print(f"Saved label distribution output: {label_distribution_path}")
     for training_history_path in training_history_paths:

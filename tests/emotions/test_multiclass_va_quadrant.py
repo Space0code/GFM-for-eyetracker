@@ -4,6 +4,7 @@ from emotions.multiclass.train_multiclass import (
     _raw_to_label,
     _resolve_fold_context,
     _resolve_task_definition,
+    _select_class_downsample_indices,
 )
 
 
@@ -65,3 +66,29 @@ def test_table6_label_mapping_maps_unknown_to_negative_one() -> None:
     raw = np.array([[0.0], [1.0], [4.0], [10.0]], dtype=float)
     labels = _raw_to_label(task_def=task_def, raw_values=raw, fold_context={})
     assert labels.tolist() == [0, 2, 1, -1]
+
+
+def test_table6_class_downsampling_matches_target_class_count() -> None:
+    task_def = {
+        "mode": "table6-3class",
+        "table6_class_mapping": {0: 0, 1: 2, 2: 0, 3: 2, 4: 1},
+        "drop_unmapped_labels": True,
+    }
+    raw = np.array([[0.0], [0.0], [2.0], [2.0], [1.0], [3.0], [4.0], [99.0]], dtype=float)
+
+    selected, metadata = _select_class_downsample_indices(
+        raw_targets=raw,
+        task_def=task_def,
+        downsampling_cfg={
+            "enabled": True,
+            "strategy": "match_class_count",
+            "source_class": 0,
+            "target_class": 2,
+            "random_state": 42,
+        },
+    )
+
+    labels = _raw_to_label(task_def=task_def, raw_values=raw[selected], fold_context={})
+    assert np.bincount(labels, minlength=3).tolist() == [2, 1, 2]
+    assert metadata["before_counts"] == {0: 4, 1: 1, 2: 2}
+    assert metadata["after_counts"] == {0: 2, 1: 1, 2: 2}

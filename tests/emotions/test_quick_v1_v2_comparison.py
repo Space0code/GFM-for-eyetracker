@@ -18,6 +18,8 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     _save_combined_confusion_matrices,
     _save_group_model_ranking,
     _save_label_distribution_outputs,
+    _save_training_history_outputs,
+    _plot_test_loss_summary,
 )
 
 
@@ -216,6 +218,96 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
     output_path = _save_group_model_ranking(summary=summary, output_dir=tmp_path)
 
     assert output_path == tmp_path / "plots" / "classification_group_model_ranking.png"
+    assert output_path.exists()
+
+
+def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    fold_dir = trainer_run_dir / "subject_kfold" / "fold_0"
+    fold_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "epoch": 1,
+                "train_loss": 1.1,
+                "val_loss": 1.0,
+                "val_balanced_accuracy": 0.4,
+                "val_macro_f1": 0.35,
+                "best_epoch": 2,
+            },
+            {
+                "epoch": 2,
+                "train_loss": 0.9,
+                "val_loss": 0.8,
+                "val_balanced_accuracy": 0.5,
+                "val_macro_f1": 0.45,
+                "best_epoch": 2,
+            },
+        ]
+    ).to_csv(fold_dir / "gnn_training_history.csv", index=False)
+
+    paths = _save_training_history_outputs(
+        rows=[
+            {
+                "model": "GNN_v2",
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 arousal 3-class",
+                "cv_strategy": "subject_kfold",
+                "status": "success",
+                "suite_run_dir": str(suite_run_dir),
+                "summary_model_name": "GNN",
+            }
+        ],
+        output_dir=tmp_path,
+    )
+
+    expected_paths = {
+        tmp_path / "tables" / "training_history.csv",
+        tmp_path / "plots" / "training_progress_loss.png",
+        tmp_path / "plots" / "training_progress_validation_metrics.png",
+        tmp_path / "plots" / "best_epoch_distribution.png",
+    }
+    assert expected_paths.issubset(set(paths))
+    for path in expected_paths:
+        assert path.exists()
+
+
+def test_test_loss_summary_plot_is_written(tmp_path: Path) -> None:
+    summary = pd.DataFrame(
+        [
+            {
+                "model": "GNN_v2",
+                "status": "success",
+                "loss": 0.83,
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 arousal 3-class",
+                "cv_strategy": "subject_kfold",
+            },
+            {
+                "model": "LightGBM",
+                "status": "success",
+                "loss": np.nan,
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 arousal 3-class",
+                "cv_strategy": "subject_kfold",
+            },
+        ]
+    )
+
+    output_path = _plot_test_loss_summary(summary=summary, output_dir=tmp_path)
+
+    assert output_path == tmp_path / "plots" / "test_loss_by_model.png"
     assert output_path.exists()
 
 

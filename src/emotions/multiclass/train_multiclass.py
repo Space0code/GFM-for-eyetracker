@@ -20,7 +20,7 @@ import time
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 import joblib
 import numpy as np
@@ -373,6 +373,96 @@ def _encode_labels(raw_labels: np.ndarray, class_to_index: Dict[int, int]) -> np
             )
         encoded.append(class_to_index[int(value)])
     return np.asarray(encoded, dtype=int)
+
+
+class _IndexSubset(Sequence[Any]):
+    """Lightweight index view over a dataset without copying samples."""
+
+    def __init__(self, dataset: Sequence[Any], indices: np.ndarray) -> None:
+        self.dataset = dataset
+        self.indices = np.asarray(indices, dtype=int)
+        self.emotion_names = getattr(dataset, "emotion_names", [])
+
+    def __len__(self) -> int:
+        return int(len(self.indices))
+
+    def __getitem__(self, idx: int) -> Any:
+        return self.dataset[int(self.indices[int(idx)])]
+
+
+def _resolve_class_downsampling_cfg(multiclass_task_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Return normalized optional class-downsampling settings."""
+    cfg = multiclass_task_cfg.get("class_downsampling", {})
+    if cfg is None:
+        return {"enabled": False}
+    if not isinstance(cfg, dict):
+        raise ValueError("multiclass_task.class_downsampling must be a dictionary.")
+    return cfg
+
+
+def _select_class_downsample_indices(
+    raw_targets: np.ndarray,
+    task_def: Dict[str, Any],
+    downsampling_cfg: Dict[str, Any],
+) -> tuple[np.ndarray, Dict[str, Any]]:
+    """Select sample indices after optional mapped-class downsampling."""
+    all_indices = np.arange(len(raw_targets), dtype=int)
+    if not bool(downsampling_cfg.get("enabled", False)):
+        return all_indices, {"enabled": False}
+
+    if task_def["mode"] != "table6-3class":
+        raise ValueError("class_downsampling is currently supported only for Table-6 multiclass tasks.")
+
+    strategy = str(downsampling_cfg.get("strategy", "match_class_count"))
+    if strategy != "match_class_count":
+        raise ValueError("Unsupported class_downsampling.strategy. Use 'match_class_count'.")
+
+    source_class = int(downsampling_cfg["source_class"])
+    target_class = int(downsampling_cfg["target_class"])
+    random_state = int(downsampling_cfg.get("random_state", 42))
+
+    mapped_labels = _raw_to_label(task_def=task_def, raw_values=raw_targets, fold_context={})
+    valid_mask = mapped_labels >= 0 if task_def.get("drop_unmapped_labels", False) else np.ones_like(mapped_labels, dtype=bool)
+    valid_indices = all_indices[valid_mask]
+    valid_labels = mapped_labels[valid_mask]
+
+    source_indices = valid_indices[valid_labels == source_class]
+    target_indices = valid_indices[valid_labels == target_class]
+    if len(target_indices) == 0:
+        raise ValueError(f"Cannot downsample class {source_class}: target class {target_class} has zero samples.")
+    if len(source_indices) < len(target_indices):
+        raise ValueError(
+            f"Cannot downsample class {source_class} to class {target_class}: "
+            f"source has {len(source_indices)} samples, target has {len(target_indices)}."
+        )
+
+    rng = np.random.default_rng(random_state)
+    kept_source = np.sort(rng.choice(source_indices, size=len(target_indices), replace=False))
+    other_indices = valid_indices[(valid_labels != source_class)]
+    selected = np.sort(np.concatenate([kept_source, other_indices]).astype(int))
+
+    before_counts = {
+        int(label): int(count)
+        for label, count in zip(*np.unique(valid_labels.astype(int), return_counts=True))
+    }
+    after_labels = mapped_labels[selected]
+    after_counts = {
+        int(label): int(count)
+        for label, count in zip(*np.unique(after_labels.astype(int), return_counts=True))
+        if int(label) >= 0
+    }
+
+    return selected, {
+        "enabled": True,
+        "strategy": strategy,
+        "source_class": source_class,
+        "target_class": target_class,
+        "random_state": random_state,
+        "before_counts": before_counts,
+        "after_counts": after_counts,
+        "selected_samples": int(len(selected)),
+        "dropped_samples": int(len(valid_indices) - len(selected)),
+    }
 
 
 def _build_graph_subset(
@@ -908,7 +998,7 @@ def run_training_from_config(config_path: str) -> str:
     multiclass_task_cfg = config["multiclass_task"]
     cv_cfg = config["cross_validation"]
     logging_cfg = config["logging"]
-    metric_names = config["metrics"]
+    metric_names = list(dict.fromkeys([*config["metrics"], "loss"]))
     verbose = bool(logging_cfg.get("verbose", True))
 
     task_def = _resolve_task_definition(multiclass_task_cfg, dataset_cfg=dataset_cfg)
@@ -994,6 +1084,47 @@ def run_training_from_config(config_path: str) -> str:
             )
             print(f"Loaded {len(base_tabular_samples)} tabular samples")
 
+        downsampling_cfg = _resolve_class_downsampling_cfg(multiclass_task_cfg)
+        downsampling_metadata: Dict[str, Any] = {
+            "enabled": bool(downsampling_cfg.get("enabled", False)),
+            "datasets": {},
+        }
+        if bool(downsampling_cfg.get("enabled", False)):
+            print("\nApplying class downsampling before CV split construction...")
+            if run_experiments["gnn"] and base_gnn_dataset is not None:
+                gnn_all_indices = np.arange(len(base_gnn_dataset))
+                gnn_raw_all = _extract_graph_raw_targets(base_gnn_dataset, gnn_all_indices, target_columns)
+                gnn_keep_idx, gnn_sampling_info = _select_class_downsample_indices(
+                    raw_targets=gnn_raw_all,
+                    task_def=task_def,
+                    downsampling_cfg=downsampling_cfg,
+                )
+                base_gnn_dataset = _IndexSubset(base_gnn_dataset, gnn_keep_idx)
+                downsampling_metadata["datasets"]["gnn"] = gnn_sampling_info
+                print(
+                    "  GNN class counts before/after: "
+                    f"{gnn_sampling_info['before_counts']} -> {gnn_sampling_info['after_counts']}"
+                )
+
+            if run_experiments["baselines"] and base_tabular_samples is not None:
+                baseline_all_indices = np.arange(len(base_tabular_samples))
+                baseline_raw_all = _extract_tabular_raw_targets(
+                    base_tabular_samples,
+                    baseline_all_indices,
+                    target_columns,
+                )
+                baseline_keep_idx, baseline_sampling_info = _select_class_downsample_indices(
+                    raw_targets=baseline_raw_all,
+                    task_def=task_def,
+                    downsampling_cfg=downsampling_cfg,
+                )
+                base_tabular_samples = [base_tabular_samples[int(idx)] for idx in baseline_keep_idx]
+                downsampling_metadata["datasets"]["baselines"] = baseline_sampling_info
+                print(
+                    "  Baseline class counts before/after: "
+                    f"{baseline_sampling_info['before_counts']} -> {baseline_sampling_info['after_counts']}"
+                )
+
         # Build class mapping.
         if run_experiments["gnn"] and base_gnn_dataset is not None:
             all_indices = np.arange(len(base_gnn_dataset))
@@ -1051,6 +1182,7 @@ def run_training_from_config(config_path: str) -> str:
             "raw_label_names": {
                 int(raw): str(name) for raw, name in task_def.get("raw_label_names", {}).items()
             },
+            "class_downsampling": downsampling_metadata,
         }
         with open(os.path.join(run_dir, "class_metadata.yaml"), "w", encoding="utf-8") as handle:
             yaml.safe_dump(class_metadata, handle, sort_keys=True)
