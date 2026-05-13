@@ -88,5 +88,6 @@ recent work, plans, or decisions.
 
 ## Archived Notes
 
+- 2026-05-13: Repo cleanup archived the legacy unified regression workflow (`train.py`, `train_gnn.py`, `param_search.py`) under `archive/src/emotions/legacy_unified_regression/`. Active training entrypoints are now the suite runner, task-specific binary/multiclass/regression trainers, and the quick Table-6 runner.
 - Detailed May 2026 quick-runner and Table-6 experiment history was moved to `docs/experiment_log.md` on 2026-05-13 to keep this memory file short.
 - Documentation source-of-truth cleanup on 2026-05-13 shortened `AGENTS.md`, `MEMORY.md`, and `diploma_knowledge_base.md` while preserving detailed run history in `docs/experiment_log.md`.
