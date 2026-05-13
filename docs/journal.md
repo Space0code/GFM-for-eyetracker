@@ -785,6 +785,11 @@ The experiments below use subject k-fold evaluation. The main metric reported he
 
    This may simply be too little data for a more complex GNN v2, and it reinforces that arousal is currently harder than valence in this setup.
 
+7. **Label-noise proxy analysis.**
+   To check whether Table-6 labels are internally consistent with participant self-reports, I compared the emotion-id-derived Table-6 classes against the continuous self-report rating bucket on the 1-9 scale (`1-3` low, `4-6` medium/neutral, `7-9` high). For binary low/high, exact neutral `5` is treated as ambiguous. The mentor-meeting plots are saved in `docs/figures/hci-tagging/mentors meeting 2026-05-13/label_noise_analysis/2026-05-13_table6_self_report_alignment/`: see `label_noise_summary.png` and `table6_vs_self_report_heatmaps.png`.
+
+   The important result is that arousal labels look much noisier than valence labels. Section-level Table-6/self-report mismatch is `48.6%` for arousal 3-class and `29.7%` for arousal low/high, compared with `27.5%` for valence 3-class and only `3.3%` for valence low/high. The heatmaps show the same pattern: valence low/high labels mostly agree with the participant ratings, while arousal labels often fall into the neighboring or opposite self-report bucket. This gives a concrete data-backed explanation for why low/high valence trains much better than arousal in the current ET-only setup, and suggests low/high valence is the cleanest target for the next core experiments.
+
 ### Diploma direction
 
 At the beginning of May 2026 I started writing the diploma in Overleaf, including motivation, related work, and theory sections. The practical diploma goal is now narrower and realistic: complete a core experiment set on MAHNOB-HCI, improve the GNN enough that it beats the local classical baselines, and try to improve over the eye-gaze results reported in the MAHNOB dataset paper. More sophisticated work, such as multiple datasets, broader model families, and a larger GFM-style study, should be kept for a post-diploma paper.
