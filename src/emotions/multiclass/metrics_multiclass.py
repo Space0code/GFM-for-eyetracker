@@ -192,7 +192,7 @@ def evaluate_multiclass_classification(
     result: Dict[str, Any] = {
         "standard": {
             "aggregated": standard_metrics,
-            "per_emotion": {"multiclass": standard_metrics},
+            "per_emotion": {},
         },
         "per_pair_aggregated": None,
     }
@@ -211,7 +211,7 @@ def evaluate_multiclass_classification(
             )
             result["per_pair_aggregated"] = {
                 "aggregated": pair_metrics,
-                "per_emotion": {"multiclass": pair_metrics},
+                "per_emotion": {},
             }
             result["pair_aggregated"] = result["per_pair_aggregated"]
         except Exception:  # pragma: no cover - defensive fallback

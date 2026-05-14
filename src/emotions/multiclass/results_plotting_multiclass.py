@@ -32,7 +32,7 @@ def _load_results_df(strategy_dirs: Sequence[Path], summary_file: str, run_name:
     for strategy_dir in strategy_dirs:
         df = pd.read_csv(strategy_dir / summary_file)
         if "metric_type" in df.columns:
-            df = df[df["metric_type"] != "aggregated"]
+            df = df[df["metric_type"] == "aggregated"]
         df["strategy"] = strategy_dir.name
         df["run"] = run_name
         frames.append(df)
