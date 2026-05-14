@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from emotions.baseline_model import get_baseline_by_name
 from data.data import clean_dataset
+from data.hci_signals import feature_interpolation_columns, prepare_hci_eye_tracking_signals
 
 
 class TabularWindowSample:
@@ -221,15 +222,16 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         if len(df) == 0:
             return df.reset_index(drop=True)
 
-        df = df.sort_values("time-rel-seconds").reset_index(drop=True)
+        df = prepare_hci_eye_tracking_signals(df.sort_values("time-rel-seconds").reset_index(drop=True))
         required_clean_cols = ["time-rel-seconds"] + feature_columns
         missing_required = [col for col in required_clean_cols if col not in df.columns]
         if not missing_required:
             df = clean_dataset(
                 df,
                 required_cols=required_clean_cols,
-                interpolation_cols=feature_columns,
+                interpolation_cols=feature_interpolation_columns(feature_columns),
             )
+            df = prepare_hci_eye_tracking_signals(df)
 
         if dropna_columns is None:
             df = df.dropna()

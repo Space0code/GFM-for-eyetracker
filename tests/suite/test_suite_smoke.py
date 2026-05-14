@@ -327,7 +327,13 @@ def test_suite_smoke_runs_selected_experiments(monkeypatch, tmp_path: Path) -> N
         },
         "global_overrides": {
             "cross_validation": {"strategies": ["recording_loo"], "val_size": 1, "random_state": 42},
-            "dataset": {"target_aggregation": "mean"},
+            "dataset": {
+                "target_aggregation": "mean",
+                "use_distance_avg": False,
+                "use_fixation_duration": False,
+                "use_delta_distance_edge_feature": False,
+                "use_fixation_edges": False,
+            },
         },
         "experiments": {
             "binary_valence": {

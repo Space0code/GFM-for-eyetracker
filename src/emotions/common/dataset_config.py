@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, MutableMapping, Sequence
 
-DEFAULT_FEATURE_COLUMNS = [
-    "x-avg",
-    "y-avg",
-    "pupil-size-left-avg",
-    "pupil-size-right-avg",
-]
+from data.hci_signals import BASE_NODE_FEATURE_COLUMNS, resolve_optional_hci_feature_columns
+
+DEFAULT_FEATURE_COLUMNS = list(BASE_NODE_FEATURE_COLUMNS)
 
 DEFAULT_BASE_DROPNA_COLUMNS = [
     "time-rel-seconds",
@@ -27,7 +24,23 @@ def resolve_feature_columns(dataset_cfg: Mapping[str, Any]) -> list[str]:
     raw = dataset_cfg.get("feature_columns", DEFAULT_FEATURE_COLUMNS)
     if not isinstance(raw, list) or not raw:
         raise ValueError("dataset.feature_columns must be a non-empty list.")
-    return [str(column) for column in raw]
+    return resolve_optional_hci_feature_columns(
+        [str(column) for column in raw],
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+    )
+
+
+def sync_gnn_in_channels(model_cfg: MutableMapping[str, Any], feature_columns: Sequence[str]) -> None:
+    """Keep configured model input width aligned with resolved node features."""
+    resolved = len(feature_columns)
+    configured = model_cfg.get("in_channels")
+    if configured is not None and int(configured) != resolved:
+        print(
+            "Updating gnn.model.in_channels from "
+            f"{configured} to {resolved} based on resolved dataset feature_columns."
+        )
+    model_cfg["in_channels"] = resolved
 
 
 def resolve_dropna_columns(
@@ -102,6 +115,10 @@ def build_graph_dataset_kwargs(
         "label_quality_column": dataset_cfg.get("label_quality_column"),
         "allowed_label_quality_values": dataset_cfg.get("allowed_label_quality_values"),
         "target_aggregation": dataset_cfg.get("target_aggregation", "mean"),
+        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", False)),
+        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", False)),
+        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", False)),
+        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", False)),
     }
 
 

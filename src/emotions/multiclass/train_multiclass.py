@@ -53,6 +53,7 @@ from emotions.common.dataset_config import (
     resolve_dropna_columns,
     resolve_feature_columns,
     resolve_min_samples_per_window,
+    sync_gnn_in_channels,
 )
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
@@ -651,6 +652,14 @@ def _train_gnn_fold(
             "edge_weight_mode",
             config["dataset"].get("edge_weight_mode", "learned_signed"),
         )
+        model_kwargs["use_delta_distance_edge_feature"] = model_cfg.get(
+            "use_delta_distance_edge_feature",
+            bool(config["dataset"].get("use_delta_distance_edge_feature", False)),
+        )
+        model_kwargs["use_fixation_edges"] = model_cfg.get(
+            "use_fixation_edges",
+            bool(config["dataset"].get("use_fixation_edges", False)),
+        )
 
     model = model_cls(**model_kwargs).to(device)
 
@@ -1054,8 +1063,11 @@ def run_training_from_config(config_path: str) -> str:
         target_columns = task_def["target_columns"]
 
         feature_columns = resolve_feature_columns(dataset_cfg)
+        sync_gnn_in_channels(config["gnn"]["model"], feature_columns)
         dropna_columns = resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
         min_samples_per_window = resolve_min_samples_per_window(dataset_cfg)
+        with open(os.path.join(run_dir, "config.yaml"), "w", encoding="utf-8") as handle:
+            yaml.safe_dump(config, handle, sort_keys=False)
 
         base_gnn_dataset = None
         if run_experiments["gnn"]:

@@ -13,14 +13,15 @@ import pandas as pd
 import yaml
 
 from data.data import clean_dataset
+from data.hci_signals import (
+    BASE_NODE_FEATURE_COLUMNS,
+    feature_interpolation_columns,
+    prepare_hci_eye_tracking_signals,
+    resolve_optional_hci_feature_columns,
+)
 
 
-DEFAULT_FEATURE_COLUMNS = [
-    "x-avg",
-    "y-avg",
-    "pupil-size-left-avg",
-    "pupil-size-right-avg",
-]
+DEFAULT_FEATURE_COLUMNS = list(BASE_NODE_FEATURE_COLUMNS)
 
 SNAPSHOT_CACHE_VERSION = "snapshot-cache-v1"
 
@@ -93,7 +94,9 @@ def _clean_group(
     if len(group_df) == 0:
         return group_df.reset_index(drop=True)
 
-    group_df = group_df.sort_values("time-rel-seconds").reset_index(drop=True)
+    group_df = prepare_hci_eye_tracking_signals(
+        group_df.sort_values("time-rel-seconds").reset_index(drop=True)
+    )
 
     required_clean_cols = ["time-rel-seconds"] + feature_columns
     missing_required = [col for col in required_clean_cols if col not in group_df.columns]
@@ -103,8 +106,9 @@ def _clean_group(
     cleaned = clean_dataset(
         group_df,
         required_cols=required_clean_cols,
-        interpolation_cols=feature_columns,
+        interpolation_cols=feature_interpolation_columns(feature_columns),
     )
+    cleaned = prepare_hci_eye_tracking_signals(cleaned)
 
     if dropna_columns is None:
         cleaned = cleaned.dropna()
@@ -176,9 +180,18 @@ def _dataset_affecting_cache_payload(dataset_cfg: Dict[str, Any]) -> Dict[str, A
     signal_outlier_cfg = dataset_cfg.get("signal_outlier_filter") or {}
     if not isinstance(signal_outlier_cfg, dict):
         signal_outlier_cfg = {}
+    feature_columns = resolve_optional_hci_feature_columns(
+        dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+    )
 
     return {
-        "feature_columns": _normalize_sequence_for_key(dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS),
+        "feature_columns": _normalize_sequence_for_key(feature_columns),
+        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", False)),
+        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", False)),
+        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", False)),
+        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", False)),
         "dropna_columns": _normalize_sequence_for_key(dataset_cfg.get("dropna_columns")),
         "filter_subjects": _normalize_sequence_for_key(dataset_cfg.get("filter_subjects")),
         "filter_recordings": _normalize_sequence_for_key(dataset_cfg.get("filter_recordings")),
@@ -382,7 +395,11 @@ def build_clean_snapshot_dataframe(
         }
         return SnapshotBuildResult(dataframe=pd.DataFrame(), manifest=manifest, source_files=[])
 
-    feature_columns = dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS
+    feature_columns = resolve_optional_hci_feature_columns(
+        dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+    )
     dropna_columns = dataset_cfg.get("dropna_columns")
     dropping_threshold = float(dataset_cfg.get("dropping_emotion_threshold", -np.inf))
 

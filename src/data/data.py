@@ -12,6 +12,14 @@ import torch
 from torch.utils.data import Dataset
 from torch_geometric.data import Data, HeteroData
 
+from data.hci_signals import (
+    DISTANCE_AVG_COLUMN,
+    FIXATION_INDEX_COLUMN,
+    feature_interpolation_columns,
+    prepare_hci_eye_tracking_signals,
+    resolve_optional_hci_feature_columns,
+)
+
 
 def load_csv_files(self, root_dir, recursive, ignore_dirs, file_list):
     if file_list is not None:
@@ -185,7 +193,11 @@ class SpacioTemporalDataset(Dataset):
             dropna_columns: Optional[List[str]] = None, experiment_type_column: str = "experiment-type",
             allowed_experiment_types: Optional[List[str]] = None, label_quality_column: Optional[str] = None,
             allowed_label_quality_values: Optional[List[str]] = None,
-            target_aggregation: str = "mean"):
+            target_aggregation: str = "mean",
+            use_distance_avg: bool = False,
+            use_fixation_duration: bool = False,
+            use_delta_distance_edge_feature: bool = False,
+            use_fixation_edges: bool = False):
         """
         Load CSV files and convert to graphs.
         
@@ -238,12 +250,15 @@ class SpacioTemporalDataset(Dataset):
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
         self.dropping_emotion_threshold = dropping_emotion_threshold
-        self.feature_columns = feature_columns or [
-            "x-avg",
-            "y-avg",
-            "pupil-size-left-avg",
-            "pupil-size-right-avg",
-        ]
+        self.use_distance_avg = bool(use_distance_avg)
+        self.use_fixation_duration = bool(use_fixation_duration)
+        self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
+        self.use_fixation_edges = bool(use_fixation_edges)
+        self.feature_columns = resolve_optional_hci_feature_columns(
+            feature_columns,
+            use_distance_avg=self.use_distance_avg,
+            use_fixation_duration=self.use_fixation_duration,
+        )
         self.target_columns = target_columns
         self.target_aggregation = target_aggregation
         self.dropna_columns = dropna_columns
@@ -387,6 +402,12 @@ class SpacioTemporalDataset(Dataset):
         config_str += f"_lqcol={self.label_quality_column}_lqvals={self.allowed_label_quality_values}"
         config_str += f"_tagg={self.target_aggregation}"
         config_str += f"_minsamples={self.min_samples_per_window}"
+        config_str += (
+            f"_usedistavg={self.use_distance_avg}"
+            f"_usefixdur={self.use_fixation_duration}"
+            f"_usedeltadistedge={self.use_delta_distance_edge_feature}"
+            f"_usefixedges={self.use_fixation_edges}"
+        )
         
         # Hash the configuration
         config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
@@ -413,6 +434,11 @@ class SpacioTemporalDataset(Dataset):
                     'window_length': self.window_length,
                     'window_overlap': self.window_overlap,
                     'min_samples_per_window': self.min_samples_per_window,
+                    'feature_columns': self.feature_columns,
+                    'use_distance_avg': self.use_distance_avg,
+                    'use_fixation_duration': self.use_fixation_duration,
+                    'use_delta_distance_edge_feature': self.use_delta_distance_edge_feature,
+                    'use_fixation_edges': self.use_fixation_edges,
                 }, f)
             print(f"Successfully cached {len(self.graphs)} graphs")
         except Exception as e:
@@ -442,8 +468,14 @@ class SpacioTemporalDataset(Dataset):
         if len(df) == 0:
             return df
 
+        df = prepare_hci_eye_tracking_signals(df)
         required_clean_cols = ["time-rel-seconds"] + self.feature_columns
-        df = clean_dataset(df, required_cols=required_clean_cols, interpolation_cols=self.feature_columns)
+        df = clean_dataset(
+            df,
+            required_cols=required_clean_cols,
+            interpolation_cols=feature_interpolation_columns(self.feature_columns),
+        )
+        df = prepare_hci_eye_tracking_signals(df)
 
         if self.dropna_columns:
             missing = [col for col in self.dropna_columns if col not in df.columns]
@@ -527,6 +559,18 @@ class SpacioTemporalDataset(Dataset):
         x_values = X[:, x_idx]
         y_values = X[:, y_idx]
 
+        distance_avg_values = None
+        if self.use_delta_distance_edge_feature:
+            if DISTANCE_AVG_COLUMN not in df_window.columns:
+                raise ValueError(
+                    f"{DISTANCE_AVG_COLUMN!r} is required when "
+                    "use_delta_distance_edge_feature=True."
+                )
+            distance_avg_values = torch.tensor(
+                pd.to_numeric(df_window[DISTANCE_AVG_COLUMN], errors="coerce").values,
+                dtype=torch.float32,
+            )
+
         def build_edge_features(edge_index: torch.Tensor, direction: float | None = None) -> torch.Tensor:
             """Build relation features for learned edge-weight MLPs."""
             src_idx, dst_idx = edge_index[0], edge_index[1]
@@ -542,9 +586,37 @@ class SpacioTemporalDataset(Dataset):
                 delta_y,
                 distance,
             ]
+            if self.use_delta_distance_edge_feature:
+                if distance_avg_values is None:
+                    raise ValueError(
+                        f"{DISTANCE_AVG_COLUMN!r} is required when "
+                        "use_delta_distance_edge_feature=True."
+                    )
+                features.append(distance_avg_values[dst_idx] - distance_avg_values[src_idx])
             if direction is not None:
                 features.append(torch.full_like(delta_t, float(direction)))
             return torch.stack(features, dim=1)
+
+        def build_fixation_edge_index(window_df: pd.DataFrame) -> torch.Tensor:
+            """Connect consecutive samples that share a fixation id, bidirectionally."""
+            empty = torch.empty((2, 0), dtype=torch.long)
+            if FIXATION_INDEX_COLUMN not in window_df.columns:
+                return empty
+            fixation_ids = pd.to_numeric(window_df[FIXATION_INDEX_COLUMN], errors="coerce").to_numpy()
+            src_edges: list[int] = []
+            dst_edges: list[int] = []
+            for local_idx in range(len(fixation_ids) - 1):
+                current_id = fixation_ids[local_idx]
+                next_id = fixation_ids[local_idx + 1]
+                if not np.isfinite(current_id) or not np.isfinite(next_id):
+                    continue
+                if current_id != next_id:
+                    continue
+                src_edges.extend([local_idx, local_idx + 1])
+                dst_edges.extend([local_idx + 1, local_idx])
+            if not src_edges:
+                return empty
+            return torch.tensor([src_edges, dst_edges], dtype=torch.long)
         
         #### Extract graph-level targets
         target_cols = self._resolve_target_columns(df_window)
@@ -626,6 +698,9 @@ class SpacioTemporalDataset(Dataset):
         else:
             data["node", "temporal_forward", "node"].edge_index = edge_index_temporal_forward
             data["node", "temporal_backward", "node"].edge_index = edge_index_temporal_backward
+            if self.use_fixation_edges:
+                edge_index_fixation = build_fixation_edge_index(df_window)
+                data["node", "fixation", "node"].edge_index = edge_index_fixation
         data["node", "spatial", "node"].edge_index = edge_index_spatial
         if self.use_edge_weights:
             if self.graph_version == "v1":
@@ -644,6 +719,8 @@ class SpacioTemporalDataset(Dataset):
                 )
             if self.edge_weight_mode == "learned_signed" and self.graph_version == "v2":
                 data["node", "spatial", "node"].edge_attr = build_edge_features(edge_index_spatial)
+                if self.use_fixation_edges:
+                    data["node", "fixation", "node"].edge_attr = build_edge_features(edge_index_fixation)
             else:
                 data["node", "spatial", "node"].edge_attr = w_spatial
         

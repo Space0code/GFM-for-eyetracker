@@ -177,6 +177,11 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             num_layers: int = 2, pooling: str = "attention", graph_pooling: str | None = None,
             head_pooling: str | None = None, relation_pooling: str = "mlp",
             edge_weight_mode: str = "learned_signed",
+            use_delta_distance_edge_feature: bool = False,
+            use_fixation_edges: bool = False,
+            spatial_edge_attr_dim: int | None = None,
+            temporal_edge_attr_dim: int | None = None,
+            fixation_edge_attr_dim: int | None = None,
             ):
         nn.Module.__init__(self)
         if num_layers < 1:
@@ -201,6 +206,22 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
                 "Choose 'handcrafted' or 'learned_signed'."
             )
         self.edge_weight_mode = edge_weight_mode
+        self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
+        self.spatial_edge_attr_dim = (
+            int(spatial_edge_attr_dim)
+            if spatial_edge_attr_dim is not None
+            else 7 if self.use_delta_distance_edge_feature else 6
+        )
+        self.temporal_edge_attr_dim = (
+            int(temporal_edge_attr_dim)
+            if temporal_edge_attr_dim is not None
+            else 8 if self.use_delta_distance_edge_feature else 7
+        )
+        self.fixation_edge_attr_dim = (
+            int(fixation_edge_attr_dim)
+            if fixation_edge_attr_dim is not None
+            else self.spatial_edge_attr_dim
+        )
 
         self.use_preprocess_mlp = use_preprocess_mlp
         if self.use_preprocess_mlp:
@@ -233,6 +254,8 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
 
         self.relations = ("spatial", "temporal_forward", "temporal_backward")
+        if use_fixation_edges:
+            self.relations = (*self.relations, "fixation")
         self.num_layers = num_layers
         self.pooling = resolved_graph_pooling
         self.relation_pooling = relation_pooling
@@ -271,24 +294,9 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
         self.gnn_activation = nn.GELU()
         self.gnn_dropout = nn.Dropout(p=dropout_gnn)
-        self.spatial_edge_weight_mlp = nn.Sequential(
-            nn.Linear(6, 6),
-            nn.GELU(),
-            nn.Linear(6, 4),
-            nn.GELU(),
-            nn.Linear(4, 2),
-            nn.GELU(),
-            nn.Linear(2, 1),
-        )
-        self.temporal_edge_weight_mlp = nn.Sequential(
-            nn.Linear(7, 6),
-            nn.GELU(),
-            nn.Linear(6, 4),
-            nn.GELU(),
-            nn.Linear(4, 2),
-            nn.GELU(),
-            nn.Linear(2, 1),
-        )
+        self.spatial_edge_weight_mlp = self._build_edge_weight_mlp(self.spatial_edge_attr_dim)
+        self.temporal_edge_weight_mlp = self._build_edge_weight_mlp(self.temporal_edge_attr_dim)
+        self.fixation_edge_weight_mlp = self._build_edge_weight_mlp(self.fixation_edge_attr_dim)
 
         if self.pooling == "mean":
             head_in_channels = hidden_channels
@@ -320,6 +328,19 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
     def _edge_type(relation: str) -> tuple[str, str, str]:
         """Return the heterograph edge type tuple for one node-node relation."""
         return ("node", relation, "node")
+
+    @staticmethod
+    def _build_edge_weight_mlp(input_dim: int) -> nn.Sequential:
+        """Build the small edge-weight MLP used for learned signed weights."""
+        return nn.Sequential(
+            nn.Linear(input_dim, 6),
+            nn.GELU(),
+            nn.Linear(6, 4),
+            nn.GELU(),
+            nn.Linear(4, 2),
+            nn.GELU(),
+            nn.Linear(2, 1),
+        )
 
     @staticmethod
     def _apply_relation_conv(
@@ -360,13 +381,26 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             return edge_attr.view(-1)
 
         if relation == "spatial":
-            if edge_attr.shape[-1] != 6:
-                raise ValueError(f"Spatial learned edge attributes must have 6 features, got {edge_attr.shape[-1]}.")
+            if edge_attr.shape[-1] != self.spatial_edge_attr_dim:
+                raise ValueError(
+                    "Spatial learned edge attributes must have "
+                    f"{self.spatial_edge_attr_dim} features, got {edge_attr.shape[-1]}."
+                )
             raw_scores = self.spatial_edge_weight_mlp(edge_attr)
         elif relation in {"temporal_forward", "temporal_backward"}:
-            if edge_attr.shape[-1] != 7:
-                raise ValueError(f"Temporal learned edge attributes must have 7 features, got {edge_attr.shape[-1]}.")
+            if edge_attr.shape[-1] != self.temporal_edge_attr_dim:
+                raise ValueError(
+                    "Temporal learned edge attributes must have "
+                    f"{self.temporal_edge_attr_dim} features, got {edge_attr.shape[-1]}."
+                )
             raw_scores = self.temporal_edge_weight_mlp(edge_attr)
+        elif relation == "fixation":
+            if edge_attr.shape[-1] != self.fixation_edge_attr_dim:
+                raise ValueError(
+                    "Fixation learned edge attributes must have "
+                    f"{self.fixation_edge_attr_dim} features, got {edge_attr.shape[-1]}."
+                )
+            raw_scores = self.fixation_edge_weight_mlp(edge_attr)
         else:
             raise ValueError(f"Unsupported relation for learned edge weights: {relation}.")
 
@@ -396,7 +430,7 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             relation_outputs = []
             for relation in self.relations:
                 edge_type = self._edge_type(relation)
-                if edge_type not in edge_index_dict:
+                if edge_type not in edge_index_dict or edge_index_dict[edge_type].numel() == 0:
                     relation_outputs.append(
                         torch.zeros(
                             x_node.shape[0],

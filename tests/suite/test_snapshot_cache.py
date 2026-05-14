@@ -49,6 +49,10 @@ def _dataset_cfg() -> dict:
         "filter_subjects": None,
         "filter_recordings": None,
         "exclude_subjects": None,
+        "use_distance_avg": False,
+        "use_fixation_duration": False,
+        "use_delta_distance_edge_feature": False,
+        "use_fixation_edges": False,
     }
 
 

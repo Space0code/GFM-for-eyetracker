@@ -1,10 +1,18 @@
 import argparse
 import os
 import re
+import sys
 from glob import glob
 from pathlib import Path
 
 import pandas as pd
+
+if __package__ in {None, ""}:
+    src_dir = Path(__file__).resolve().parents[1]
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
+
+from data.hci_signals import prepare_hci_eye_tracking_signals
 
 """
 Usage:
@@ -155,7 +163,16 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
     signal_optional_columns = [
         "pupil-size-left-avg",
         "pupil-size-right-avg",
+        "distance-left",
+        "distance-right",
     ]
+    hci_membership_columns = []
+    if "hci-tagging" in dir_name:
+        hci_membership_columns = [
+            "fixation-index",
+            "fixation-duration",
+            "fixation",
+        ]
     metadata_columns = [
         "subject",
         "recording",
@@ -184,6 +201,7 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
     present_cols = (
         mandatory_columns
         + [col for col in signal_optional_columns if col in df.columns]
+        + [col for col in hci_membership_columns if col in df.columns]
         + [col for col in metadata_columns if col in df.columns]
         + raw_validity_cols
         + label_cols
@@ -206,10 +224,18 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
     condition_good = condition_good.fillna(False)
 
     metadata_present = [col for col in metadata_columns if col in df.columns]
-    protected_cols = set(["time-rel-seconds"] + metadata_present + raw_validity_cols + label_cols)
+    protected_cols = set(
+        ["time-rel-seconds"]
+        + metadata_present
+        + raw_validity_cols
+        + label_cols
+        + [col for col in hci_membership_columns if col in df.columns]
+    )
 
     cols_to_nan = [col for col in present_cols if col not in protected_cols]
     df.loc[~condition_good, cols_to_nan] = float("nan")
+    if "hci-tagging" in dir_name:
+        df = prepare_hci_eye_tracking_signals(df)
 
     valid_indices = df.index[condition_good]
     if len(valid_indices) == 0:
@@ -245,6 +271,9 @@ def preprocess_file(dir_name: str, filename: str, file_path: str, dest_data_dir:
         )
         if "pupil" in col:
             df[col] = df[col].rolling(window=3, min_periods=2, center=True).mean()
+
+    if "hci-tagging" in dir_name:
+        df = prepare_hci_eye_tracking_signals(df)
 
     dest_filename = os.path.join(dest_data_dir, filename)
     os.makedirs(dest_data_dir, exist_ok=True)

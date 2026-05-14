@@ -164,6 +164,8 @@ def test_gnn_v2_forward_pass_accepts_split_temporal_edges() -> None:
         use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=3,
+        use_delta_distance_edge_feature=False,
+        use_fixation_edges=False,
     )
     model.eval()
     with torch.no_grad():

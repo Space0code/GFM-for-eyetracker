@@ -59,6 +59,10 @@ global_overrides:
     use_edge_weights: true
     graph_version: v2
     edge_weight_mode: learned_signed
+    use_distance_avg: false
+    use_fixation_duration: false
+    use_delta_distance_edge_feature: false
+    use_fixation_edges: false
     # Set these to lists for quick subset runs, e.g. [P1, P8, P5] and [69.avi, 55.avi].
     filter_subjects: null
     exclude_subjects: [P9, P12, P15]

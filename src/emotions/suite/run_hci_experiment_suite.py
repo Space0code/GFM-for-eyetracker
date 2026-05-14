@@ -30,6 +30,7 @@ from emotions.binary.train_binary import run_training_from_config as run_binary_
 from emotions.common.dataset_config import (
     apply_defaults_when_missing,
     resolve_dropna_columns,
+    resolve_feature_columns,
     resolve_min_samples_per_window,
 )
 from emotions.multiclass.train_multiclass import (
@@ -225,6 +226,7 @@ def _compute_window_counts(
     target_columns: List[str],
 ) -> Tuple[Dict[str, int], Dict[str, int]]:
     min_samples = resolve_min_samples_per_window(dataset_cfg)
+    feature_columns = resolve_feature_columns(dataset_cfg)
 
     samples = build_tabular_samples(
         data_dir=None,
@@ -236,7 +238,7 @@ def _compute_window_counts(
         window_overlap=float(dataset_cfg.get("window_overlap", 0.0)),
         min_samples_per_window=min_samples,
         dropping_emotion_threshold=float(dataset_cfg.get("dropping_emotion_threshold", -1)),
-        feature_columns=dataset_cfg.get("feature_columns"),
+        feature_columns=feature_columns,
         target_columns=target_columns,
         target_aggregation=dataset_cfg.get("target_aggregation", "mean"),
         dropna_columns=dataset_cfg.get("dropna_columns"),
