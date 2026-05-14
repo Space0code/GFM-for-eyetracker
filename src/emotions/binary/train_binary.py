@@ -558,11 +558,11 @@ def train_gnn_fold(
             )
             model_kwargs.setdefault(
                 "use_delta_distance_edge_feature",
-                bool(config["dataset"].get("use_delta_distance_edge_feature", False)),
+                bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
             )
             model_kwargs.setdefault(
                 "use_fixation_edges",
-                bool(config["dataset"].get("use_fixation_edges", False)),
+                bool(config["dataset"].get("use_fixation_edges", True)),
             )
             model_kwargs.setdefault("head_pooling", model_kwargs.get("head_pooling"))
             model_kwargs.setdefault(

@@ -30,8 +30,8 @@ DISTANCE_SOURCE_COLUMNS = ["distance-left", "distance-right"]
 def resolve_optional_hci_feature_columns(
     feature_columns: Sequence[str] | None,
     *,
-    use_distance_avg: bool = False,
-    use_fixation_duration: bool = False,
+    use_distance_avg: bool = True,
+    use_fixation_duration: bool = True,
 ) -> list[str]:
     """Resolve node feature columns with optional HCI signals appended once."""
     resolved = list(feature_columns) if feature_columns is not None else list(BASE_NODE_FEATURE_COLUMNS)

@@ -654,11 +654,11 @@ def _train_gnn_fold(
         )
         model_kwargs["use_delta_distance_edge_feature"] = model_cfg.get(
             "use_delta_distance_edge_feature",
-            bool(config["dataset"].get("use_delta_distance_edge_feature", False)),
+            bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
         )
         model_kwargs["use_fixation_edges"] = model_cfg.get(
             "use_fixation_edges",
-            bool(config["dataset"].get("use_fixation_edges", False)),
+            bool(config["dataset"].get("use_fixation_edges", True)),
         )
 
     model = model_cls(**model_kwargs).to(device)

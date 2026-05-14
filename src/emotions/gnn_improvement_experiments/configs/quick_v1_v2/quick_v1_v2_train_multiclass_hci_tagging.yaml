@@ -48,10 +48,10 @@ dataset:
   use_edge_weights: true
   graph_version: v2
   edge_weight_mode: learned_signed
-  use_distance_avg: false
-  use_fixation_duration: false
-  use_delta_distance_edge_feature: false
-  use_fixation_edges: false
+  use_distance_avg: true
+  use_fixation_duration: true
+  use_delta_distance_edge_feature: true
+  use_fixation_edges: true
   tau: 0.05
   cache_dir: "data/cache"
   use_cache: false

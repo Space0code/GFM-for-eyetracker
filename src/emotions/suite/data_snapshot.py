@@ -182,16 +182,16 @@ def _dataset_affecting_cache_payload(dataset_cfg: Dict[str, Any]) -> Dict[str, A
         signal_outlier_cfg = {}
     feature_columns = resolve_optional_hci_feature_columns(
         dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
-        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
-        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
     )
 
     return {
         "feature_columns": _normalize_sequence_for_key(feature_columns),
-        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", False)),
-        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", False)),
-        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", False)),
-        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", False)),
+        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", True)),
+        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", True)),
+        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
+        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
         "dropna_columns": _normalize_sequence_for_key(dataset_cfg.get("dropna_columns")),
         "filter_subjects": _normalize_sequence_for_key(dataset_cfg.get("filter_subjects")),
         "filter_recordings": _normalize_sequence_for_key(dataset_cfg.get("filter_recordings")),
@@ -397,8 +397,8 @@ def build_clean_snapshot_dataframe(
 
     feature_columns = resolve_optional_hci_feature_columns(
         dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
-        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
-        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
     )
     dropna_columns = dataset_cfg.get("dropna_columns")
     dropping_threshold = float(dataset_cfg.get("dropping_emotion_threshold", -np.inf))

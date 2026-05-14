@@ -194,10 +194,10 @@ class SpacioTemporalDataset(Dataset):
             allowed_experiment_types: Optional[List[str]] = None, label_quality_column: Optional[str] = None,
             allowed_label_quality_values: Optional[List[str]] = None,
             target_aggregation: str = "mean",
-            use_distance_avg: bool = False,
-            use_fixation_duration: bool = False,
-            use_delta_distance_edge_feature: bool = False,
-            use_fixation_edges: bool = False):
+            use_distance_avg: bool = True,
+            use_fixation_duration: bool = True,
+            use_delta_distance_edge_feature: bool = True,
+            use_fixation_edges: bool = True):
         """
         Load CSV files and convert to graphs.
         

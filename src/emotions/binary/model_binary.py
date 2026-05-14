@@ -64,8 +64,8 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         head_pooling: str | None = None,
         relation_pooling: str = "mlp",
         edge_weight_mode: str = "learned_signed",
-        use_delta_distance_edge_feature: bool = False,
-        use_fixation_edges: bool = False,
+        use_delta_distance_edge_feature: bool = True,
+        use_fixation_edges: bool = True,
     ):
         """
         Initialize binary classification GNN.

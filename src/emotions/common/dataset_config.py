@@ -26,8 +26,8 @@ def resolve_feature_columns(dataset_cfg: Mapping[str, Any]) -> list[str]:
         raise ValueError("dataset.feature_columns must be a non-empty list.")
     return resolve_optional_hci_feature_columns(
         [str(column) for column in raw],
-        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", False)),
-        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", False)),
+        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
+        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
     )
 
 
@@ -115,10 +115,10 @@ def build_graph_dataset_kwargs(
         "label_quality_column": dataset_cfg.get("label_quality_column"),
         "allowed_label_quality_values": dataset_cfg.get("allowed_label_quality_values"),
         "target_aggregation": dataset_cfg.get("target_aggregation", "mean"),
-        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", False)),
-        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", False)),
-        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", False)),
-        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", False)),
+        "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", True)),
+        "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", True)),
+        "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
+        "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
     }
 
 
