@@ -40,7 +40,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, log_loss
 
 # Add src directory only for direct script execution.
 if __package__ in {None, ""}:
@@ -73,6 +73,12 @@ DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
 PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
+LOSS_METRIC_COLUMNS = ["train_loss", "val_loss", "test_loss"]
+LOSS_METRIC_STYLES = {
+    "train_loss": {"label": "Train loss", "color": "#0072B2", "linestyle": "-"},
+    "val_loss": {"label": "Validation loss", "color": "#E69F00", "linestyle": "-"},
+    "test_loss": {"label": "Held-out test loss", "color": "#666666", "linestyle": "--"},
+}
 MODEL_ALIASES = {
     "random": "Random",
     "rand": "Random",
@@ -1090,6 +1096,11 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
         strategy_dir = trainer_run_dir / cv_strategy
         if not strategy_dir.exists():
             continue
+        test_loss_by_fold = _load_fold_test_losses(
+            strategy_dir=strategy_dir,
+            model_name=model_name,
+            summary_model_name=summary_model_name,
+        )
 
         for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
             if summary_model_name == "GNN":
@@ -1107,6 +1118,9 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
             history = pd.read_csv(history_path)
             if history.empty or "epoch" not in history.columns:
                 continue
+            test_loss = test_loss_by_fold.get(fold_dir.name)
+            if test_loss is not None and np.isfinite(test_loss):
+                history["test_loss"] = float(test_loss)
 
             history.insert(0, "history_kind", history_kind)
             history.insert(0, "history_path", str(history_path))
@@ -1125,6 +1139,190 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
     return pd.concat(records, ignore_index=True)
 
 
+def _compute_saved_prediction_log_loss(prediction_path: Path, target_path: Path) -> float | None:
+    """Compute multiclass log loss from saved probabilities and encoded targets."""
+    if not prediction_path.exists() or not target_path.exists():
+        return None
+
+    y_pred = np.load(prediction_path)
+    y_true = np.load(target_path)
+    if y_pred.ndim != 2 or y_pred.shape[0] == 0:
+        return None
+
+    labels = np.arange(y_pred.shape[1], dtype=int)
+    return float(log_loss(y_true, y_pred, labels=labels))
+
+
+def _load_fold_test_losses(
+    strategy_dir: Path,
+    model_name: str,
+    summary_model_name: str,
+) -> Dict[str, float]:
+    """Load one held-out test loss per fold for a plotted training-history model."""
+    expected_metric_model = "GNN" if summary_model_name == "GNN" else model_name
+    fold_metrics_path = strategy_dir / "fold_metrics.csv"
+    if fold_metrics_path.exists():
+        fold_metrics = pd.read_csv(fold_metrics_path)
+        required_columns = {"model", "fold_id", "metric_type", "loss"}
+        if required_columns.issubset(fold_metrics.columns):
+            metric_df = fold_metrics[
+                (fold_metrics["model"].astype(str) == expected_metric_model)
+                & (fold_metrics["metric_type"].astype(str) == "aggregated")
+            ].copy()
+            metric_df["loss"] = pd.to_numeric(metric_df["loss"], errors="coerce")
+            metric_df = metric_df.dropna(subset=["loss"])
+            if not metric_df.empty:
+                return {
+                    str(row.fold_id): float(row.loss)
+                    for row in metric_df[["fold_id", "loss"]].itertuples(index=False)
+                }
+
+    losses: Dict[str, float] = {}
+    for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+        if summary_model_name == "GNN":
+            prediction_path = fold_dir / "test_predictions.npy"
+            target_path = fold_dir / "test_targets.npy"
+        elif model_name == "MLP":
+            prediction_path = fold_dir / "baselines" / "MLP" / "test_predictions.npy"
+            target_path = fold_dir / "baselines" / "MLP" / "test_targets.npy"
+        else:
+            continue
+
+        loss_value = _compute_saved_prediction_log_loss(prediction_path, target_path)
+        if loss_value is not None and np.isfinite(loss_value):
+            losses[fold_dir.name] = loss_value
+
+    return losses
+
+
+def _slugify_filename(value: str) -> str:
+    """Return a compact filename-safe representation."""
+    safe_chars = [char if char.isalnum() or char in {"-", "_"} else "_" for char in str(value)]
+    return "_".join("".join(safe_chars).split("_"))
+
+
+def _metric_display_name(metric: str) -> str:
+    """Return a readable metric label for plot titles and legends."""
+    if metric in LOSS_METRIC_STYLES:
+        return str(LOSS_METRIC_STYLES[metric]["label"])
+    return {
+        "val_balanced_accuracy": "Validation balanced accuracy",
+        "val_macro_f1": "Validation macro F1",
+    }.get(metric, metric)
+
+
+def _compute_aggregated_metric_curve(
+    group_df: pd.DataFrame,
+    metric: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    """Compute mean/std/min/max curve, keeping test loss constant over epochs."""
+    if group_df.empty:
+        return None
+
+    if metric == "test_loss":
+        metric_values = (
+            group_df[group_df["metric"] == metric]
+            .drop_duplicates(subset=["fold_id"])["value"]
+            .dropna()
+            .to_numpy(dtype=float)
+        )
+        x = np.sort(group_df["epoch"].dropna().unique().astype(float))
+        if metric_values.size == 0 or x.size == 0:
+            return None
+        finite_values = metric_values[np.isfinite(metric_values)]
+        if finite_values.size == 0:
+            return None
+        mean_value = float(np.mean(finite_values))
+        std_value = float(np.std(finite_values, ddof=1)) if finite_values.size > 1 else 0.0
+        min_value = float(np.min(finite_values))
+        max_value = float(np.max(finite_values))
+        return (
+            x,
+            np.full_like(x, mean_value, dtype=float),
+            np.full_like(x, std_value, dtype=float),
+            np.full_like(x, min_value, dtype=float),
+            np.full_like(x, max_value, dtype=float),
+        )
+
+    metric_df = group_df[group_df["metric"] == metric]
+    if metric_df.empty:
+        return None
+    metric_stats = (
+        metric_df.groupby("epoch", as_index=False)["value"]
+        .agg(["mean", "std", "min", "max"])
+        .reset_index()
+        .sort_values("epoch")
+    )
+    if metric_stats.empty:
+        return None
+
+    return (
+        metric_stats["epoch"].to_numpy(dtype=float),
+        metric_stats["mean"].to_numpy(dtype=float),
+        metric_stats["std"].fillna(0.0).to_numpy(dtype=float),
+        metric_stats["min"].to_numpy(dtype=float),
+        metric_stats["max"].to_numpy(dtype=float),
+    )
+
+
+def _plot_band_curve(
+    ax: plt.Axes,
+    x: np.ndarray,
+    y: np.ndarray,
+    std: np.ndarray,
+    min_values: np.ndarray,
+    max_values: np.ndarray,
+    *,
+    color: str,
+    label: str,
+    linestyle: str = "-",
+    linewidth: float = 2.0,
+) -> None:
+    """Draw a mean curve with min-max and standard-deviation bands."""
+    std_lower = np.maximum(y - std, min_values)
+    std_upper = np.minimum(y + std, max_values)
+    ax.fill_between(x, min_values, max_values, color=color, alpha=0.055, linewidth=0)
+    ax.fill_between(x, std_lower, std_upper, color=color, alpha=0.16, linewidth=0)
+    ax.plot(x, y, label=label, color=color, linestyle=linestyle, linewidth=linewidth)
+
+
+def _plot_loss_lines(
+    ax: plt.Axes,
+    fold_history: pd.DataFrame,
+    *,
+    show_legend: bool,
+) -> None:
+    """Draw train/validation/test losses for one fold without uncertainty bands."""
+    x_values = pd.to_numeric(fold_history["epoch"], errors="coerce")
+    for metric in LOSS_METRIC_COLUMNS:
+        if metric not in fold_history.columns:
+            continue
+        y_values = pd.to_numeric(fold_history[metric], errors="coerce")
+        if y_values.notna().sum() == 0:
+            continue
+        style = LOSS_METRIC_STYLES[metric]
+        ax.plot(
+            x_values,
+            y_values,
+            label=str(style["label"]),
+            color=str(style["color"]),
+            linestyle=str(style["linestyle"]),
+            linewidth=2.0,
+        )
+    if show_legend:
+        ax.legend(loc="best", frameon=False, fontsize="small")
+
+
+def _style_loss_axis(ax: plt.Axes, *, ylabel: str | None = None) -> None:
+    """Apply shared styling for loss-curve axes."""
+    ax.set_xlabel("epoch")
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    ax.grid(alpha=0.18)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
 def _plot_training_curve_grid(
     history: pd.DataFrame,
     output_dir: Path,
@@ -1133,7 +1331,7 @@ def _plot_training_curve_grid(
     ylabel: str,
     ylim: tuple[float, float] | None = None,
 ) -> Path | None:
-    """Save mean training curves with standard deviation bands."""
+    """Save mean training curves with standard-deviation and min-max bands."""
     available_metrics = [metric for metric in metric_columns if metric in history.columns]
     if history.empty or not available_metrics:
         return None
@@ -1171,69 +1369,271 @@ def _plot_training_curve_grid(
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     output_path = plots_dir / output_name
+    figure_title = "Training Progress"
+    if len(groups) == 1:
+        _, experiment_name, cv_strategy = groups[0]
+        figure_title = f"{experiment_name} Training Progress - {cv_strategy}"
 
+    n_rows = len(groups)
+    n_cols = len(available_metrics)
     fig, axes = plt.subplots(
-        len(groups),
-        1,
-        figsize=(12, max(4.0, 3.5 * len(groups))),
+        n_rows,
+        n_cols,
+        figsize=(max(10.0, 4.8 * n_cols), max(4.0, 3.7 * n_rows)),
+        sharex=True,
+        sharey="row",
         squeeze=False,
     )
-    palette = sns.color_palette("tab10", n_colors=max(1, long_df["model"].nunique()))
+    palette = sns.color_palette("colorblind", n_colors=max(1, long_df["model"].nunique()))
     model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
     color_by_model = {model: palette[idx % len(palette)] for idx, model in enumerate(model_order)}
-    line_styles = {
-        "train_loss": "-",
-        "val_loss": "--",
-        "val_balanced_accuracy": "-",
-        "val_macro_f1": "--",
-    }
+    line_style_by_metric = {"test_loss": "--"}
+    legend_handles = {}
 
     for row_idx, (experiment_id, experiment_name, cv_strategy) in enumerate(groups):
-        ax = axes[row_idx, 0]
         group_df = long_df[
             (long_df["experiment_id"].astype(str) == str(experiment_id))
             & (long_df["cv_strategy"].astype(str) == str(cv_strategy))
         ]
-        curve_stats = (
-            group_df.groupby(["model", "metric", "epoch"], as_index=False)["value"]
-            .agg(["mean", "std"])
-            .reset_index()
-        )
-        for model_name in model_order:
-            model_stats = curve_stats[curve_stats["model"].astype(str) == model_name]
-            if model_stats.empty:
-                continue
-            for metric in available_metrics:
-                metric_stats = model_stats[model_stats["metric"] == metric].sort_values("epoch")
-                if metric_stats.empty:
+        for col_idx, metric in enumerate(available_metrics):
+            ax = axes[row_idx, col_idx]
+            for model_name in model_order:
+                model_long_df = group_df[group_df["model"].astype(str) == model_name]
+                if model_long_df.empty:
                     continue
-                x = metric_stats["epoch"].to_numpy(dtype=float)
-                y = metric_stats["mean"].to_numpy(dtype=float)
-                std = metric_stats["std"].fillna(0.0).to_numpy(dtype=float)
-                label = f"{model_name} {metric}"
+                curve = _compute_aggregated_metric_curve(model_long_df, metric)
+                if curve is None:
+                    continue
+                x, y, std, min_values, max_values = curve
                 color = color_by_model.get(model_name)
-                ax.plot(
+                _plot_band_curve(
+                    ax,
                     x,
                     y,
-                    label=label,
+                    std,
+                    min_values,
+                    max_values,
                     color=color,
-                    linestyle=line_styles.get(metric, "-"),
-                    linewidth=1.8,
+                    label=model_name,
+                    linestyle=line_style_by_metric.get(metric, "-"),
                 )
-                ax.fill_between(x, y - std, y + std, color=color, alpha=0.12)
+                line = ax.lines[-1]
+                legend_handles.setdefault(model_name, line)
 
-        ax.set_title(f"{experiment_name} Training Progress - {cv_strategy}")
-        ax.set_xlabel("epoch")
-        ax.set_ylabel(ylabel)
-        if ylim is not None:
-            ax.set_ylim(*ylim)
-        ax.grid(alpha=0.2)
-        ax.legend(loc="best", fontsize="small")
+            if row_idx == 0:
+                ax.set_title(_metric_display_name(metric), fontsize=11)
+            if row_idx == n_rows - 1:
+                ax.set_xlabel("epoch")
+            if col_idx == 0:
+                ax.set_ylabel(ylabel)
+                if n_rows > 1:
+                    ax.text(
+                        -0.08,
+                        1.04,
+                        f"{experiment_name} - {cv_strategy}",
+                        transform=ax.transAxes,
+                        ha="left",
+                        va="bottom",
+                        fontsize=10,
+                        fontweight="semibold",
+                    )
+            if ylim is not None:
+                ax.set_ylim(*ylim)
+            _style_loss_axis(ax, ylabel=None)
+
+    if len(legend_handles) > 1:
+        fig.legend(
+            handles=[legend_handles[model] for model in model_order if model in legend_handles],
+            labels=[model for model in model_order if model in legend_handles],
+            loc="upper center",
+            ncol=min(len(legend_handles), 4),
+            frameon=False,
+            bbox_to_anchor=(0.5, 1.005),
+        )
+        title_y = 1.06
+    else:
+        title_y = 1.03
+    fig.suptitle(figure_title, y=title_y, fontsize=14)
+    fig.text(
+        0.995,
+        0.005,
+        "bands: darker = mean +/- std, lighter = fold min-max",
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color="#555555",
+    )
 
     fig.tight_layout()
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Path | None:
+    """Save aggregated train/validation/test loss curves in shared panels."""
+    available_metrics = [metric for metric in LOSS_METRIC_COLUMNS if metric in history.columns]
+    if history.empty or not available_metrics:
+        return None
+
+    plot_df = history.copy()
+    plot_df["epoch"] = pd.to_numeric(plot_df["epoch"], errors="coerce")
+    for metric in available_metrics:
+        plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+
+    id_vars = [
+        "experiment_id",
+        "experiment_display_name",
+        "cv_strategy",
+        "model",
+        "fold_id",
+        "epoch",
+    ]
+    long_df = plot_df.melt(
+        id_vars=[column for column in id_vars if column in plot_df.columns],
+        value_vars=available_metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["epoch", "value"])
+    if long_df.empty:
+        return None
+
+    groups = list(
+        long_df[["experiment_id", "experiment_display_name", "cv_strategy"]]
+        .drop_duplicates()
+        .itertuples(index=False, name=None)
+    )
+    model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
+    if not groups or not model_order:
+        return None
+
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / "training_progress_loss_combined.png"
+
+    n_rows = len(groups)
+    n_cols = len(model_order)
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(max(7.0, 5.4 * n_cols), max(4.0, 3.8 * n_rows)),
+        sharex=True,
+        sharey="row",
+        squeeze=False,
+    )
+
+    for row_idx, (experiment_id, experiment_name, cv_strategy) in enumerate(groups):
+        group_df = long_df[
+            (long_df["experiment_id"].astype(str) == str(experiment_id))
+            & (long_df["cv_strategy"].astype(str) == str(cv_strategy))
+        ]
+        for col_idx, model_name in enumerate(model_order):
+            ax = axes[row_idx, col_idx]
+            model_df = group_df[group_df["model"].astype(str) == model_name]
+            if model_df.empty:
+                ax.set_visible(False)
+                continue
+
+            for metric in available_metrics:
+                curve = _compute_aggregated_metric_curve(model_df, metric)
+                if curve is None:
+                    continue
+                x, y, std, min_values, max_values = curve
+                style = LOSS_METRIC_STYLES[metric]
+                _plot_band_curve(
+                    ax,
+                    x,
+                    y,
+                    std,
+                    min_values,
+                    max_values,
+                    color=str(style["color"]),
+                    label=str(style["label"]),
+                    linestyle=str(style["linestyle"]),
+                )
+
+            if row_idx == 0:
+                ax.set_title(model_name, fontsize=11)
+            if col_idx == 0:
+                ax.set_ylabel("loss")
+                if n_rows > 1:
+                    ax.text(
+                        -0.08,
+                        1.04,
+                        f"{experiment_name} - {cv_strategy}",
+                        transform=ax.transAxes,
+                        ha="left",
+                        va="bottom",
+                        fontsize=10,
+                        fontweight="semibold",
+                    )
+            _style_loss_axis(ax)
+            ax.legend(loc="best", frameon=False, fontsize="small")
+
+    figure_title = "Training Progress Losses"
+    if len(groups) == 1:
+        _, experiment_name, cv_strategy = groups[0]
+        figure_title = f"{experiment_name} Training Losses - {cv_strategy}"
+    fig.suptitle(figure_title, y=1.03, fontsize=14)
+    fig.text(
+        0.995,
+        0.005,
+        "bands: darker = mean +/- std, lighter = fold min-max",
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        color="#555555",
+    )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+def _save_fold_loss_plots(history: pd.DataFrame, output_dir: Path) -> List[Path]:
+    """Save per-fold train/validation/test loss plots in one combined layout."""
+    available_metrics = [metric for metric in LOSS_METRIC_COLUMNS if metric in history.columns]
+    required_columns = {
+        "experiment_id",
+        "experiment_display_name",
+        "cv_strategy",
+        "model",
+        "fold_id",
+        "epoch",
+    }
+    if history.empty or not available_metrics or not required_columns.issubset(history.columns):
+        return []
+
+    plot_df = history.copy()
+    plot_df["epoch"] = pd.to_numeric(plot_df["epoch"], errors="coerce")
+    for metric in available_metrics:
+        plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+
+    losses_dir = output_dir / "plots" / "losses"
+    losses_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: List[Path] = []
+    group_columns = ["experiment_id", "experiment_display_name", "cv_strategy", "model", "fold_id"]
+
+    for group_values, fold_df in plot_df.groupby(group_columns, sort=True):
+        experiment_id, experiment_name, cv_strategy, model_name, fold_id = [str(value) for value in group_values]
+        fold_df = fold_df.sort_values("epoch")
+        if fold_df[available_metrics].notna().sum().sum() == 0:
+            continue
+
+        filename_base = _slugify_filename(f"{experiment_id}_{cv_strategy}_{model_name}_{fold_id}")
+        title = f"{experiment_name} - {cv_strategy} - {model_name} - {fold_id}"
+
+        combined_path = losses_dir / f"{filename_base}_combined.png"
+        fig, ax = plt.subplots(1, 1, figsize=(9.0, 4.8))
+        _plot_loss_lines(ax, fold_history=fold_df, show_legend=True)
+        ax.set_title(title, fontsize=11)
+        _style_loss_axis(ax, ylabel="loss")
+        fig.tight_layout()
+        fig.savefig(combined_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        saved_paths.append(combined_path)
+
+    return saved_paths
 
 
 def _plot_best_epoch_distribution(history: pd.DataFrame, output_dir: Path) -> Path | None:
@@ -1395,10 +1795,11 @@ def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: P
         _plot_training_curve_grid(
             history=history,
             output_dir=output_dir,
-            metric_columns=["train_loss", "val_loss"],
+            metric_columns=LOSS_METRIC_COLUMNS,
             output_name="training_progress_loss.png",
             ylabel="loss",
         ),
+        _plot_training_loss_combined(history=history, output_dir=output_dir),
         _plot_training_curve_grid(
             history=history,
             output_dir=output_dir,
@@ -1411,6 +1812,8 @@ def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: P
     ]:
         if plot_path is not None:
             saved_paths.append(plot_path)
+
+    saved_paths.extend(_save_fold_loss_plots(history=history, output_dir=output_dir))
 
     return saved_paths
 

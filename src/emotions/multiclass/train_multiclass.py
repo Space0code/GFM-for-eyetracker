@@ -72,6 +72,7 @@ from emotions.utils import (
     load_config,
     print_comparison_table,
     save_comparison_csv,
+    save_fold_metrics_csv,
 )
 
 
@@ -599,6 +600,15 @@ def _evaluate_gnn(
     return metrics, avg_loss, y_pred_proba, y_true
 
 
+def _is_loader_thread_error(exc: RuntimeError) -> bool:
+    """Return True for known DataLoader pin-memory/IPC worker failures."""
+    message = str(exc)
+    return (
+        "Pin memory thread exited unexpectedly" in message
+        or "received 0 items of ancdata" in message
+    )
+
+
 def _train_gnn_fold(
     config: Dict[str, Any],
     train_idx: np.ndarray,
@@ -669,11 +679,12 @@ def _train_gnn_fold(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg["learning_rate"]))
 
+    num_workers = int(training_cfg.get("num_workers", 4))
     loader_kwargs = {
         "batch_size": int(training_cfg["batch_size"]),
-        "num_workers": int(training_cfg.get("num_workers", 4)),
+        "num_workers": num_workers,
         "pin_memory": bool(training_cfg.get("pin_memory", True)) if device.type == "cuda" else False,
-        "persistent_workers": bool(training_cfg.get("persistent_workers", True)),
+        "persistent_workers": bool(training_cfg.get("persistent_workers", True)) and num_workers > 0,
     }
 
     scaler: StandardScaler | None = None
@@ -1341,22 +1352,52 @@ def run_training_from_config(config_path: str) -> str:
                         baseline_results_all_folds[model_name][test_id] = metrics
 
                 if run_experiments["gnn"] and base_gnn_dataset is not None:
-                    gnn_metrics = _train_gnn_fold(
-                        config=config,
-                        train_idx=gnn_train_idx,
-                        val_idx=gnn_val_idx,
-                        test_idx=gnn_test_idx,
-                        dataset=base_gnn_dataset,
-                        fold_dir=fold_dir,
-                        test_name=test_name,
-                        device=device,
-                        task_def=task_def,
-                        fold_context=fold_context,
-                        class_to_index=class_to_index,
-                        class_labels=class_labels,
-                        standardize_features=standardize_features,
-                        verbose=verbose,
-                    )
+                    try:
+                        gnn_metrics = _train_gnn_fold(
+                            config=config,
+                            train_idx=gnn_train_idx,
+                            val_idx=gnn_val_idx,
+                            test_idx=gnn_test_idx,
+                            dataset=base_gnn_dataset,
+                            fold_dir=fold_dir,
+                            test_name=test_name,
+                            device=device,
+                            task_def=task_def,
+                            fold_context=fold_context,
+                            class_to_index=class_to_index,
+                            class_labels=class_labels,
+                            standardize_features=standardize_features,
+                            verbose=verbose,
+                        )
+                    except RuntimeError as exc:
+                        if not _is_loader_thread_error(exc):
+                            raise
+                        training_cfg = config["gnn"]["training"]
+                        training_cfg["num_workers"] = 0
+                        training_cfg["pin_memory"] = False
+                        training_cfg["persistent_workers"] = False
+                        print(
+                            "  Warning: DataLoader pin-memory/multiprocessing failed "
+                            f"({exc}). Retrying fold with num_workers=0, "
+                            "pin_memory=false, persistent_workers=false and applying "
+                            "those settings for subsequent folds."
+                        )
+                        gnn_metrics = _train_gnn_fold(
+                            config=config,
+                            train_idx=gnn_train_idx,
+                            val_idx=gnn_val_idx,
+                            test_idx=gnn_test_idx,
+                            dataset=base_gnn_dataset,
+                            fold_dir=fold_dir,
+                            test_name=f"{test_name} [safe-loader mode]",
+                            device=device,
+                            task_def=task_def,
+                            fold_context=fold_context,
+                            class_to_index=class_to_index,
+                            class_labels=class_labels,
+                            standardize_features=standardize_features,
+                            verbose=verbose,
+                        )
                     gnn_results_all_folds[test_id] = gnn_metrics
 
             combined_results: Dict[str, Dict[str, Any]] = {}
@@ -1369,6 +1410,7 @@ def run_training_from_config(config_path: str) -> str:
 
             print_comparison_table(combined_results, metric_names, strategy)
             save_comparison_csv(combined_results, metric_names, os.path.join(strategy_dir, "summary.csv"))
+            save_fold_metrics_csv(combined_results, metric_names, os.path.join(strategy_dir, "fold_metrics.csv"))
 
         print("\nGenerating multiclass result plots...")
         models_for_cm: List[str] = []

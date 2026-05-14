@@ -304,6 +304,48 @@ def save_comparison_csv(results: Dict[str, Dict[str, Any]],
     print(f"Saved comparison to: {output_path}")
 
 
+def save_fold_metrics_csv(results: Dict[str, Dict[str, Any]],
+                          metric_names: List[str],
+                          output_path: str,
+                          approach: str = 'standard'):
+    """Save per-fold cross-validation metrics to CSV.
+
+    Args:
+        results: Dict mapping model/strategy names to their fold results
+        metric_names: List of metrics to include
+        output_path: Path to save CSV file
+        approach: 'standard' or 'per_pair_aggregated'
+    """
+    rows = []
+
+    for model_name, model_results in results.items():
+        for fold_id, fold_result in model_results.items():
+            block = _resolve_approach_block(fold_result, approach)
+            if block is None:
+                continue
+
+            aggregated = block.get("aggregated", {})
+            rows.append({
+                "model": model_name,
+                "fold_id": fold_id,
+                "metric_type": "aggregated",
+                **{metric: float(aggregated.get(metric, np.nan)) for metric in metric_names},
+            })
+
+            per_emotion = block.get("per_emotion") or {}
+            for emo_name, emotion_metrics in per_emotion.items():
+                rows.append({
+                    "model": model_name,
+                    "fold_id": fold_id,
+                    "metric_type": f"emotion_{emo_name}",
+                    **{metric: float(emotion_metrics.get(metric, np.nan)) for metric in metric_names},
+                })
+
+    df = pd.DataFrame(rows)
+    df.to_csv(output_path, index=False)
+    print(f"Saved fold metrics to: {output_path}")
+
+
 def print_comparison_table(results: Dict[str, Dict[str, Any]], 
                           metric_names: List[str],
                           title: str = "Results"):

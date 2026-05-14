@@ -33,6 +33,7 @@ recent work, plans, or decisions.
 ## Locked Decisions
 
 - Use the `gfm` conda environment for Python work.
+- When an extra Python visualization/analysis package would materially help, ask before installing it; if approved, install it into the `gfm` conda environment with `pip`. On 2026-05-14, Plotly was approved and installed for interactive graph-window visualization.
 - Ignore files under `archive/`.
 - Treat `diploma_knowledge_base.md` as the live thesis/project knowledge base as of 2026-05-02.
 - Treat `MAHNOB_dataset_report.md` as the canonical source for local MAHNOB-HCI counts and subject-exclusion rationale.
@@ -62,6 +63,7 @@ recent work, plans, or decisions.
 - Current Table-6 GNN v2 defaults after valence depth checks: `num_layers: 3`, `early_stopping_patience: 20`, validation-loss checkpointing via `best_model.pt`.
 - 2026-05-13 mentor meeting clarified pooling: keep MLP fusion/pooling at node level, but use attention pooling at graph level rather than MLP graph pooling.
 - 2026-05-14 GNN v2 signal extension: `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges are now intended to be enabled by default. They remain configurable for ablations. Do not use raw `fixation-index` as a numeric node feature. Keep fixation meta-nodes for future work.
+- 2026-05-14 fixation-edge check: current GNN v2 has no exact duplicate edge pairs within any relation, but every sequential same-fixation edge overlaps with the corresponding temporal-forward/backward edge because `kt >= 1`. Treat this as an intentional multi-relation overlap unless ablations show overemphasis.
 
 ## Recent High-Signal Results
 
@@ -81,7 +83,9 @@ recent work, plans, or decisions.
 - Shared architecture settings, especially `gnn.model.conv_type`, live in the wrapper YAML; Python variant overrides should only select variant identity.
 - `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
 - Quick comparison supports multiple comma-separated CV strategies, class-balance diagnostics, multiclass training-history aggregation, task selection through `quick_comparison.table6_tasks`, and held-out test-loss plots.
+- Quick comparison training-progress loss plots include an aggregated split-panel plot, an aggregated combined train/validation/test plot, and per-fold combined loss plots under `plots/losses/`; aggregated loss plots use darker `mean ± std` bands and lighter min-max bands.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
+- 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
 
 ## Open Plans
 
@@ -98,6 +102,7 @@ recent work, plans, or decisions.
 ## Visualization Ideas To Implement Later
 
 - Method figures: graph construction from one 10-second gaze window; GNN v2 architecture diagram; raw MAHNOB-to-window-to-graph pipeline.
+- GNN graph-window visualization notebook should show PyG `HeteroData` windows with node positions from `x-avg`/`y-avg`, node size from mean left/right pupil size, local node-index labels starting at 0, and distinct curved edge colors for relation types (`temporal`, `spatial`, `temporal_forward`, `temporal_backward`, optionally `fixation`) so multi-relational edges between the same nodes remain visible. Edge alpha defaults to `0.60`; hover still includes `distance-avg` in centimeters. For plotting only, exact/reverse duplicates within the same relation are collapsed by default, while diagnostics report both directed and displayed edge counts. For readability, it defaults to one reproducibly random `(subject, recording)` subset, shorter 2-second visualization windows, and draws all nodes instead of arbitrary subsets of a dense 10-second training window.
 - Data figures: class distributions, subject/recording usable-window coverage, signal distributions and missingness for gaze, pupil, `distance-avg`, and `fixation-duration`.
 - Representation figures: PCA/UMAP of raw window features, GNN graph embeddings, and possibly GazeMAE embeddings; always compare coloring by target label and by subject to expose possible subject confounds.
 - Result figures: row-normalized confusion matrices using `Blues` and fixed `[0, 1]` scale; model ranking plots with fold uncertainty; train/validation/test loss curves.
