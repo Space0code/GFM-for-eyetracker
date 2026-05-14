@@ -13,6 +13,7 @@ recent work, plans, or decisions.
 - `docs/experiment_log.md`: detailed experiment/config/run history that should not clutter memory or the thesis knowledge base.
 - `docs/diploma_reference_archive.md`: non-central reference notes moved out of the main thesis knowledge base.
 - `docs/journal.md`: human-readable progress reports and experiment interpretation.
+- `docs/diploma_gnn_v2_design_notes.md`: thesis-support notes focused on the newest GNN v2 component decomposition, including distance/fixation features and relation-level architecture rationale.
 
 ## How To Use This File
 
@@ -27,6 +28,7 @@ recent work, plans, or decisions.
 - Diploma scope: develop and evaluate a spatio-temporal GNN for emotion/affective-state recognition from MAHNOB-HCI-TAGGING.
 - Current practical aim: make the GNN strong and interpretable enough to beat local baselines and ideally approach or improve on the MAHNOB eye-gaze paper result.
 - Diploma writing has started in Overleaf, covering motivation, related work, and theory. Broader multi-dataset/GFM-style experiments are deferred to post-diploma work.
+- A thesis-support design note now exists at `docs/diploma_gnn_v2_design_notes.md`; before relying on it, ask whether any newer architecture changes should be reflected.
 
 ## Locked Decisions
 
@@ -59,6 +61,7 @@ recent work, plans, or decisions.
 - Temporal edge-weight MLP: `7 -> 6 -> 4 -> 2 -> 1`; forward/backward temporal edges share this MLP.
 - Current Table-6 GNN v2 defaults after valence depth checks: `num_layers: 3`, `early_stopping_patience: 20`, validation-loss checkpointing via `best_model.pt`.
 - 2026-05-13 mentor meeting clarified pooling: keep MLP fusion/pooling at node level, but use attention pooling at graph level rather than MLP graph pooling.
+- 2026-05-14 GNN v2 signal extension: `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges are now intended to be enabled by default. They remain configurable for ablations. Do not use raw `fixation-index` as a numeric node feature. Keep fixation meta-nodes for future work.
 
 ## Recent High-Signal Results
 
@@ -82,13 +85,22 @@ recent work, plans, or decisions.
 ## Open Plans
 
 - Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
+- Add a directly comparable pretrained GazeMAE baseline by freezing the pretrained encoder and training only an MLP head on the same MAHNOB-HCI windows, targets, splits, and metrics. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
 - Convergence follow-up from 2026-05-13 mentor meeting: run more than 3 folds, plot train/val/test loss per fold and/or aggregated with uncertainty bands, reduce LR by 10x or 100x and train longer; if still unstable, try DropEdge, PairNorm, or GraphNorm.
-- Preliminarily test adding eye-tracker-to-eyes distance and fixation ID. Keep them only if they help; otherwise mention the negative/neutral preliminary result in the diploma and omit them from the main model.
+- Preliminarily test the default extended GNN v2 with `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges against the old core-feature version via ablations.
 - Diploma writing decision from 2026-05-13: current RV/PV research questions are acceptable for now, may later be shortened/merged, and explicit hypotheses are not needed.
 - Before final reported runs, verify that preprocessing, normalization, label transforms, and any resampling/downsampling are fitted or decided using train-fold information only where applicable.
 - Inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
 - Decide whether the next step is tuning v2 further, running clean ablations, or aligning the experiment story with diploma writing needs after convergence follow-up.
 - Keep detailed future run notes in `docs/experiment_log.md`; keep thesis-facing conclusions in `diploma_knowledge_base.md`.
+
+## Visualization Ideas To Implement Later
+
+- Method figures: graph construction from one 10-second gaze window; GNN v2 architecture diagram; raw MAHNOB-to-window-to-graph pipeline.
+- Data figures: class distributions, subject/recording usable-window coverage, signal distributions and missingness for gaze, pupil, `distance-avg`, and `fixation-duration`.
+- Representation figures: PCA/UMAP of raw window features, GNN graph embeddings, and possibly GazeMAE embeddings; always compare coloring by target label and by subject to expose possible subject confounds.
+- Result figures: row-normalized confusion matrices using `Blues` and fixed `[0, 1]` scale; model ranking plots with fold uncertainty; train/validation/test loss curves.
+- Interpretability case studies: one correct and one incorrect window with gaze path, prediction, true label, attention weights, and optionally learned edge weights. Treat these as model-attribution views, not causal evidence.
 
 ## Archived Notes
 
