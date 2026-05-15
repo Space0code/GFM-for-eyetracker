@@ -579,7 +579,7 @@ Current working graph idea:
 - each window of eye-tracking data becomes one graph;
 - each node represents a sample or event in the window;
 - node features can include:
-  - normalized time,
+  - window-local normalized time $(t_i - t_0) / T_{window}$,
   - gaze coordinate `x`,
   - gaze coordinate `y`,
   - left pupil size,
@@ -1616,7 +1616,7 @@ Detailed runner/config history and exact run paths are maintained in
 
 The 2026-05-12/13 experiment set supports the following current thesis narrative:
 
-- The upgraded GNN v2 implements the intended modular architecture: separate temporal-forward, temporal-backward, and spatial relations; node-level MLP fusion of relation representations; attention graph pooling; and learned signed edge weights from relation features such as $[t_i, t_j, \Delta t, \Delta x, \Delta y, d_{ij}]$, with an additional direction feature for temporal edges.
+- The upgraded GNN v2 implements the intended modular architecture: separate temporal-forward, temporal-backward, and spatial relations; node-level MLP fusion of relation representations; attention graph pooling; and learned signed edge weights from relation features such as $[t_i, t_j, \Delta t, \Delta x, \Delta y, d_{ij}]$, with an additional direction feature for temporal edges. As of 2026-05-15, $t_i$, $t_j$, and $\Delta t$ use window-local normalized time rather than absolute recording time, and learned edge attributes can be standardized with train-fold-only relation-family scalers.
 - The models do learn non-trivial signal, but validation-loss curves remain noisy. Train loss can keep decreasing while validation loss worsens, especially for longer fixed-epoch runs. This motivates early stopping and careful reporting of training stability.
 - On focused 3-class Table-6 valence subject-kfold checks, 3-layer GNN v2 is the best v2 depth tested (`balanced_accuracy=0.5285`), ahead of 1, 5, and 10 layers. This justifies making 3 layers the current default.
 - Weighted `GCNConv` slightly outperforms unweighted `GCNConv` and unweighted `GATConv` in the v2 architecture check (`0.5107` vs about `0.496`). The learned edge weights appear useful but not yet a large breakthrough.

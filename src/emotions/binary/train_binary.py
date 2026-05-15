@@ -48,6 +48,11 @@ from emotions.common.dataset_config import (
     resolve_min_samples_per_window,
     sync_gnn_in_channels,
 )
+from emotions.common.edge_scaling import (
+    EdgeScalerDict,
+    apply_edge_feature_scalers,
+    fit_edge_feature_scalers,
+)
 from emotions.train_baseline import build_tabular_samples, samples_to_xy
 from emotions.utils import (
     Logger,
@@ -257,6 +262,7 @@ def build_binary_graph_subset(
     target_column: str,
     threshold_value: float,
     scaler: StandardScaler | None = None,
+    edge_scalers: EdgeScalerDict | None = None,
 ) -> List[Any]:
     """Build a list of graphs with binary targets and optional standardized features."""
     graphs = []
@@ -278,6 +284,7 @@ def build_binary_graph_subset(
         if scaler is not None:
             x_scaled = scaler.transform(data["node"].x.detach().cpu().numpy())
             data["node"].x = torch.tensor(x_scaled, dtype=torch.float32)
+        apply_edge_feature_scalers(data, edge_scalers)
         graphs.append(data)
     return graphs
 
@@ -515,12 +522,18 @@ def train_gnn_fold(
         scaler = fit_graph_feature_scaler(dataset, train_idx)
         joblib.dump(scaler, os.path.join(fold_dir, "gnn_feature_scaler.pkl"))
 
+    edge_scalers: EdgeScalerDict | None = None
+    if bool(config["dataset"].get("standardize_edge_features", False)):
+        edge_scalers = fit_edge_feature_scalers(dataset=dataset, train_idx=train_idx)
+        joblib.dump(edge_scalers, os.path.join(fold_dir, "gnn_edge_feature_scalers.pkl"))
+
     train_graphs = build_binary_graph_subset(
         dataset=dataset,
         indices=train_idx,
         target_column=target_column,
         threshold_value=threshold_value,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
     val_graphs = build_binary_graph_subset(
         dataset=dataset,
@@ -528,6 +541,7 @@ def train_gnn_fold(
         target_column=target_column,
         threshold_value=threshold_value,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
     test_graphs = build_binary_graph_subset(
         dataset=dataset,
@@ -535,6 +549,7 @@ def train_gnn_fold(
         target_column=target_column,
         threshold_value=threshold_value,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
 
     def _run_one_attempt(*, safe_loader_mode: bool) -> Dict[str, Any]:

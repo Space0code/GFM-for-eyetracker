@@ -38,6 +38,7 @@ dataset:
   use_edge_weights: true  # Whether to use edge weights in GNN layers (requires conv_type that supports it)
   graph_version: v2
   edge_weight_mode: learned_signed
+  use_relative_time: true
   use_distance_avg: true
   use_fixation_duration: true
   use_delta_distance_edge_feature: true
@@ -47,6 +48,7 @@ dataset:
   use_cache: false
   dropping_emotion_threshold: -1  # Drop samples where all emotions <= this value (-1 to disable)
   standardize_features: true  # StandardScaler fitted on train split only
+  standardize_edge_features: true  # StandardScaler fitted on train split edge attributes only
   target_aggregation: mean  # Use the same aggregation for GNN and baselines
   feature_columns: ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
   dropna_columns: ["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "subject", "recording"]

@@ -15,7 +15,12 @@ from tqdm import tqdm
 
 from emotions.baseline_model import get_baseline_by_name
 from data.data import clean_dataset
-from data.hci_signals import feature_interpolation_columns, prepare_hci_eye_tracking_signals
+from data.hci_signals import (
+    TIME_WINDOW_NORMALIZED_COLUMN,
+    feature_interpolation_columns,
+    prepare_hci_eye_tracking_signals,
+    raw_signal_feature_columns,
+)
 
 
 class TabularWindowSample:
@@ -113,6 +118,9 @@ def aggregate_window(
     for col in ['confidence-gaze-left', 'confidence-gaze-right']:
         if col in window_df.columns:
             feats[f'{col}_mean'] = window_df[col].mean()
+
+    if TIME_WINDOW_NORMALIZED_COLUMN in window_df.columns:
+        feats[f"{TIME_WINDOW_NORMALIZED_COLUMN}_mean"] = window_df[TIME_WINDOW_NORMALIZED_COLUMN].mean()
     
     # Target labels
     if target_columns is None:
@@ -200,6 +208,8 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         raise ValueError("window_overlap must be in [0, 1).")
     if min_samples_per_window <= 0:
         raise ValueError("min_samples_per_window must be > 0.")
+    if window_length <= 0:
+        raise ValueError("window_length must be > 0.")
     feature_columns = feature_columns or [
         "x-avg",
         "y-avg",
@@ -223,7 +233,7 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             return df.reset_index(drop=True)
 
         df = prepare_hci_eye_tracking_signals(df.sort_values("time-rel-seconds").reset_index(drop=True))
-        required_clean_cols = ["time-rel-seconds"] + feature_columns
+        required_clean_cols = ["time-rel-seconds"] + raw_signal_feature_columns(feature_columns)
         missing_required = [col for col in required_clean_cols if col not in df.columns]
         if not missing_required:
             df = clean_dataset(
@@ -288,7 +298,9 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             if len(group_df) == 0:
                 continue
 
-            missing_features = [col for col in feature_columns if col not in group_df.columns]
+            missing_features = [
+                col for col in raw_signal_feature_columns(feature_columns) if col not in group_df.columns
+            ]
             if missing_features:
                 raise ValueError(f"Missing feature columns in group {(subject, recording)}: {missing_features}")
             
@@ -302,9 +314,13 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                     continue
             
             for window_slice in _iter_window_slices(group_df):
-                window_data = group_df.iloc[window_slice]
+                window_data = group_df.iloc[window_slice].copy()
                 if len(window_data) < min_samples_per_window:
                     continue
+                if TIME_WINDOW_NORMALIZED_COLUMN in feature_columns:
+                    window_data[TIME_WINDOW_NORMALIZED_COLUMN] = (
+                        window_data["time-rel-seconds"] - window_data["time-rel-seconds"].iloc[0]
+                    ) / float(window_length)
 
                 agg = aggregate_window(
                     window_data,
@@ -345,9 +361,13 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
             else:
                 subject, recording = parse_subject_recording_from_name(str(fpath))
             for window_slice in _iter_window_slices(df):
-                window_data = df.iloc[window_slice]
+                window_data = df.iloc[window_slice].copy()
                 if len(window_data) < min_samples_per_window:
                     continue
+                if TIME_WINDOW_NORMALIZED_COLUMN in feature_columns:
+                    window_data[TIME_WINDOW_NORMALIZED_COLUMN] = (
+                        window_data["time-rel-seconds"] - window_data["time-rel-seconds"].iloc[0]
+                    ) / float(window_length)
 
                 agg = aggregate_window(
                     window_data,

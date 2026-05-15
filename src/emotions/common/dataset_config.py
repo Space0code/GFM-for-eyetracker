@@ -28,6 +28,7 @@ def resolve_feature_columns(dataset_cfg: Mapping[str, Any]) -> list[str]:
         [str(column) for column in raw],
         use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
         use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
+        use_relative_time=bool(dataset_cfg.get("use_relative_time", False)),
     )
 
 
@@ -117,6 +118,7 @@ def build_graph_dataset_kwargs(
         "target_aggregation": dataset_cfg.get("target_aggregation", "mean"),
         "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", True)),
         "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", True)),
+        "use_relative_time": bool(dataset_cfg.get("use_relative_time", False)),
         "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
         "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
     }

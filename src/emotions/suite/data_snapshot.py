@@ -17,6 +17,7 @@ from data.hci_signals import (
     BASE_NODE_FEATURE_COLUMNS,
     feature_interpolation_columns,
     prepare_hci_eye_tracking_signals,
+    raw_signal_feature_columns,
     resolve_optional_hci_feature_columns,
 )
 
@@ -98,7 +99,7 @@ def _clean_group(
         group_df.sort_values("time-rel-seconds").reset_index(drop=True)
     )
 
-    required_clean_cols = ["time-rel-seconds"] + feature_columns
+    required_clean_cols = ["time-rel-seconds"] + raw_signal_feature_columns(feature_columns)
     missing_required = [col for col in required_clean_cols if col not in group_df.columns]
     if missing_required:
         raise ValueError(f"Missing required signal columns for cleaning: {missing_required}")
@@ -184,12 +185,14 @@ def _dataset_affecting_cache_payload(dataset_cfg: Dict[str, Any]) -> Dict[str, A
         dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
         use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
         use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
+        use_relative_time=bool(dataset_cfg.get("use_relative_time", False)),
     )
 
     return {
         "feature_columns": _normalize_sequence_for_key(feature_columns),
         "use_distance_avg": bool(dataset_cfg.get("use_distance_avg", True)),
         "use_fixation_duration": bool(dataset_cfg.get("use_fixation_duration", True)),
+        "use_relative_time": bool(dataset_cfg.get("use_relative_time", False)),
         "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
         "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
         "dropna_columns": _normalize_sequence_for_key(dataset_cfg.get("dropna_columns")),
@@ -399,6 +402,7 @@ def build_clean_snapshot_dataframe(
         dataset_cfg.get("feature_columns") or DEFAULT_FEATURE_COLUMNS,
         use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
         use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
+        use_relative_time=bool(dataset_cfg.get("use_relative_time", False)),
     )
     dropna_columns = dataset_cfg.get("dropna_columns")
     dropping_threshold = float(dataset_cfg.get("dropping_emotion_threshold", -np.inf))

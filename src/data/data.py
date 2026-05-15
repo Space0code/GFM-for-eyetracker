@@ -15,8 +15,10 @@ from torch_geometric.data import Data, HeteroData
 from data.hci_signals import (
     DISTANCE_AVG_COLUMN,
     FIXATION_INDEX_COLUMN,
+    TIME_WINDOW_NORMALIZED_COLUMN,
     feature_interpolation_columns,
     prepare_hci_eye_tracking_signals,
+    raw_signal_feature_columns,
     resolve_optional_hci_feature_columns,
 )
 
@@ -196,6 +198,7 @@ class SpacioTemporalDataset(Dataset):
             target_aggregation: str = "mean",
             use_distance_avg: bool = True,
             use_fixation_duration: bool = True,
+            use_relative_time: bool = False,
             use_delta_distance_edge_feature: bool = True,
             use_fixation_edges: bool = True):
         """
@@ -252,12 +255,14 @@ class SpacioTemporalDataset(Dataset):
         self.dropping_emotion_threshold = dropping_emotion_threshold
         self.use_distance_avg = bool(use_distance_avg)
         self.use_fixation_duration = bool(use_fixation_duration)
+        self.use_relative_time = bool(use_relative_time)
         self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
         self.use_fixation_edges = bool(use_fixation_edges)
         self.feature_columns = resolve_optional_hci_feature_columns(
             feature_columns,
             use_distance_avg=self.use_distance_avg,
             use_fixation_duration=self.use_fixation_duration,
+            use_relative_time=self.use_relative_time,
         )
         self.target_columns = target_columns
         self.target_aggregation = target_aggregation
@@ -405,6 +410,7 @@ class SpacioTemporalDataset(Dataset):
         config_str += (
             f"_usedistavg={self.use_distance_avg}"
             f"_usefixdur={self.use_fixation_duration}"
+            f"_usereltime={self.use_relative_time}"
             f"_usedeltadistedge={self.use_delta_distance_edge_feature}"
             f"_usefixedges={self.use_fixation_edges}"
         )
@@ -437,6 +443,7 @@ class SpacioTemporalDataset(Dataset):
                     'feature_columns': self.feature_columns,
                     'use_distance_avg': self.use_distance_avg,
                     'use_fixation_duration': self.use_fixation_duration,
+                    'use_relative_time': self.use_relative_time,
                     'use_delta_distance_edge_feature': self.use_delta_distance_edge_feature,
                     'use_fixation_edges': self.use_fixation_edges,
                 }, f)
@@ -469,7 +476,7 @@ class SpacioTemporalDataset(Dataset):
             return df
 
         df = prepare_hci_eye_tracking_signals(df)
-        required_clean_cols = ["time-rel-seconds"] + self.feature_columns
+        required_clean_cols = ["time-rel-seconds"] + raw_signal_feature_columns(self.feature_columns)
         df = clean_dataset(
             df,
             required_cols=required_clean_cols,
@@ -543,10 +550,18 @@ class SpacioTemporalDataset(Dataset):
         feature_cols = self.feature_columns
         df_window = df.loc[window_slice, :]
         n = len(df_window)
-        t = torch.tensor(df_window["time-rel-seconds"].values, dtype=torch.float32)
+        t_raw = torch.tensor(df_window["time-rel-seconds"].values, dtype=torch.float32)
+        if self.window_length <= 0:
+            raise ValueError("window_length must be > 0 to derive window-local time.")
+        t_window = (t_raw - t_raw[0]) / float(self.window_length)
 
         #### node features matrix X
-        X = torch.tensor(df_window[feature_cols].values, dtype=torch.float32)
+        if TIME_WINDOW_NORMALIZED_COLUMN in feature_cols:
+            df_features = df_window.copy()
+            df_features[TIME_WINDOW_NORMALIZED_COLUMN] = t_window.numpy()
+        else:
+            df_features = df_window
+        X = torch.tensor(df_features[feature_cols].values, dtype=torch.float32)
 
         # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
         if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
@@ -574,13 +589,13 @@ class SpacioTemporalDataset(Dataset):
         def build_edge_features(edge_index: torch.Tensor, direction: float | None = None) -> torch.Tensor:
             """Build relation features for learned edge-weight MLPs."""
             src_idx, dst_idx = edge_index[0], edge_index[1]
-            delta_t = t[dst_idx] - t[src_idx]
+            delta_t = t_window[dst_idx] - t_window[src_idx]
             delta_x = x_values[dst_idx] - x_values[src_idx]
             delta_y = y_values[dst_idx] - y_values[src_idx]
             distance = torch.sqrt(delta_x.square() + delta_y.square())
             features = [
-                t[src_idx],
-                t[dst_idx],
+                t_window[src_idx],
+                t_window[dst_idx],
                 delta_t,
                 delta_x,
                 delta_y,
@@ -657,7 +672,7 @@ class SpacioTemporalDataset(Dataset):
         edge_index_temporal = torch.stack([src, dst], dim=0)  # [2, E]
         if self.use_edge_weights:
             src, dst = edge_index_temporal[0], edge_index_temporal[1]
-            df_temporal = (t[dst] - t[src]).abs()
+            df_temporal = (t_raw[dst] - t_raw[src]).abs()
             w_temporal = torch.exp(-df_temporal / self.tau)  # shape [E]
 
         if self.graph_version == "v2":
@@ -687,7 +702,7 @@ class SpacioTemporalDataset(Dataset):
         edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
         if self.use_edge_weights:
             src, dst = edge_index_spatial[0], edge_index_spatial[1]
-            df_spatial = (t[dst] - t[src]).abs()
+            df_spatial = (t_raw[dst] - t_raw[src]).abs()
             w_spatial = torch.exp(-df_spatial / self.tau)  # shape [E]
 
         data = HeteroData()

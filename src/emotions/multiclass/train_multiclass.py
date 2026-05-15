@@ -55,6 +55,11 @@ from emotions.common.dataset_config import (
     resolve_min_samples_per_window,
     sync_gnn_in_channels,
 )
+from emotions.common.edge_scaling import (
+    EdgeScalerDict,
+    apply_edge_feature_scalers,
+    fit_edge_feature_scalers,
+)
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN, MulticlassSpatioTemporalGNNV1
@@ -474,6 +479,7 @@ def _build_graph_subset(
     fold_context: Dict[str, Any],
     class_to_index: Dict[int, int],
     scaler: StandardScaler | None,
+    edge_scalers: EdgeScalerDict | None,
 ) -> List[Any]:
     graphs: List[Any] = []
     for idx in indices:
@@ -505,6 +511,7 @@ def _build_graph_subset(
         if scaler is not None:
             x_scaled = scaler.transform(graph["node"].x.detach().cpu().numpy())
             graph["node"].x = torch.tensor(x_scaled, dtype=torch.float32)
+        apply_edge_feature_scalers(graph, edge_scalers)
 
         graphs.append(graph)
 
@@ -692,6 +699,11 @@ def _train_gnn_fold(
         scaler = _fit_graph_feature_scaler(dataset=dataset, train_idx=train_idx)
         joblib.dump(scaler, os.path.join(fold_dir, "gnn_feature_scaler.pkl"))
 
+    edge_scalers: EdgeScalerDict | None = None
+    if bool(config["dataset"].get("standardize_edge_features", False)):
+        edge_scalers = fit_edge_feature_scalers(dataset=dataset, train_idx=train_idx)
+        joblib.dump(edge_scalers, os.path.join(fold_dir, "gnn_edge_feature_scalers.pkl"))
+
     train_graphs = _build_graph_subset(
         dataset=dataset,
         indices=train_idx,
@@ -699,6 +711,7 @@ def _train_gnn_fold(
         fold_context=fold_context,
         class_to_index=class_to_index,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
     val_graphs = _build_graph_subset(
         dataset=dataset,
@@ -707,6 +720,7 @@ def _train_gnn_fold(
         fold_context=fold_context,
         class_to_index=class_to_index,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
     test_graphs = _build_graph_subset(
         dataset=dataset,
@@ -715,6 +729,7 @@ def _train_gnn_fold(
         fold_context=fold_context,
         class_to_index=class_to_index,
         scaler=scaler,
+        edge_scalers=edge_scalers,
     )
 
     train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)

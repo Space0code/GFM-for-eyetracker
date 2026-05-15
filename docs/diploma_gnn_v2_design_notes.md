@@ -77,6 +77,7 @@ vector can contain the following features:
 
 $ x_i =
 [
+t_i^{rel},
 x_i^{gaze},
 y_i^{gaze},
 p_i^{left},
@@ -87,14 +88,18 @@ f_i^{dur}
 
 where:
 
+- $t_i^{rel}$ is window-local normalized time, computed as
+  $(t_i - t_0) / T_{window}$ from the configured window length;
 - $x_i^{gaze}$ and $y_i^{gaze}$ are average gaze coordinates;
 - $p_i^{left}$ and $p_i^{right}$ are left and right pupil sizes;
 - $d_i^{avg}$ is the average eye-tracker-to-eyes distance;
 - $f_i^{dur}$ is fixation duration for the fixation containing the sample.
 
-The first four features are the core node features. The distance and fixation
-duration features are optional and controlled through configuration flags:
+The gaze and pupil features are the core signal features. Relative time,
+distance, and fixation duration are optional and controlled through
+configuration flags:
 
+- `use_relative_time`;
 - `use_distance_avg`;
 - `use_fixation_duration`.
 
@@ -250,7 +255,8 @@ s_{ij}
 
 where:
 
-- $t_i$ and $t_j$ are timestamps;
+- $t_i$ and $t_j$ are window-local normalized times, using the same values as
+  the corresponding source and target node features;
 - $\Delta t_{ij} = t_j - t_i$;
 - $\Delta x_{ij} = x_j - x_i$;
 - $\Delta y_{ij} = y_j - y_i$;
@@ -258,6 +264,10 @@ where:
 
 For spatial and fixation edges, this base 6-dimensional vector is sufficient
 when `delta_distance` is disabled.
+
+Absolute recording time is not used in these learned edge features. This avoids
+leaking where a window occurred in the recording and keeps shorter boundary
+windows from being stretched to the same normalized duration as full windows.
 
 ### 5.2 Temporal Direction Feature
 
@@ -343,6 +353,11 @@ preserving the sign of each edge.
 
 In the thesis, this can be motivated as a compromise between expressive learned
 relation weighting and numerical stability.
+
+Before the edge-weight MLPs, learned edge attributes can additionally be
+standardized with train-fold-only `StandardScaler` instances. Temporal
+forward/backward edges share one scaler, spatial and fixation edges use
+separate scalers, and the temporal direction indicator remains unscaled.
 
 ---
 
@@ -522,15 +537,17 @@ that produces $h_G$.
 
 ## 12. Configuration Flags
 
-The newest version is designed so optional distance and fixation components can
-be switched on or off in config files.
+The newest version is designed so optional time, distance, and fixation
+components can be switched on or off in config files.
 
 | Flag | Component controlled |
 |---|---|
+| `use_relative_time` | appends `time-window-normalized` to node and baseline features |
 | `use_distance_avg` | appends `distance-avg` to node features |
 | `use_fixation_duration` | appends `fixation-duration` to node features |
 | `use_delta_distance_edge_feature` | appends $\Delta d^{avg}$ to learned edge features |
 | `use_fixation_edges` | adds the `fixation` relation |
+| `standardize_edge_features` | standardizes learned edge attributes using train-fold scalers |
 | `use_edge_weights` | enables edge weights in supported GNN convolutions |
 | `edge_weight_mode` | chooses handcrafted or learned signed edge weights |
 | `relation_pooling` | chooses relation fusion mode, currently MLP by default |

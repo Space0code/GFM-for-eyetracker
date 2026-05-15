@@ -54,6 +54,11 @@ from emotions.common.dataset_config import (
     resolve_min_samples_per_window,
     sync_gnn_in_channels,
 )
+from emotions.common.edge_scaling import (
+    EdgeScalerDict,
+    apply_edge_feature_scalers,
+    fit_edge_feature_scalers,
+)
 from emotions.baseline_model import get_baseline_by_name
 from emotions.model import SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
 from emotions.metrics import compute_metrics
@@ -120,6 +125,7 @@ def _build_graph_subset(
     indices: np.ndarray,
     target_column: str,
     scaler: StandardScaler | None,
+    edge_scalers: EdgeScalerDict | None,
 ) -> List[Any]:
     graphs: List[Any] = []
     for idx in indices:
@@ -134,6 +140,7 @@ def _build_graph_subset(
         if scaler is not None:
             x_scaled = scaler.transform(graph["node"].x.detach().cpu().numpy())
             graph["node"].x = torch.tensor(x_scaled, dtype=torch.float32)
+        apply_edge_feature_scalers(graph, edge_scalers)
 
         graphs.append(graph)
     return graphs
@@ -311,9 +318,14 @@ def _train_gnn_fold(
         scaler = _fit_graph_feature_scaler(dataset=dataset, train_idx=train_idx)
         joblib.dump(scaler, os.path.join(fold_dir, "gnn_feature_scaler.pkl"))
 
-    train_graphs = _build_graph_subset(dataset, train_idx, target_column, scaler)
-    val_graphs = _build_graph_subset(dataset, val_idx, target_column, scaler)
-    test_graphs = _build_graph_subset(dataset, test_idx, target_column, scaler)
+    edge_scalers: EdgeScalerDict | None = None
+    if bool(config["dataset"].get("standardize_edge_features", False)):
+        edge_scalers = fit_edge_feature_scalers(dataset=dataset, train_idx=train_idx)
+        joblib.dump(edge_scalers, os.path.join(fold_dir, "gnn_edge_feature_scalers.pkl"))
+
+    train_graphs = _build_graph_subset(dataset, train_idx, target_column, scaler, edge_scalers)
+    val_graphs = _build_graph_subset(dataset, val_idx, target_column, scaler, edge_scalers)
+    test_graphs = _build_graph_subset(dataset, test_idx, target_column, scaler, edge_scalers)
 
     train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)
     val_loader = DataLoader(val_graphs, shuffle=False, **loader_kwargs)

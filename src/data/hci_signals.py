@@ -24,6 +24,7 @@ DISTANCE_AVG_COLUMN = "distance-avg"
 FIXATION_DURATION_COLUMN = "fixation-duration"
 FIXATION_INDEX_COLUMN = "fixation-index"
 FIXATION_COLUMN = "fixation"
+TIME_WINDOW_NORMALIZED_COLUMN = "time-window-normalized"
 DISTANCE_SOURCE_COLUMNS = ["distance-left", "distance-right"]
 
 
@@ -32,9 +33,12 @@ def resolve_optional_hci_feature_columns(
     *,
     use_distance_avg: bool = True,
     use_fixation_duration: bool = True,
+    use_relative_time: bool = False,
 ) -> list[str]:
     """Resolve node feature columns with optional HCI signals appended once."""
     resolved = list(feature_columns) if feature_columns is not None else list(BASE_NODE_FEATURE_COLUMNS)
+    if use_relative_time and TIME_WINDOW_NORMALIZED_COLUMN not in resolved:
+        resolved.append(TIME_WINDOW_NORMALIZED_COLUMN)
     if use_distance_avg and DISTANCE_AVG_COLUMN not in resolved:
         resolved.append(DISTANCE_AVG_COLUMN)
     if use_fixation_duration and FIXATION_DURATION_COLUMN not in resolved:
@@ -44,7 +48,16 @@ def resolve_optional_hci_feature_columns(
 
 def feature_interpolation_columns(feature_columns: Sequence[str]) -> list[str]:
     """Return feature columns that should be linearly interpolated."""
-    return [column for column in feature_columns if column != FIXATION_DURATION_COLUMN]
+    return [
+        column
+        for column in feature_columns
+        if column not in {FIXATION_DURATION_COLUMN, TIME_WINDOW_NORMALIZED_COLUMN}
+    ]
+
+
+def raw_signal_feature_columns(feature_columns: Sequence[str]) -> list[str]:
+    """Return feature columns that must exist before window-local derivation."""
+    return [column for column in feature_columns if column != TIME_WINDOW_NORMALIZED_COLUMN]
 
 
 def _coerce_fixation_bool(series: pd.Series) -> pd.Series:
