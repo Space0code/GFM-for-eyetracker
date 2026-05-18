@@ -16,16 +16,18 @@ suite:
 quick_comparison:
   # Select one or both Table-6 tasks for the v1/v2 quick runner:
   #   table6_tasks: [arousal]
-  table6_tasks: [valence]
+  table6_tasks: [valence, arousal]
   #   table6_tasks: [arousal, valence]
 
 global_overrides:
   cross_validation:
     strategies:
-      - "subject_kfold"
+      # - "subject_kfold"
       # - "recording_kfold"
+      - subject_loo
+      - recording_loo
     n_splits: 5
-    val_size: 1
+    val_size: 2
     random_state: 42
   gnn:
     model:
@@ -51,7 +53,7 @@ global_overrides:
       early_stopping_min_delta: 0.0
       early_stopping_restore_best: true
       learning_rate: 0.00005
-      num_epochs: 350
+      num_epochs: 500
       batch_size: 256
       num_workers: 4
   dataset:
