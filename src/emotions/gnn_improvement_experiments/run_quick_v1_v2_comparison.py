@@ -199,15 +199,24 @@ def parse_args() -> argparse.Namespace:
 
 
 class _TeeStream:
-    """Write console output to both the original stream and a log file."""
+    """Write console output to both the original stream and a timestamped log file."""
 
     def __init__(self, stream: TextIO, log_handle: TextIO) -> None:
         self.stream = stream
         self.log_handle = log_handle
+        self._log_at_line_start = True
+
+    def _write_log(self, message: str) -> None:
+        """Write message fragments with one HH:MM:SS prefix per log row."""
+        for chunk in message.splitlines(keepends=True):
+            if self._log_at_line_start:
+                self.log_handle.write(f"[{datetime.now().strftime('%H:%M:%S')}] ")
+            self.log_handle.write(chunk)
+            self._log_at_line_start = chunk.endswith("\n")
 
     def write(self, message: str) -> int:
         self.stream.write(message)
-        self.log_handle.write(message)
+        self._write_log(message)
         self.log_handle.flush()
         return len(message)
 
