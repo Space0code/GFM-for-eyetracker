@@ -41,6 +41,7 @@ recent work, plans, or decisions.
 - Normalize confusion-matrix rows to per-class percentages, use fixed color scale `[0.0, 1.0]`, and use the `Blues` color scheme for heatmaps.
 - For questions about recent experiments, trainings, models, or data, check the latest git commits and explicitly state the assumption that the user likely means the most recently modified experiment context.
 - When making git commits, keep them granular by functionality or goal and write high-quality commit messages that are clear but not overly wordy.
+- If a user prompt, comment, or question appears strange, nonsensical, or based on a possibly mistaken premise, say so directly and ask what was meant instead of forcing a sensible interpretation.
 
 ## Current Data Assumptions
 
