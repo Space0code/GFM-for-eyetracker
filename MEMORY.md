@@ -85,6 +85,7 @@ recent work, plans, or decisions.
 ## Current Config Context
 
 - Quick v1/v2 configs live under `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`.
+- Thesis-facing implementation notes for the frozen `GazeMAE_MLP` transfer baseline are in `docs/appendix/gazemae_mlp_baseline.md`; use this as the detailed code-grounded source when writing the diploma comparison section.
 - The quick runner defaults to `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`.
 - Shared architecture settings, especially `gnn.model.conv_type`, live in the wrapper YAML; Python variant overrides should only select variant identity.
 - `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
