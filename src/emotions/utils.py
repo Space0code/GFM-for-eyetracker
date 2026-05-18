@@ -27,19 +27,11 @@ class Logger:
     def __init__(self, log_file: str):
         self.terminal = sys.stdout
         self.log = open(log_file, 'a')
-        self._log_at_line_start = True
-
-    def _write_log(self, message: str) -> None:
-        """Write message fragments with one HH:MM:SS prefix per log row."""
-        for chunk in message.splitlines(keepends=True):
-            if self._log_at_line_start:
-                self.log.write(f"[{datetime.now().strftime('%H:%M:%S')}] ")
-            self.log.write(chunk)
-            self._log_at_line_start = chunk.endswith("\n")
+        self.log_writer = TimestampedLineWriter(self.log)
     
     def write(self, message: str):
         self.terminal.write(message)
-        self._write_log(message)
+        self.log_writer.write(message)
         self.log.flush()
     
     def flush(self):
@@ -48,6 +40,22 @@ class Logger:
     
     def close(self):
         self.log.close()
+
+
+class TimestampedLineWriter:
+    """Write text fragments with one HH:MM:SS prefix per output row."""
+
+    def __init__(self, handle):
+        self.handle = handle
+        self._log_at_line_start = True
+
+    def write(self, message: str) -> None:
+        """Write a possibly partial message, timestamping each new row."""
+        for chunk in message.splitlines(keepends=True):
+            if self._log_at_line_start:
+                self.handle.write(f"[{datetime.now().strftime('%H:%M:%S')}] ")
+            self.handle.write(chunk)
+            self._log_at_line_start = chunk.endswith(("\n", "\r"))
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
