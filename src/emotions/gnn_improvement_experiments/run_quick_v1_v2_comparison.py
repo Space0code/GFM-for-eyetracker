@@ -451,6 +451,33 @@ def build_variant(model_name: str) -> QuickVariant:
 def build_quick_runs(model_names: Sequence[str]) -> List[QuickRun]:
     """Group requested models into the minimum safe set of suite invocations."""
     baseline_names = [name for name in model_names if name in BASELINE_MODELS]
+    gnn_names = [name for name in model_names if name in {"GNN_v1", "GNN_v2"}]
+    if baseline_names and len(gnn_names) == 1:
+        gnn_variant = build_variant(gnn_names[0])
+        return [
+            QuickRun(
+                run_name=f"{gnn_names[0]}_and_Baselines",
+                description=(
+                    f"{gnn_names[0]} and baselines on one shared suite run and aligned CV folds: "
+                    f"{', '.join(baseline_names)}."
+                ),
+                model_names=list(dict.fromkeys([*baseline_names, gnn_names[0]])),
+                summary_model_names={
+                    **{name: name for name in baseline_names},
+                    gnn_names[0]: gnn_variant.summary_model_name,
+                },
+                overrides=merge_many(
+                    gnn_variant.overrides,
+                    {
+                        "global_overrides": {
+                            "run_experiments": {"baselines": True, "gnn": True},
+                            "baselines": {"models": baseline_names},
+                        }
+                    },
+                ),
+            )
+        ]
+
     emitted_baseline_run = False
     runs: List[QuickRun] = []
 

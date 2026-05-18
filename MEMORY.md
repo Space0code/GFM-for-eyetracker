@@ -80,6 +80,7 @@ recent work, plans, or decisions.
 - 2026-05-13 arousal low-vs-high with low-class downsampling (`results/quick_v1_v2_comparison/2026-05-13_08-48-31`): raw `{0,2}` -> encoded `{0,1}`, counts before `{0: 2360, 2: 928}`, after `{0: 928, 2: 928}`, balanced accuracy `GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`.
 - 2026-05-13 low/high Table-6 valence 7-fold subject-kfold (`results/quick_v1_v2_comparison/2026-05-13_09-36-39`): balanced accuracy `GNN_v2=0.6646`, `GNN_v1=0.6473`, `LightGBM=0.6104`, `MLP=0.6003`.
 - 2026-05-13 label-noise proxy analysis (`results/label_noise_analysis/2026-05-13_table6_self_report_alignment`): mismatch between emotion-id-derived Table-6 targets and participant self-report rating buckets was arousal 3-class `48.6%`, arousal low/high `29.7%`, valence 3-class `27.5%`, valence low/high `3.3%`; this supports using low/high valence as the cleanest current target.
+- 2026-05-18 Table-6 valence 3-class quick comparison with newly implemented self-contained `GazeMAE_MLP` (`results/quick_v1_v2_comparison/2026-05-18_12-06-36`), requested models only and aligned baseline/GNN subject folds in one suite invocation: balanced accuracy `GazeMAE_MLP=0.5060`, `GNN_v2=0.5026`, `Random=0.3355`, `Majority=0.3333`. The run completed end-to-end after fixing the quick runner/trainer fold alignment path; GazeMAE embeddings loaded from cache and GNN graph dataset built successfully.
 
 ## Current Config Context
 
@@ -98,7 +99,7 @@ recent work, plans, or decisions.
 ## Open Plans
 
 - Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
-- Run full comparable `GazeMAE_MLP` quick comparisons for 3-class Table-6 and low/high Table-6 targets after the 2026-05-18 smoke tests. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
+- Run full comparable `GazeMAE_MLP` quick comparison for low/high Table-6 targets after the 2026-05-18 3-class valence run. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
 - Convergence follow-up from 2026-05-13 mentor meeting: run more than 3 folds, plot train/val/test loss per fold and/or aggregated with uncertainty bands, reduce LR by 10x or 100x and train longer; if still unstable, try DropEdge, PairNorm, or GraphNorm.
 - Preliminarily test the default extended GNN v2 with `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges against the old core-feature version via ablations.
 - Diploma writing decision from 2026-05-13: current RV/PV research questions are acceptable for now, may later be shortened/merged, and explicit hypotheses are not needed.

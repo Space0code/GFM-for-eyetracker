@@ -485,3 +485,43 @@ Parity and smoke checks:
 - small subject-kfold quick run with `GazeMAE_MLP,MLP` completed end-to-end
   using only local model assets;
 - rerunning the same small setup loaded cached GazeMAE embeddings directly.
+
+### 2026-05-18: Full 3-class valence quick comparison with GazeMAE_MLP
+
+Ran the quick comparison script end-to-end as a user-facing check of the new
+self-contained `GazeMAE_MLP` baseline:
+
+```bash
+conda run -n gfm python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
+  --models Random,Majority,GNN_v2,GazeMAE_MLP
+```
+
+Config/run context:
+
+- base wrapper:
+  `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`;
+- selected task from wrapper: Table-6 valence 3-class;
+- CV: `subject_kfold`, `n_splits=5`, `val_size=1`, seed `42`;
+- effective models: `Random`, `Majority`, `GazeMAE_MLP`, `GNN_v2`;
+- output directory: `results/quick_v1_v2_comparison/2026-05-18_12-06-36`;
+- implementation note: the first attempt completed but used separate baseline
+  and GNN suite invocations, which produced different subject folds. The quick
+  runner and multiclass trainer were fixed so this final run executes all four
+  requested models in one suite invocation with aligned baseline/GNN fold group
+  identities.
+
+Standard aggregated metrics from `quick_comparison_summary.csv`:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Weighted F1 | AUC | Loss |
+|---|---:|---:|---:|---:|---:|---:|
+| GazeMAE_MLP | 0.5125 | 0.5060 | 0.5016 | 0.5044 | 0.6849 | 1.2684 |
+| GNN_v2 | 0.5047 | 0.5026 | 0.4930 | 0.4951 | 0.6931 | 1.0358 |
+| Random | 0.3363 | 0.3355 | 0.3335 | 0.3384 | 0.5016 | 23.9214 |
+| Majority | 0.3516 | 0.3333 | 0.1731 | 0.1839 | 0.5000 | 23.3715 |
+
+The final aligned run completed without further errors. The GazeMAE path loaded
+5,034 cached embedding samples, and the GNN path built 5,034 graph samples.
+GNN_v2 completed all five folds with early stopping; best epochs were 21, 7,
+39, 61, and 11. Command-level outputs include the ranking plot, test-loss plot,
+label-distribution tables/plots, training-history CSV/plots, per-fold loss
+plots for GNN_v2 and GazeMAE_MLP, and combined confusion matrices.
