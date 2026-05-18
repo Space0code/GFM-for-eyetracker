@@ -464,3 +464,24 @@ Additional checks:
 - rerunning the same small setup with `GazeMAE_MLP` loaded the cached GazeMAE
   embeddings directly, confirming practical cache reuse across timestamped
   quick-comparison output directories.
+
+Follow-up self-contained runtime cleanup: replaced the cross-repo runtime
+dependency on `/home/ppg/eyetracking/gazemae` with a minimal local GazeMAE
+encoder implementation in `src/emotions/gazemae_model.py` and converted
+encoder-only checkpoints in `models/gazemae/`. The converted checkpoints keep
+only encoder and bottleneck state dicts:
+
+- `models/gazemae/pos-i3738-encoder-state.pt`;
+- `models/gazemae/vel-i8528-encoder-state.pt`.
+
+Parity and smoke checks:
+
+- local position encoder matched the original external checkpoint output with
+  `max_abs_diff=0.0` on random `[batch, 2, 1000]` chunks;
+- local velocity encoder matched the original external checkpoint output with
+  `max_abs_diff=0.0` on random `[batch, 2, 1000]` chunks;
+- local embedder smoke produced five 2s chunks and a finite 512-dimensional
+  pooled embedding;
+- small subject-kfold quick run with `GazeMAE_MLP,MLP` completed end-to-end
+  using only local model assets;
+- rerunning the same small setup loaded cached GazeMAE embeddings directly.

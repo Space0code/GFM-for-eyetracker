@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -23,6 +21,7 @@ import torch
 import yaml
 
 from emotions.common.dataset_config import build_tabular_samples_kwargs
+from emotions.gazemae_model import load_gazemae_encoder
 from emotions.train_baseline import TabularWindowSample, build_tabular_samples
 
 
@@ -30,16 +29,19 @@ GAZEMAE_MODEL_NAME = "GazeMAE_MLP"
 GAZEMAE_FEATURE_PREFIX = "gazemae_z_"
 GAZEMAE_FEATURE_DIM = 512
 GAZEMAE_FEATURE_COLUMNS = [f"{GAZEMAE_FEATURE_PREFIX}{idx:03d}" for idx in range(GAZEMAE_FEATURE_DIM)]
-GAZEMAE_CACHE_VERSION = "gazemae-cache-v2"
+GAZEMAE_CACHE_VERSION = "gazemae-cache-v3"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_GAZEMAE_MODEL_DIR = PROJECT_ROOT / "models" / "gazemae"
+DEFAULT_GAZEMAE_POS_MODEL = DEFAULT_GAZEMAE_MODEL_DIR / "pos-i3738-encoder-state.pt"
+DEFAULT_GAZEMAE_VEL_MODEL = DEFAULT_GAZEMAE_MODEL_DIR / "vel-i8528-encoder-state.pt"
 
 
 @dataclass(frozen=True)
 class GazeMAEConfig:
     """Resolved GazeMAE embedding settings."""
 
-    repo_root: Path = Path("/home/ppg/eyetracking/gazemae")
-    model_pos: Path = Path("/home/ppg/eyetracking/gazemae/models/pos-i3738")
-    model_vel: Path = Path("/home/ppg/eyetracking/gazemae/models/vel-i8528")
+    model_pos: Path = DEFAULT_GAZEMAE_POS_MODEL
+    model_vel: Path = DEFAULT_GAZEMAE_VEL_MODEL
     screen_width: float = 1280.0
     screen_height: float = 800.0
     clip_to_screen: bool = True
@@ -52,6 +54,14 @@ class GazeMAEConfig:
     cache_dir: Path = Path("data/cache/gazemae_embeddings")
 
 
+def _resolve_repo_path(raw_path: Any, default_path: Path) -> Path:
+    """Resolve optional config paths relative to the current repository root."""
+    if raw_path is None:
+        return default_path
+    path = Path(str(raw_path))
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
 def resolve_gazemae_config(raw_cfg: Mapping[str, Any] | None, dataset_cfg: Mapping[str, Any]) -> GazeMAEConfig:
     """Resolve config values with thesis-locked MAHNOB defaults."""
     raw_cfg = raw_cfg or {}
@@ -59,9 +69,8 @@ def resolve_gazemae_config(raw_cfg: Mapping[str, Any] | None, dataset_cfg: Mappi
     if cache_dir is None:
         cache_dir = Path(str(dataset_cfg.get("cache_dir", "data/cache"))) / "gazemae_embeddings"
     return GazeMAEConfig(
-        repo_root=Path(str(raw_cfg.get("repo_root", "/home/ppg/eyetracking/gazemae"))),
-        model_pos=Path(str(raw_cfg.get("model_pos", "/home/ppg/eyetracking/gazemae/models/pos-i3738"))),
-        model_vel=Path(str(raw_cfg.get("model_vel", "/home/ppg/eyetracking/gazemae/models/vel-i8528"))),
+        model_pos=_resolve_repo_path(raw_cfg.get("model_pos"), DEFAULT_GAZEMAE_POS_MODEL),
+        model_vel=_resolve_repo_path(raw_cfg.get("model_vel"), DEFAULT_GAZEMAE_VEL_MODEL),
         screen_width=float(raw_cfg.get("screen_width", 1280)),
         screen_height=float(raw_cfg.get("screen_height", 800)),
         clip_to_screen=bool(raw_cfg.get("clip_to_screen", True)),
@@ -79,37 +88,6 @@ def _resolve_device(device_arg: str) -> torch.device:
     if device_arg == "auto":
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return torch.device(device_arg)
-
-
-def _ensure_gazemae_import_path(repo_root: Path) -> None:
-    module_root = repo_root / "gazemae"
-    if str(module_root) not in sys.path:
-        sys.path.insert(0, str(module_root))
-
-
-def _load_pretrained_network(model_path: Path, device: torch.device) -> torch.nn.Module:
-    if not model_path.exists():
-        raise FileNotFoundError(f"Missing GazeMAE checkpoint: {model_path}")
-
-    with warnings.catch_warnings():
-        source_change_warning = getattr(torch.serialization, "SourceChangeWarning", Warning)
-        warnings.filterwarnings("ignore", category=source_change_warning)
-        try:
-            checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-        except TypeError:
-            checkpoint = torch.load(model_path, map_location=device)
-
-    network = checkpoint.get("network", checkpoint.get("model"))
-    if network is None:
-        raise KeyError(f"GazeMAE checkpoint does not contain 'network' or 'model': {model_path}")
-    state_dict = checkpoint.get("model_state_dict")
-    if state_dict is None:
-        raise KeyError(f"GazeMAE checkpoint missing 'model_state_dict': {model_path}")
-    network.load_state_dict(state_dict)
-    network = network.to(device).eval()
-    for parameter in network.parameters():
-        parameter.requires_grad_(False)
-    return network
 
 
 def _interp_1d(old_x: np.ndarray, old_y: np.ndarray, new_x: np.ndarray) -> np.ndarray:
@@ -168,14 +146,13 @@ class GazeMAEWindowEmbedder:
     def __init__(self, config: GazeMAEConfig, window_seconds: float) -> None:
         if config.chunk_pooling != "mean_std":
             raise ValueError("Only gazemae.chunk_pooling='mean_std' is currently supported.")
-        _ensure_gazemae_import_path(config.repo_root)
         self.config = config
         self.window_seconds = float(window_seconds)
         self.device = _resolve_device(config.device)
         self.target_len = int(round(float(config.target_hz) * self.window_seconds))
         self.chunk_len = int(round(float(config.target_hz) * float(config.chunk_seconds)))
-        self.network_pos = _load_pretrained_network(config.model_pos, device=self.device)
-        self.network_vel = _load_pretrained_network(config.model_vel, device=self.device)
+        self.network_pos = load_gazemae_encoder(config.model_pos, device=self.device)
+        self.network_vel = load_gazemae_encoder(config.model_vel, device=self.device)
 
     def _prepare_chunks(self, window_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         required = ["time-rel-seconds", "x-avg", "y-avg"]
@@ -271,7 +248,6 @@ def _cache_key(
         "dropna_columns": dropna_columns,
         "min_samples_per_window": int(min_samples_per_window),
         "gazemae": {
-            "repo_root": str(config.repo_root),
             "model_pos": _model_file_identity(config.model_pos),
             "model_vel": _model_file_identity(config.model_vel),
             "screen_width": config.screen_width,

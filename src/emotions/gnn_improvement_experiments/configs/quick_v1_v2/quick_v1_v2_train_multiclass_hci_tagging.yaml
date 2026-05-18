@@ -117,9 +117,8 @@ baselines:
       device: auto
 
 gazemae:
-  repo_root: "/home/ppg/eyetracking/gazemae"
-  model_pos: "/home/ppg/eyetracking/gazemae/models/pos-i3738"
-  model_vel: "/home/ppg/eyetracking/gazemae/models/vel-i8528"
+  model_pos: "models/gazemae/pos-i3738-encoder-state.pt"
+  model_vel: "models/gazemae/vel-i8528-encoder-state.pt"
   screen_width: 1280
   screen_height: 800
   clip_to_screen: true
