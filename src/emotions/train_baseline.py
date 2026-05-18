@@ -10,7 +10,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import List, Dict, Any, Tuple, Optional
+from typing import Callable, List, Dict, Any, Tuple, Optional
 from tqdm import tqdm
 
 from emotions.baseline_model import get_baseline_by_name
@@ -179,7 +179,8 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                          experiment_type_column: str = "experiment-type",
                          allowed_experiment_types: Optional[List[str]] = None,
                          label_quality_column: Optional[str] = None,
-                         allowed_label_quality_values: Optional[List[str]] = None) -> List[TabularWindowSample]:
+                         allowed_label_quality_values: Optional[List[str]] = None,
+                         window_feature_builder: Optional[Callable[[pd.DataFrame], Dict[str, float]]] = None) -> List[TabularWindowSample]:
     """Load CSVs and build windowed samples with subject/recording metadata.
     
     Args:
@@ -329,7 +330,10 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 )
 
                 # Separate features and targets
-                features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                if window_feature_builder is None:
+                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                else:
+                    features = window_feature_builder(window_data)
                 targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
 
                 samples.append(TabularWindowSample(features, targets, subject, recording))
@@ -376,7 +380,10 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
                 )
 
                 # Separate features and targets
-                features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                if window_feature_builder is None:
+                    features = {k: v for k, v in agg.items() if k not in resolved_target_cols}
+                else:
+                    features = window_feature_builder(window_data)
                 targets = {k: v for k, v in agg.items() if k in resolved_target_cols}
 
                 samples.append(TabularWindowSample(features, targets, subject, recording))

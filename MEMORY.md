@@ -40,6 +40,7 @@ recent work, plans, or decisions.
 - Keep scripts configurable with sensible defaults; terminal scripts should run as `python <script_name>.py` where feasible and log final arguments at startup.
 - Normalize confusion-matrix rows to per-class percentages, use fixed color scale `[0.0, 1.0]`, and use the `Blues` color scheme for heatmaps.
 - For questions about recent experiments, trainings, models, or data, check the latest git commits and explicitly state the assumption that the user likely means the most recently modified experiment context.
+- When making git commits, keep them granular by functionality or goal and write high-quality commit messages that are clear but not overly wordy.
 
 ## Current Data Assumptions
 
@@ -66,6 +67,7 @@ recent work, plans, or decisions.
 - 2026-05-14 fixation-edge check: current GNN v2 has no exact duplicate edge pairs within any relation, but every sequential same-fixation edge overlaps with the corresponding temporal-forward/backward edge because `kt >= 1`. Treat this as an intentional multi-relation overlap unless ablations show overemphasis.
 - 2026-05-15 GNN v2 time/edge-scale update: `time-window-normalized = (time_i - time_window_start) / window_length_from_config` is the intended node and baseline time feature; do not use per-window observed min-max normalization or absolute recording time. Learned edge features `t_i`, `t_j`, and `delta_t` use the same window-local normalized time. Active quick configs enable `use_relative_time: true` and `standardize_edge_features: true`; edge scalers are train-fold-only, relation-family-specific, and leave temporal direction unscaled.
 - 2026-05-15 fixation all-to-all check on locally available HCI raw-one-format P1 sections 2/5: 10s windows had ~562 nodes on average; sequential same-fixation edges averaged ~1,015 directed edges/window, while all-to-all same-`fixation-index` edges averaged ~37,006 and reached 228,072 in one window. Treat full same-fixation cliques as likely too dense/dominant unless capped or replaced by fixation meta-nodes/top-k-within-fixation.
+- 2026-05-18 GazeMAE transfer baseline decision: use frozen pretrained GazeMAE position and velocity encoders from `/home/ppg/eyetracking/gazemae`, split each 10s MAHNOB window into 2s chunks at 500 Hz, pool chunk embeddings with mean+std into 512 features, and train only a PyTorch MLP head. Clip raw MAHNOB coordinates to the actual screen resolution `1280x800` with no scaling and no mean normalization; do not scale `y` to 1024 because that would distort position and velocity magnitudes.
 
 ## Recent High-Signal Results
 
@@ -86,13 +88,15 @@ recent work, plans, or decisions.
 - `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
 - Quick comparison supports multiple comma-separated CV strategies, class-balance diagnostics, multiclass training-history aggregation, task selection through `quick_comparison.table6_tasks`, and held-out test-loss plots.
 - Quick comparison training-progress loss plots include an aggregated split-panel plot, an aggregated combined train/validation/test plot, and per-fold combined loss plots under `plots/losses/`; aggregated loss plots use darker `mean ± std` bands and lighter min-max bands.
+- `GazeMAE_MLP` is available in the quick comparison runner as a baseline model alias (`gazemae`, `gazemae_mlp`, `GazeMAE_MLP`). It uses the same suite snapshots, CV splits, Table-6 mappings, summaries, label-distribution tables, loss plots, and confusion-matrix plotting as other multiclass baselines. The Table-6 low/high wrapper lives at `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_low_high.yaml`.
+- GazeMAE embedding cache reuse is intentionally stable across timestamped quick/suite runs: when a suite snapshot manifest is available, the cache key uses `snapshot_hash`/`snapshot_cache_key` rather than the generated snapshot CSV path or modification time. The key also includes GazeMAE checkpoint file hashes and preprocessing settings, so embeddings are reused only for identical data/model/preprocessing identities. This was verified with a repeated small quick-comparison run.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
 - 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
 
 ## Open Plans
 
 - Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
-- Add a directly comparable pretrained GazeMAE baseline by freezing the pretrained encoder and training only an MLP head on the same MAHNOB-HCI windows, targets, splits, and metrics. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
+- Run full comparable `GazeMAE_MLP` quick comparisons for 3-class Table-6 and low/high Table-6 targets after the 2026-05-18 smoke tests. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
 - Convergence follow-up from 2026-05-13 mentor meeting: run more than 3 folds, plot train/val/test loss per fold and/or aggregated with uncertainty bands, reduce LR by 10x or 100x and train longer; if still unstable, try DropEdge, PairNorm, or GraphNorm.
 - Preliminarily test the default extended GNN v2 with `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges against the old core-feature version via ablations.
 - Diploma writing decision from 2026-05-13: current RV/PV research questions are acceptable for now, may later be shortened/merged, and explicit hypotheses are not needed.

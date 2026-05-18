@@ -15,7 +15,7 @@ Example:
 
 Useful options:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
-      --models Random,Majority,GNN_v1,GNN_v2,MLP,LightGBM,SVM \
+      --models Random,Majority,GNN_v1,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
       --num-epochs 20 \
       --dry-run
 """
@@ -70,8 +70,8 @@ EXPERIMENT_DISPLAY_NAMES = {
     VALENCE_EXPERIMENT_ID: "Table-6 Valence",
 }
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
-BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP"}
-PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP"]
+BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
+PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "GazeMAE_MLP", "MLP"]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 LOSS_METRIC_COLUMNS = ["train_loss", "val_loss", "test_loss"]
 LOSS_METRIC_STYLES = {
@@ -89,6 +89,11 @@ MODEL_ALIASES = {
     "lightgbm": "LightGBM",
     "lgbm": "LightGBM",
     "mlp": "MLP",
+    "gazemae": "GazeMAE_MLP",
+    "gazemae_mlp": "GazeMAE_MLP",
+    "gazemae-mlp": "GazeMAE_MLP",
+    "gaze_mae": "GazeMAE_MLP",
+    "gaze_mae_mlp": "GazeMAE_MLP",
     "gnn1": "GNN_v1",
     "gnn_v1": "GNN_v1",
     "gnn-v1": "GNN_v1",
@@ -144,7 +149,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=",".join(DEFAULT_MODELS),
         help=(
-            "Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP. "
+            "Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
             "Common lowercase aliases like random, majority, gnn1, gnn2, and lgbm are accepted."
         ),
     )
@@ -1075,14 +1080,14 @@ def _save_label_distribution_outputs(rows: Sequence[Dict[str, Any]], output_dir:
 
 
 def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
-    """Collect available fold-level GNN and MLP training histories."""
+    """Collect available fold-level GNN and MLP-head training histories."""
     records: List[pd.DataFrame] = []
     successful_rows = [row for row in rows if row.get("status") == "success"]
 
     for row in successful_rows:
         model_name = str(row.get("model", ""))
         summary_model_name = str(row.get("summary_model_name", ""))
-        if summary_model_name != "GNN" and model_name != "MLP":
+        if summary_model_name != "GNN" and model_name not in {"MLP", "GazeMAE_MLP"}:
             continue
 
         experiment_id = str(row.get("experiment_id", ""))
@@ -1106,9 +1111,9 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
             if summary_model_name == "GNN":
                 history_path = fold_dir / "gnn_training_history.csv"
                 history_kind = "gnn"
-            elif model_name == "MLP":
-                history_path = fold_dir / "baselines" / "MLP" / "mlp_training_history.csv"
-                history_kind = "mlp"
+            elif model_name in {"MLP", "GazeMAE_MLP"}:
+                history_path = fold_dir / "baselines" / model_name / "mlp_training_history.csv"
+                history_kind = str(model_name).lower()
             else:
                 continue
 
@@ -1182,9 +1187,9 @@ def _load_fold_test_losses(
         if summary_model_name == "GNN":
             prediction_path = fold_dir / "test_predictions.npy"
             target_path = fold_dir / "test_targets.npy"
-        elif model_name == "MLP":
-            prediction_path = fold_dir / "baselines" / "MLP" / "test_predictions.npy"
-            target_path = fold_dir / "baselines" / "MLP" / "test_targets.npy"
+        elif model_name in {"MLP", "GazeMAE_MLP"}:
+            prediction_path = fold_dir / "baselines" / model_name / "test_predictions.npy"
+            target_path = fold_dir / "baselines" / model_name / "test_targets.npy"
         else:
             continue
 

@@ -422,3 +422,45 @@ Main conclusions:
 - long fixed training without early stopping is unstable;
 - low-vs-high valence is much more learnable than arousal;
 - downsampled arousal improves only modestly.
+
+### 2026-05-18: GazeMAE frozen-backbone baseline integration
+
+Implemented `GazeMAE_MLP` as a frozen pretrained GazeMAE position+velocity
+encoder plus trainable PyTorch MLP head. The baseline uses the same suite
+snapshots, windowing, CV splits, labels, metrics, plots, and quick-comparison
+summary flow as other multiclass baselines.
+
+Locked preprocessing decision: clip MAHNOB coordinates to the actual screen
+resolution `1280x800`, with no scaling and no mean normalization. Do not scale
+vertical coordinates to 1024, because this would alter position and velocity
+magnitudes.
+
+Smoke checks:
+
+- synthetic 10s window -> five 2s chunks for position and velocity, final
+  embedding shape `512`;
+- quick dry run with `--models GazeMAE_MLP` generated a baseline-only wrapper;
+- tiny subject-kfold smoke run on `P1`, `P5`, `P8` with `GazeMAE_MLP,MLP`
+  created summary CSVs, label-distribution tables, ranking/test-loss plots,
+  training-history plots, and confusion matrices under `/tmp/gazemae_quick_smoke`.
+
+Follow-up cache improvement: strengthened embedding reuse across quick/suite
+runs by keying GazeMAE cache entries from the stable suite `snapshot_hash` and
+`snapshot_cache_key` when a snapshot manifest is available, instead of the
+timestamped snapshot CSV path. The cache key also includes checkpoint file
+hashes and preprocessing settings, so reuse remains tied to identical data,
+model, and preprocessing identities.
+
+Additional checks:
+
+- two different manifest paths with the same `snapshot_hash` produced the same
+  GazeMAE cache key;
+- changing `snapshot_hash` changed the cache key;
+- `--models GazeMAE_MLP --dry-run` still generated a baseline-only wrapper with
+  `run_experiments.gnn: false`.
+- recheck smoke on a small subject-kfold valence subset with `GazeMAE_MLP,MLP`
+  completed end-to-end, including summary CSVs, loss plots, label-distribution
+  tables, and confusion matrices;
+- rerunning the same small setup with `GazeMAE_MLP` loaded the cached GazeMAE
+  embeddings directly, confirming practical cache reuse across timestamped
+  quick-comparison output directories.

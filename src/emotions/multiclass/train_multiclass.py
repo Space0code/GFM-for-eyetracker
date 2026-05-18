@@ -28,6 +28,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import yaml
+from sklearn.metrics import log_loss
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.loader import DataLoader
 
@@ -60,6 +61,11 @@ from emotions.common.edge_scaling import (
     apply_edge_feature_scalers,
     fit_edge_feature_scalers,
 )
+from emotions.gazemae_baseline import (
+    GAZEMAE_FEATURE_COLUMNS,
+    GAZEMAE_MODEL_NAME,
+    build_gazemae_tabular_samples,
+)
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN, MulticlassSpatioTemporalGNNV1
@@ -79,6 +85,18 @@ from emotions.utils import (
     save_comparison_csv,
     save_fold_metrics_csv,
 )
+
+
+BaselineSplit = Tuple[
+    pd.DataFrame,
+    np.ndarray,
+    pd.DataFrame,
+    np.ndarray,
+    pd.DataFrame,
+    np.ndarray,
+    List[Tuple[str, str]],
+    StandardScaler | None,
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -844,6 +862,11 @@ def _train_gnn_fold(
 
 def _save_mlp_training_history(model: Any, output_path: str) -> None:
     """Save sklearn MLP training loss history when the fitted model exposes it."""
+    training_history = getattr(model, "training_history_", None)
+    if training_history:
+        pd.DataFrame(training_history).to_csv(output_path, index=False)
+        return
+
     estimator = getattr(model, "model", None)
     loss_curve = getattr(estimator, "loss_curve_", None)
     if loss_curve is None:
@@ -929,47 +952,51 @@ def _train_baselines_fold(
     class_labels: List[int],
     standardize_features: bool,
     feature_columns: List[str],
-    verbose: bool,
+    gazemae_samples: List[Any] | None = None,
+    verbose: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
     baselines_dir = os.path.join(fold_dir, "baselines")
     os.makedirs(baselines_dir, exist_ok=True)
 
-    X_train, y_train, _ = _prepare_baseline_split(
-        samples=samples,
-        indices=train_idx,
-        feature_columns=feature_columns,
-        task_def=task_def,
-        fold_context=fold_context,
-        class_to_index=class_to_index,
-    )
-    X_val, y_val, _ = _prepare_baseline_split(
-        samples=samples,
-        indices=val_idx,
-        feature_columns=feature_columns,
-        task_def=task_def,
-        fold_context=fold_context,
-        class_to_index=class_to_index,
-    )
-    X_test, y_test, test_meta = _prepare_baseline_split(
-        samples=samples,
-        indices=test_idx,
-        feature_columns=feature_columns,
-        task_def=task_def,
-        fold_context=fold_context,
-        class_to_index=class_to_index,
-    )
+    prepared_splits: Dict[str, BaselineSplit] = {}
 
-    scaler: StandardScaler | None = None
-    if standardize_features:
-        scaler = StandardScaler()
-        X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-        X_val = pd.DataFrame(scaler.transform(X_val), columns=X_val.columns, index=X_val.index)
-        X_test = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
+    def prepare_kind(kind: str, split_samples: List[Any], split_feature_columns: List[str]) -> BaselineSplit:
+        if kind in prepared_splits:
+            return prepared_splits[kind]
+        X_train, y_train, _ = _prepare_baseline_split(
+            samples=split_samples,
+            indices=train_idx,
+            feature_columns=split_feature_columns,
+            task_def=task_def,
+            fold_context=fold_context,
+            class_to_index=class_to_index,
+        )
+        X_val, y_val, _ = _prepare_baseline_split(
+            samples=split_samples,
+            indices=val_idx,
+            feature_columns=split_feature_columns,
+            task_def=task_def,
+            fold_context=fold_context,
+            class_to_index=class_to_index,
+        )
+        X_test, y_test, test_meta = _prepare_baseline_split(
+            samples=split_samples,
+            indices=test_idx,
+            feature_columns=split_feature_columns,
+            task_def=task_def,
+            fold_context=fold_context,
+            class_to_index=class_to_index,
+        )
 
-    test_metadata = {
-        "subjects": [meta[0] for meta in test_meta if meta],
-        "recordings": [meta[1] for meta in test_meta if meta],
-    }
+        scaler: StandardScaler | None = None
+        if standardize_features:
+            scaler = StandardScaler()
+            X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+            X_val = pd.DataFrame(scaler.transform(X_val), columns=X_val.columns, index=X_val.index)
+            X_test = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)
+
+        prepared_splits[kind] = (X_train, y_train, X_val, y_val, X_test, y_test, test_meta, scaler)
+        return prepared_splits[kind]
 
     results: Dict[str, Dict[str, Any]] = {}
     class_labels_array = np.asarray(class_labels, dtype=int)
@@ -981,6 +1008,25 @@ def _train_baselines_fold(
         model_dir = os.path.join(baselines_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
 
+        if model_name == GAZEMAE_MODEL_NAME:
+            if gazemae_samples is None:
+                raise ValueError("GazeMAE_MLP requested but GazeMAE samples were not built.")
+            X_train, y_train, X_val, y_val, X_test, y_test, test_meta, scaler = prepare_kind(
+                kind="gazemae",
+                split_samples=gazemae_samples,
+                split_feature_columns=GAZEMAE_FEATURE_COLUMNS,
+            )
+        else:
+            X_train, y_train, X_val, y_val, X_test, y_test, test_meta, scaler = prepare_kind(
+                kind="tabular",
+                split_samples=samples,
+                split_feature_columns=feature_columns,
+            )
+
+        test_metadata = {
+            "subjects": [meta[0] for meta in test_meta if meta],
+            "recordings": [meta[1] for meta in test_meta if meta],
+        }
         model = get_multiclass_baseline_by_name(
             model_name,
             **baseline_cfg.get("hyperparameters", {}).get(model_name, {}),
@@ -988,8 +1034,11 @@ def _train_baselines_fold(
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, message=".*Stochastic Optimizer.*")
-            model.fit(X_train, y_train)
-        if model_name == "MLP":
+            if hasattr(model, "fit_with_validation"):
+                model.fit_with_validation(X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
+            else:
+                model.fit(X_train, y_train)
+        if model_name in {"MLP", GAZEMAE_MODEL_NAME}:
             _save_mlp_training_history(
                 model=model,
                 output_path=os.path.join(model_dir, "mlp_training_history.csv"),
@@ -1002,7 +1051,17 @@ def _train_baselines_fold(
             metadata=test_metadata,
         )
         test_pred = model.predict_proba(X_test, all_classes=class_labels_array)
+        try:
+            test_metrics["standard"]["aggregated"]["loss"] = float(
+                log_loss(y_test, test_pred, labels=class_labels_array)
+            )
+        except ValueError:
+            test_metrics["standard"]["aggregated"]["loss"] = float("nan")
 
+        if hasattr(model, "move_to_cpu"):
+            model.move_to_cpu()
+        if hasattr(model, "save_checkpoint"):
+            model.save_checkpoint(os.path.join(model_dir, "model.pt"))
         with open(os.path.join(model_dir, "model.pkl"), "wb") as handle:
             pickle.dump(model, handle)
         if scaler is not None:
@@ -1109,6 +1168,9 @@ def run_training_from_config(config_path: str) -> str:
             print(f"Loaded {len(base_gnn_dataset)} graph samples")
 
         base_tabular_samples = None
+        base_gazemae_samples = None
+        baseline_model_names = list(config.get("baselines", {}).get("models", []))
+        needs_gazemae = run_experiments["baselines"] and GAZEMAE_MODEL_NAME in baseline_model_names
         if run_experiments["baselines"]:
             print("Loading tabular samples for baselines...")
             base_tabular_samples = build_tabular_samples(
@@ -1121,6 +1183,22 @@ def run_training_from_config(config_path: str) -> str:
                 ),
             )
             print(f"Loaded {len(base_tabular_samples)} tabular samples")
+            if needs_gazemae:
+                print("Loading frozen GazeMAE embeddings for GazeMAE_MLP...")
+                base_gazemae_samples = build_gazemae_tabular_samples(
+                    dataset_cfg=dataset_cfg,
+                    target_columns=target_columns,
+                    feature_columns=feature_columns,
+                    dropna_columns=dropna_columns,
+                    min_samples_per_window=min_samples_per_window,
+                    gazemae_cfg=config.get("gazemae", {}),
+                )
+                if len(base_gazemae_samples) != len(base_tabular_samples):
+                    raise ValueError(
+                        "GazeMAE sample count does not match tabular baseline count: "
+                        f"{len(base_gazemae_samples)} vs {len(base_tabular_samples)}."
+                    )
+                print(f"Loaded {len(base_gazemae_samples)} GazeMAE embedding samples")
 
         downsampling_cfg = _resolve_class_downsampling_cfg(multiclass_task_cfg)
         downsampling_metadata: Dict[str, Any] = {
@@ -1157,6 +1235,8 @@ def run_training_from_config(config_path: str) -> str:
                     downsampling_cfg=downsampling_cfg,
                 )
                 base_tabular_samples = [base_tabular_samples[int(idx)] for idx in baseline_keep_idx]
+                if base_gazemae_samples is not None:
+                    base_gazemae_samples = [base_gazemae_samples[int(idx)] for idx in baseline_keep_idx]
                 downsampling_metadata["datasets"]["baselines"] = baseline_sampling_info
                 print(
                     "  Baseline class counts before/after: "
@@ -1361,6 +1441,7 @@ def run_training_from_config(config_path: str) -> str:
                         class_labels=class_labels,
                         standardize_features=standardize_features,
                         feature_columns=feature_columns,
+                        gazemae_samples=base_gazemae_samples,
                         verbose=verbose,
                     )
                     for model_name, metrics in baseline_results.items():
