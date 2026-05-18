@@ -45,6 +45,9 @@ class Logger:
 class TimestampedLineWriter:
     """Write text fragments with one HH:MM:SS prefix per output row."""
 
+    BLUE = "\033[34m"
+    RESET = "\033[0m"
+
     def __init__(self, handle):
         self.handle = handle
         self._log_at_line_start = True
@@ -53,7 +56,8 @@ class TimestampedLineWriter:
         """Write a possibly partial message, timestamping each new row."""
         for chunk in message.splitlines(keepends=True):
             if self._log_at_line_start:
-                self.handle.write(f"[{datetime.now().strftime('%H:%M:%S')}] ")
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                self.handle.write(f"{self.BLUE}[{timestamp}]{self.RESET} ")
             self.handle.write(chunk)
             self._log_at_line_start = chunk.endswith(("\n", "\r"))
 
