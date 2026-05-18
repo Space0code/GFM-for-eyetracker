@@ -9,6 +9,7 @@ import sys
 import yaml
 import numpy as np
 import pandas as pd
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from emotions.splits import (
@@ -21,15 +22,16 @@ from emotions.splits import (
 
 
 class Logger:
-    """Logger that writes to both console and file."""
+    """Logger that writes to both console and a timestamped file."""
     
     def __init__(self, log_file: str):
         self.terminal = sys.stdout
         self.log = open(log_file, 'a')
+        self.log_writer = TimestampedLineWriter(self.log)
     
     def write(self, message: str):
         self.terminal.write(message)
-        self.log.write(message)
+        self.log_writer.write(message)
         self.log.flush()
     
     def flush(self):
@@ -38,6 +40,26 @@ class Logger:
     
     def close(self):
         self.log.close()
+
+
+class TimestampedLineWriter:
+    """Write text fragments with one HH:MM:SS prefix per output row."""
+
+    BLUE = "\033[34m"
+    RESET = "\033[0m"
+
+    def __init__(self, handle):
+        self.handle = handle
+        self._log_at_line_start = True
+
+    def write(self, message: str) -> None:
+        """Write a possibly partial message, timestamping each new row."""
+        for chunk in message.splitlines(keepends=True):
+            if self._log_at_line_start:
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                self.handle.write(f"{self.BLUE}[{timestamp}]{self.RESET} ")
+            self.handle.write(chunk)
+            self._log_at_line_start = chunk.endswith(("\n", "\r"))
 
 
 def load_config(config_path: str) -> Dict[str, Any]:

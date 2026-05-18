@@ -318,7 +318,7 @@ def generate_and_save_multiclass_results_plots(
         "macro_auc_ovr",
         "weighted_auc_ovr",
     ),
-    preferred_baseline_order: Sequence[str] = ("Mean", "SVM", "LightGBM", "MLP", "GNN"),
+    preferred_baseline_order: Sequence[str] = ("Mean", "SVM", "LightGBM", "GazeMAE_MLP", "MLP", "GNN"),
 ) -> List[Path]:
     """Generate and save multiclass summary and confusion-matrix figures."""
     run_dir_path = Path(run_dir)

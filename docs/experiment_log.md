@@ -422,3 +422,106 @@ Main conclusions:
 - long fixed training without early stopping is unstable;
 - low-vs-high valence is much more learnable than arousal;
 - downsampled arousal improves only modestly.
+
+### 2026-05-18: GazeMAE frozen-backbone baseline integration
+
+Implemented `GazeMAE_MLP` as a frozen pretrained GazeMAE position+velocity
+encoder plus trainable PyTorch MLP head. The baseline uses the same suite
+snapshots, windowing, CV splits, labels, metrics, plots, and quick-comparison
+summary flow as other multiclass baselines.
+
+Locked preprocessing decision: clip MAHNOB coordinates to the actual screen
+resolution `1280x800`, with no scaling and no mean normalization. Do not scale
+vertical coordinates to 1024, because this would alter position and velocity
+magnitudes.
+
+Smoke checks:
+
+- synthetic 10s window -> five 2s chunks for position and velocity, final
+  embedding shape `512`;
+- quick dry run with `--models GazeMAE_MLP` generated a baseline-only wrapper;
+- tiny subject-kfold smoke run on `P1`, `P5`, `P8` with `GazeMAE_MLP,MLP`
+  created summary CSVs, label-distribution tables, ranking/test-loss plots,
+  training-history plots, and confusion matrices under `/tmp/gazemae_quick_smoke`.
+
+Follow-up cache improvement: strengthened embedding reuse across quick/suite
+runs by keying GazeMAE cache entries from the stable suite `snapshot_hash` and
+`snapshot_cache_key` when a snapshot manifest is available, instead of the
+timestamped snapshot CSV path. The cache key also includes checkpoint file
+hashes and preprocessing settings, so reuse remains tied to identical data,
+model, and preprocessing identities.
+
+Additional checks:
+
+- two different manifest paths with the same `snapshot_hash` produced the same
+  GazeMAE cache key;
+- changing `snapshot_hash` changed the cache key;
+- `--models GazeMAE_MLP --dry-run` still generated a baseline-only wrapper with
+  `run_experiments.gnn: false`.
+- recheck smoke on a small subject-kfold valence subset with `GazeMAE_MLP,MLP`
+  completed end-to-end, including summary CSVs, loss plots, label-distribution
+  tables, and confusion matrices;
+- rerunning the same small setup with `GazeMAE_MLP` loaded the cached GazeMAE
+  embeddings directly, confirming practical cache reuse across timestamped
+  quick-comparison output directories.
+
+Follow-up self-contained runtime cleanup: replaced the cross-repo runtime
+dependency on `/home/ppg/eyetracking/gazemae` with a minimal local GazeMAE
+encoder implementation in `src/emotions/gazemae_model.py` and converted
+encoder-only checkpoints in `models/gazemae/`. The converted checkpoints keep
+only encoder and bottleneck state dicts:
+
+- `models/gazemae/pos-i3738-encoder-state.pt`;
+- `models/gazemae/vel-i8528-encoder-state.pt`.
+
+Parity and smoke checks:
+
+- local position encoder matched the original external checkpoint output with
+  `max_abs_diff=0.0` on random `[batch, 2, 1000]` chunks;
+- local velocity encoder matched the original external checkpoint output with
+  `max_abs_diff=0.0` on random `[batch, 2, 1000]` chunks;
+- local embedder smoke produced five 2s chunks and a finite 512-dimensional
+  pooled embedding;
+- small subject-kfold quick run with `GazeMAE_MLP,MLP` completed end-to-end
+  using only local model assets;
+- rerunning the same small setup loaded cached GazeMAE embeddings directly.
+
+### 2026-05-18: Full 3-class valence quick comparison with GazeMAE_MLP
+
+Ran the quick comparison script end-to-end as a user-facing check of the new
+self-contained `GazeMAE_MLP` baseline:
+
+```bash
+conda run -n gfm python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
+  --models Random,Majority,GNN_v2,GazeMAE_MLP
+```
+
+Config/run context:
+
+- base wrapper:
+  `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`;
+- selected task from wrapper: Table-6 valence 3-class;
+- CV: `subject_kfold`, `n_splits=5`, `val_size=1`, seed `42`;
+- effective models: `Random`, `Majority`, `GazeMAE_MLP`, `GNN_v2`;
+- output directory: `results/quick_v1_v2_comparison/2026-05-18_12-06-36`;
+- implementation note: the first attempt completed but used separate baseline
+  and GNN suite invocations, which produced different subject folds. The quick
+  runner and multiclass trainer were fixed so this final run executes all four
+  requested models in one suite invocation with aligned baseline/GNN fold group
+  identities.
+
+Standard aggregated metrics from `quick_comparison_summary.csv`:
+
+| Model | Accuracy | Balanced accuracy | Macro F1 | Weighted F1 | AUC | Loss |
+|---|---:|---:|---:|---:|---:|---:|
+| GazeMAE_MLP | 0.5125 | 0.5060 | 0.5016 | 0.5044 | 0.6849 | 1.2684 |
+| GNN_v2 | 0.5047 | 0.5026 | 0.4930 | 0.4951 | 0.6931 | 1.0358 |
+| Random | 0.3363 | 0.3355 | 0.3335 | 0.3384 | 0.5016 | 23.9214 |
+| Majority | 0.3516 | 0.3333 | 0.1731 | 0.1839 | 0.5000 | 23.3715 |
+
+The final aligned run completed without further errors. The GazeMAE path loaded
+5,034 cached embedding samples, and the GNN path built 5,034 graph samples.
+GNN_v2 completed all five folds with early stopping; best epochs were 21, 7,
+39, 61, and 11. Command-level outputs include the ranking plot, test-loss plot,
+label-distribution tables/plots, training-history CSV/plots, per-fold loss
+plots for GNN_v2 and GazeMAE_MLP, and combined confusion matrices.

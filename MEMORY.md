@@ -40,6 +40,8 @@ recent work, plans, or decisions.
 - Keep scripts configurable with sensible defaults; terminal scripts should run as `python <script_name>.py` where feasible and log final arguments at startup.
 - Normalize confusion-matrix rows to per-class percentages, use fixed color scale `[0.0, 1.0]`, and use the `Blues` color scheme for heatmaps.
 - For questions about recent experiments, trainings, models, or data, check the latest git commits and explicitly state the assumption that the user likely means the most recently modified experiment context.
+- When making git commits, keep them granular by functionality or goal and write high-quality commit messages that are clear but not overly wordy.
+- If a user prompt, comment, or question appears strange, nonsensical, or based on a possibly mistaken premise, say so directly and ask what was meant instead of forcing a sensible interpretation.
 
 ## Current Data Assumptions
 
@@ -67,6 +69,7 @@ recent work, plans, or decisions.
 - 2026-05-15 GNN v2 time/edge-scale update: `time-window-normalized = (time_i - time_window_start) / window_length_from_config` is the intended node and baseline time feature; do not use per-window observed min-max normalization or absolute recording time. Learned edge features `t_i`, `t_j`, and `delta_t` use the same window-local normalized time. Active quick configs enable `use_relative_time: true` and `standardize_edge_features: true`; edge scalers are train-fold-only, relation-family-specific, and leave temporal direction unscaled.
 - 2026-05-15 fixation all-to-all check on locally available HCI raw-one-format P1 sections 2/5: 10s windows had ~562 nodes on average; sequential same-fixation edges averaged ~1,015 directed edges/window, while all-to-all same-`fixation-index` edges averaged ~37,006 and reached 228,072 in one window. Treat full same-fixation cliques as likely too dense/dominant unless capped or replaced by fixation meta-nodes/top-k-within-fixation.
 - 2026-05-18 fixation-overlap check on the same local P1 sections: current sequential same-fixation edges are exactly a subset of temporal edges whenever `kt >= 1`; with `kt=2`, same-fixation temporal edges made up ~88.9% of temporal edges, while the current sequential fixation relation made up ~45.4% of temporal edges. This means sequential fixation edges add a relation label/parameter path, not new graph reachability.
+- 2026-05-18 GazeMAE transfer baseline decision: use frozen pretrained GazeMAE position and velocity encoders packaged locally as encoder-only weights under `models/gazemae/`, split each 10s MAHNOB window into 2s chunks at 500 Hz, pool chunk embeddings with mean+std into 512 features, and train only a PyTorch MLP head. Clip raw MAHNOB coordinates to the actual screen resolution `1280x800` with no scaling and no mean normalization; do not scale `y` to 1024 because that would distort position and velocity magnitudes.
 
 ## Recent High-Signal Results
 
@@ -78,22 +81,27 @@ recent work, plans, or decisions.
 - 2026-05-13 arousal low-vs-high with low-class downsampling (`results/quick_v1_v2_comparison/2026-05-13_08-48-31`): raw `{0,2}` -> encoded `{0,1}`, counts before `{0: 2360, 2: 928}`, after `{0: 928, 2: 928}`, balanced accuracy `GNN_v1=0.5472`, `MLP=0.5424`, `GNN_v2=0.5348`, `LightGBM=0.5278`.
 - 2026-05-13 low/high Table-6 valence 7-fold subject-kfold (`results/quick_v1_v2_comparison/2026-05-13_09-36-39`): balanced accuracy `GNN_v2=0.6646`, `GNN_v1=0.6473`, `LightGBM=0.6104`, `MLP=0.6003`.
 - 2026-05-13 label-noise proxy analysis (`results/label_noise_analysis/2026-05-13_table6_self_report_alignment`): mismatch between emotion-id-derived Table-6 targets and participant self-report rating buckets was arousal 3-class `48.6%`, arousal low/high `29.7%`, valence 3-class `27.5%`, valence low/high `3.3%`; this supports using low/high valence as the cleanest current target.
+- 2026-05-18 Table-6 valence 3-class quick comparison with newly implemented self-contained `GazeMAE_MLP` (`results/quick_v1_v2_comparison/2026-05-18_12-06-36`), requested models only and aligned baseline/GNN subject folds in one suite invocation: balanced accuracy `GazeMAE_MLP=0.5060`, `GNN_v2=0.5026`, `Random=0.3355`, `Majority=0.3333`. The run completed end-to-end after fixing the quick runner/trainer fold alignment path; GazeMAE embeddings loaded from cache and GNN graph dataset built successfully.
 
 ## Current Config Context
 
 - Quick v1/v2 configs live under `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`.
+- Thesis-facing implementation notes for the frozen `GazeMAE_MLP` transfer baseline are in `docs/appendix/gazemae_mlp_baseline.md`; use this as the detailed code-grounded source when writing the diploma comparison section.
 - The quick runner defaults to `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`.
 - Shared architecture settings, especially `gnn.model.conv_type`, live in the wrapper YAML; Python variant overrides should only select variant identity.
 - `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
 - Quick comparison supports multiple comma-separated CV strategies, class-balance diagnostics, multiclass training-history aggregation, task selection through `quick_comparison.table6_tasks`, and held-out test-loss plots.
 - Quick comparison training-progress loss plots include an aggregated split-panel plot, an aggregated combined train/validation/test plot, and per-fold combined loss plots under `plots/losses/`; aggregated loss plots use darker `mean ± std` bands and lighter min-max bands.
+- `GazeMAE_MLP` is available in the quick comparison runner as a baseline model alias (`gazemae`, `gazemae_mlp`, `GazeMAE_MLP`). It uses the same suite snapshots, CV splits, Table-6 mappings, summaries, label-distribution tables, loss plots, and confusion-matrix plotting as other multiclass baselines. The Table-6 low/high wrapper lives at `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_low_high.yaml`.
+- GazeMAE embedding cache reuse is intentionally stable across timestamped quick/suite runs: when a suite snapshot manifest is available, the cache key uses `snapshot_hash`/`snapshot_cache_key` rather than the generated snapshot CSV path or modification time. The key also includes GazeMAE checkpoint file hashes and preprocessing settings, so embeddings are reused only for identical data/model/preprocessing identities. This was verified with a repeated small quick-comparison run.
+- GazeMAE runtime is now self-contained in this repository: `src/emotions/gazemae_model.py` implements the minimal inference encoder, and `models/gazemae/*-encoder-state.pt` stores converted encoder+bottleneck state dicts. The quick configs no longer depend on `/home/ppg/eyetracking/gazemae` at runtime.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
 - 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
 
 ## Open Plans
 
 - Near-term: use 3-layer v2 with validation-loss early stopping for the next core Table-6 experiments.
-- Add a directly comparable pretrained GazeMAE baseline by freezing the pretrained encoder and training only an MLP head on the same MAHNOB-HCI windows, targets, splits, and metrics. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
+- Run full comparable `GazeMAE_MLP` quick comparison for low/high Table-6 targets after the 2026-05-18 3-class valence run. Frame it as a pretrained gaze representation transfer baseline, not a full SOTA reproduction.
 - Convergence follow-up from 2026-05-13 mentor meeting: run more than 3 folds, plot train/val/test loss per fold and/or aggregated with uncertainty bands, reduce LR by 10x or 100x and train longer; if still unstable, try DropEdge, PairNorm, or GraphNorm.
 - Preliminarily test the default extended GNN v2 with `distance-avg`, `fixation-duration`, `delta_distance` edge features, and sequential same-fixation edges against the old core-feature version via ablations.
 - Diploma writing decision from 2026-05-13: current RV/PV research questions are acceptable for now, may later be shortened/merged, and explicit hypotheses are not needed.

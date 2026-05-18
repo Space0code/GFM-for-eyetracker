@@ -395,6 +395,13 @@ def run_suite(wrapper_config_path: str) -> str:
 
                 # Force trainer to consume the exact snapshot from EDA phase.
                 dataset_cfg["data_filepath"] = row["snapshot_csv"]
+                dataset_cfg["snapshot_manifest_path"] = row["snapshot_manifest"]
+                dataset_cfg["snapshot_hash"] = snapshot_result.manifest.get("snapshot_hash")
+                dataset_cfg["snapshot_cache_key"] = (
+                    snapshot_result.manifest.get("cache", {}).get("cache_key")
+                    if isinstance(snapshot_result.manifest.get("cache"), dict)
+                    else None
+                )
                 dataset_cfg.pop("data_dir", None)
                 dataset_cfg.pop("file_list", None)
                 dataset_cfg["filter_subjects"] = None

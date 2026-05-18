@@ -105,6 +105,29 @@ baselines:
       max_iter: 200
       random_state: 42
       early_stopping: false
+    GazeMAE_MLP:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+
+gazemae:
+  model_pos: "models/gazemae/pos-i3738-encoder-state.pt"
+  model_vel: "models/gazemae/vel-i8528-encoder-state.pt"
+  screen_width: 1280
+  screen_height: 800
+  clip_to_screen: true
+  target_hz: 500
+  chunk_seconds: 2.0
+  chunk_pooling: mean_std
+  batch_size: 256
+  device: auto
+  cache_embeddings: true
 
 gnn:
   model:

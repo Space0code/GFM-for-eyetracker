@@ -6,10 +6,14 @@ from typing import Any, Dict, List
 
 import lightgbm as lgb
 import numpy as np
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
+from emotions.gazemae_baseline import GAZEMAE_MODEL_NAME
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 
 
@@ -294,6 +298,204 @@ class MLPMulticlassBaseline(MulticlassBaselineModel):
         return _align_probabilities(np.asarray(raw), np.asarray(self.model.classes_), all_classes)
 
 
+class _TorchMLPHead(nn.Module):
+    """Small classifier head used for frozen embedding baselines."""
+
+    def __init__(self, in_features: int, hidden_size: int, n_classes: int, dropout: float) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_features, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, n_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class GazeMAEMLPMulticlassBaseline(MulticlassBaselineModel):
+    """PyTorch MLP head trained on frozen GazeMAE window embeddings."""
+
+    def __init__(
+        self,
+        hidden_layer_size: int = 128,
+        num_epochs: int = 100,
+        learning_rate: float = 0.001,
+        weight_decay: float = 0.0001,
+        dropout: float = 0.2,
+        early_stopping_patience: int = 15,
+        batch_size: int = 128,
+        random_state: int = 42,
+        device: str = "auto",
+        **_: Any,
+    ) -> None:
+        super().__init__(GAZEMAE_MODEL_NAME)
+        self.hidden_layer_size = int(hidden_layer_size)
+        self.num_epochs = int(num_epochs)
+        self.learning_rate = float(learning_rate)
+        self.weight_decay = float(weight_decay)
+        self.dropout = float(dropout)
+        self.early_stopping_patience = int(early_stopping_patience)
+        self.batch_size = int(batch_size)
+        self.random_state = int(random_state)
+        self.device_arg = str(device)
+        self.device = torch.device("cuda" if self.device_arg == "auto" and torch.cuda.is_available() else "cpu")
+        if self.device_arg != "auto":
+            self.device = torch.device(self.device_arg)
+        self.training_history_: List[Dict[str, float]] = []
+        self.class_indices_: np.ndarray | None = None
+
+    @staticmethod
+    def _as_float_array(X: Any) -> np.ndarray:
+        return np.asarray(X.values if hasattr(X, "values") else X, dtype=np.float32)
+
+    def fit(self, X_train: Any, y_train: Any) -> None:
+        self.fit_with_validation(X_train=X_train, y_train=y_train, X_val=None, y_val=None)
+
+    def fit_with_validation(self, X_train: Any, y_train: Any, X_val: Any | None, y_val: Any | None) -> None:
+        torch.manual_seed(self.random_state)
+        np.random.seed(self.random_state)
+        self.model = None
+        self._constant_class = None
+        self.class_indices_ = None
+        self.training_history_ = []
+
+        X_train_np = self._as_float_array(X_train)
+        y_train_np = _as_1d_labels(y_train)
+        self._classes_train = np.unique(y_train_np)
+        if len(self._classes_train) < 2:
+            self._constant_class = int(self._classes_train[0])
+            return
+
+        n_classes = int(np.max(y_train_np)) + 1
+        if y_val is not None:
+            y_val_np = _as_1d_labels(y_val)
+            if y_val_np.size > 0:
+                n_classes = max(n_classes, int(np.max(y_val_np)) + 1)
+        self.class_indices_ = np.arange(n_classes, dtype=int)
+
+        self.model = _TorchMLPHead(
+            in_features=int(X_train_np.shape[1]),
+            hidden_size=self.hidden_layer_size,
+            n_classes=n_classes,
+            dropout=self.dropout,
+        ).to(self.device)
+        optimizer = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+        )
+        criterion = nn.CrossEntropyLoss()
+        train_dataset = TensorDataset(
+            torch.tensor(X_train_np, dtype=torch.float32),
+            torch.tensor(y_train_np, dtype=torch.long),
+        )
+        generator = torch.Generator()
+        generator.manual_seed(self.random_state)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=max(1, self.batch_size),
+            shuffle=True,
+            generator=generator,
+        )
+
+        has_val = X_val is not None and y_val is not None and len(X_val) > 0
+        X_val_tensor: torch.Tensor | None = None
+        y_val_tensor: torch.Tensor | None = None
+        if has_val:
+            X_val_tensor = torch.tensor(self._as_float_array(X_val), dtype=torch.float32, device=self.device)
+            y_val_tensor = torch.tensor(_as_1d_labels(y_val), dtype=torch.long, device=self.device)
+
+        best_state: Dict[str, torch.Tensor] | None = None
+        best_val = float("inf")
+        stale_epochs = 0
+
+        for epoch in range(1, self.num_epochs + 1):
+            self.model.train()
+            total_loss = 0.0
+            total_count = 0
+            for batch_x, batch_y in train_loader:
+                batch_x = batch_x.to(self.device)
+                batch_y = batch_y.to(self.device)
+                optimizer.zero_grad(set_to_none=True)
+                logits = self.model(batch_x)
+                loss = criterion(logits, batch_y)
+                loss.backward()
+                optimizer.step()
+                total_loss += float(loss.item()) * int(batch_x.shape[0])
+                total_count += int(batch_x.shape[0])
+
+            train_loss = total_loss / max(1, total_count)
+            val_loss = float("nan")
+            if has_val and X_val_tensor is not None and y_val_tensor is not None:
+                self.model.eval()
+                with torch.no_grad():
+                    val_loss = float(criterion(self.model(X_val_tensor), y_val_tensor).item())
+
+                if val_loss < best_val:
+                    best_val = val_loss
+                    best_state = {
+                        key: value.detach().cpu().clone()
+                        for key, value in self.model.state_dict().items()
+                    }
+                    stale_epochs = 0
+                else:
+                    stale_epochs += 1
+
+            self.training_history_.append(
+                {
+                    "epoch": float(epoch),
+                    "train_loss": float(train_loss),
+                    "val_loss": float(val_loss),
+                }
+            )
+            if has_val and stale_epochs >= self.early_stopping_patience:
+                break
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+
+    def predict_proba(self, X: Any, all_classes: np.ndarray) -> np.ndarray:
+        if self._constant_class is not None:
+            probs = np.zeros((len(X), len(all_classes)), dtype=float)
+            col = np.where(all_classes == self._constant_class)[0]
+            if len(col) > 0:
+                probs[:, int(col[0])] = 1.0
+            return probs
+        if self.model is None or self.class_indices_ is None:
+            raise RuntimeError("GazeMAE_MLP has not been fitted.")
+
+        X_np = self._as_float_array(X)
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(torch.tensor(X_np, dtype=torch.float32, device=self.device))
+            raw = torch.softmax(logits, dim=1).detach().cpu().numpy()
+        return _align_probabilities(raw, self.class_indices_, all_classes)
+
+    def save_checkpoint(self, output_path: str) -> None:
+        if self.model is None:
+            return
+        torch.save(
+            {
+                "model_state_dict": self.model.state_dict(),
+                "class_indices": self.class_indices_,
+                "hidden_layer_size": self.hidden_layer_size,
+                "dropout": self.dropout,
+            },
+            output_path,
+        )
+
+    def move_to_cpu(self) -> None:
+        """Move the fitted head to CPU before pickling for portable artifacts."""
+        if self.model is not None:
+            self.model.to("cpu")
+        self.device = torch.device("cpu")
+
+
 def get_multiclass_baseline_by_name(model_name: str, **hyperparams: Any) -> MulticlassBaselineModel:
     """Factory for multiclass baseline estimators."""
     models = {
@@ -303,6 +505,7 @@ def get_multiclass_baseline_by_name(model_name: str, **hyperparams: Any) -> Mult
         "SVM": SVMMulticlassBaseline,
         "LightGBM": LGBMMulticlassBaseline,
         "MLP": MLPMulticlassBaseline,
+        GAZEMAE_MODEL_NAME: GazeMAEMLPMulticlassBaseline,
     }
     if model_name not in models:
         raise ValueError(
