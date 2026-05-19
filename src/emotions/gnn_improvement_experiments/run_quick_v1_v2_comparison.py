@@ -840,6 +840,87 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     return output_path
 
 
+def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Path) -> Path | None:
+    """Save an interactive HTML model ranking plot with legend-toggleable metrics."""
+    metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
+    available_metrics = [metric for metric in metric_columns if metric in summary.columns]
+    if summary.empty or not available_metrics:
+        return None
+
+    try:
+        import plotly.express as px
+    except ImportError:
+        return None
+
+    plot_df = summary[summary["status"] == "success"].copy()
+    for metric in available_metrics:
+        plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
+    plot_df = plot_df.dropna(subset=available_metrics, how="all")
+    if plot_df.empty:
+        return None
+
+    id_vars = [
+        col
+        for col in ["experiment_id", "experiment_display_name", "cv_strategy", "model"]
+        if col in plot_df.columns
+    ]
+    long_df = plot_df.melt(
+        id_vars=id_vars,
+        value_vars=available_metrics,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+    if long_df.empty:
+        return None
+
+    long_df["group"] = long_df.apply(
+        lambda row: (
+            f"{row.get('experiment_display_name', row.get('experiment_id', 'Experiment'))}"
+            f" - {row.get('cv_strategy', 'all')}"
+        ),
+        axis=1,
+    )
+    model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
+    metric_order = [metric for metric in metric_columns if metric in available_metrics]
+    group_order = list(dict.fromkeys(long_df["group"].astype(str).tolist()))
+
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    output_path = plots_dir / "classification_group_model_ranking.html"
+    hover_data = {"metric": True, "value": ":.4f"}
+    if "experiment_id" in long_df.columns:
+        hover_data["experiment_id"] = True
+    if "cv_strategy" in long_df.columns:
+        hover_data["cv_strategy"] = True
+
+    fig = px.bar(
+        long_df,
+        x="value",
+        y="model",
+        color="metric",
+        facet_row="group",
+        orientation="h",
+        barmode="group",
+        category_orders={
+            "model": model_order,
+            "metric": metric_order,
+            "group": group_order,
+        },
+        hover_data=hover_data,
+        title="Quick Model Ranking",
+        height=max(420, 330 * len(group_order)),
+    )
+    fig.update_xaxes(range=[0.0, 1.0], title_text="metric value")
+    fig.update_yaxes(title_text="model")
+    fig.update_layout(
+        legend_title_text="metric",
+        bargap=0.18,
+        margin={"l": 120, "r": 40, "t": 70, "b": 60},
+    )
+    fig.write_html(output_path, include_plotlyjs="cdn", full_html=True)
+    return output_path
+
+
 def _load_class_display_names(trainer_run_dir: Path) -> Dict[int, str]:
     """Load encoded class display names from one trainer run."""
     metadata_path = trainer_run_dir / "class_metadata.yaml"
@@ -1320,6 +1401,29 @@ def _plot_band_curve(
     ax.plot(x, y, label=label, color=color, linestyle=linestyle, linewidth=linewidth)
 
 
+def _set_loss_ylim_from_values(ax: plt.Axes, values: Sequence[np.ndarray]) -> None:
+    """Set a local y-axis range from the finite loss values drawn in one subplot."""
+    finite_parts = [
+        np.asarray(value, dtype=float).reshape(-1)
+        for value in values
+        if np.asarray(value, dtype=float).size > 0
+    ]
+    if not finite_parts:
+        return
+    finite = np.concatenate(finite_parts)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return
+
+    y_min = float(np.min(finite))
+    y_max = float(np.max(finite))
+    if np.isclose(y_min, y_max):
+        pad = max(0.05, abs(y_min) * 0.05)
+    else:
+        pad = 0.05 * (y_max - y_min)
+    ax.set_ylim(y_min - pad, y_max + pad)
+
+
 def _plot_loss_lines(
     ax: plt.Axes,
     fold_history: pd.DataFrame,
@@ -1415,7 +1519,7 @@ def _plot_training_curve_grid(
         n_cols,
         figsize=(max(10.0, 4.8 * n_cols), max(4.0, 3.7 * n_rows)),
         sharex=True,
-        sharey="row",
+        sharey=False,
         squeeze=False,
     )
     palette = sns.color_palette("colorblind", n_colors=max(1, long_df["model"].nunique()))
@@ -1431,6 +1535,7 @@ def _plot_training_curve_grid(
         ]
         for col_idx, metric in enumerate(available_metrics):
             ax = axes[row_idx, col_idx]
+            y_limit_values: List[np.ndarray] = []
             for model_name in model_order:
                 model_long_df = group_df[group_df["model"].astype(str) == model_name]
                 if model_long_df.empty:
@@ -1439,6 +1544,7 @@ def _plot_training_curve_grid(
                 if curve is None:
                     continue
                 x, y, std, min_values, max_values = curve
+                y_limit_values.extend([min_values, max_values])
                 color = color_by_model.get(model_name)
                 _plot_band_curve(
                     ax,
@@ -1473,6 +1579,8 @@ def _plot_training_curve_grid(
                     )
             if ylim is not None:
                 ax.set_ylim(*ylim)
+            elif y_limit_values:
+                _set_loss_ylim_from_values(ax, y_limit_values)
             _style_loss_axis(ax, ylabel=None)
 
     if len(legend_handles) > 1:
@@ -1552,7 +1660,7 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
         n_cols,
         figsize=(max(7.0, 5.4 * n_cols), max(4.0, 3.8 * n_rows)),
         sharex=True,
-        sharey="row",
+        sharey=False,
         squeeze=False,
     )
 
@@ -1568,11 +1676,13 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
                 ax.set_visible(False)
                 continue
 
+            y_limit_values: List[np.ndarray] = []
             for metric in available_metrics:
                 curve = _compute_aggregated_metric_curve(model_df, metric)
                 if curve is None:
                     continue
                 x, y, std, min_values, max_values = curve
+                y_limit_values.extend([min_values, max_values])
                 style = LOSS_METRIC_STYLES[metric]
                 _plot_band_curve(
                     ax,
@@ -1601,6 +1711,8 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
                         fontsize=10,
                         fontweight="semibold",
                     )
+            if y_limit_values:
+                _set_loss_ylim_from_values(ax, y_limit_values)
             _style_loss_axis(ax)
             ax.legend(loc="best", frameon=False, fontsize="small")
 
@@ -2071,6 +2183,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     summary_path = output_dir / "quick_comparison_summary.csv"
     summary.to_csv(summary_path, index=False)
     ranking_path = _save_group_model_ranking(summary=summary, output_dir=output_dir)
+    interactive_ranking_path = _save_group_model_ranking_interactive(summary=summary, output_dir=output_dir)
     test_loss_path = _plot_test_loss_summary(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
     label_distribution_paths: List[Path] = []
@@ -2103,6 +2216,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     print(f"Saved quick comparison summary: {summary_path}")
     if ranking_path is not None:
         print(f"Saved ranking plot: {ranking_path}")
+    if interactive_ranking_path is not None:
+        print(f"Saved interactive ranking plot: {interactive_ranking_path}")
     if test_loss_path is not None:
         print(f"Saved test loss plot: {test_loss_path}")
     for label_distribution_path in label_distribution_paths:

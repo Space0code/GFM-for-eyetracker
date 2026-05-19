@@ -925,7 +925,7 @@ def _train_gnn_fold(
 
 
 def _save_mlp_training_history(model: Any, output_path: str) -> None:
-    """Save sklearn MLP training loss history when the fitted model exposes it."""
+    """Save MLP training history when the fitted model exposes per-epoch losses."""
     training_history = getattr(model, "training_history_", None)
     if training_history:
         pd.DataFrame(training_history).to_csv(output_path, index=False)
