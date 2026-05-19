@@ -1,0 +1,182 @@
+run_experiments:
+  baselines: false
+  gnn: true
+multiclass_task:
+  task_name: table6-valence-3class
+  target_column: emotion-id
+  use_table6_3class_targets: true
+  drop_unmapped_labels: true
+  class_name_mapping:
+    0: Unpleasant
+    1: Neutral valence
+    2: Pleasant
+  table6_class_mapping:
+    0: 1
+    1: 0
+    2: 0
+    3: 0
+    4: 2
+    5: 0
+    6: 1
+    11: 2
+    12: 0
+dataset:
+  data_filepath: results/quick_v1_v2_comparison/2026-05-18_13-24-39/model_runs/2026-05-18_13-24-41/experiments/multiclass_table6_valence_3class_emotion-elicitation/snapshot.csv
+  label_mapping_spec_path: specifications/hci_to_GFM_spec.yaml
+  exclude_subjects:
+  - P9
+  - P12
+  - P15
+  recursive: true
+  ignore_dirs: []
+  window_length: 10
+  window_overlap: 0
+  min_samples_per_window: 60
+  kt: 2
+  ks: 2
+  use_edge_weights: true
+  graph_version: v1
+  edge_weight_mode: handcrafted
+  use_relative_time: true
+  use_distance_avg: true
+  use_fixation_duration: true
+  use_delta_distance_edge_feature: true
+  use_fixation_edges: true
+  tau: 0.05
+  cache_dir: data/cache
+  use_cache: true
+  dropping_emotion_threshold: -1
+  standardize_features: true
+  standardize_edge_features: true
+  target_aggregation: mean
+  feature_columns:
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  dropna_columns:
+  - time-rel-seconds
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  - emotion-id
+  - subject
+  - recording
+  experiment_type_column: experiment-type
+  allowed_experiment_types:
+  - emotion-elicitation
+  label_quality_column: emotion-derivation-status
+  allowed_label_quality_values:
+  - ok
+  signal_outlier_filter:
+    enabled: true
+    lower_quantile: 0.01
+    upper_quantile: 0.99
+    columns:
+    - x-avg
+    - y-avg
+    - pupil-size-left-avg
+    - pupil-size-right-avg
+  snapshot_manifest_path: results/quick_v1_v2_comparison/2026-05-18_13-24-39/model_runs/2026-05-18_13-24-41/experiments/multiclass_table6_valence_3class_emotion-elicitation/snapshot_manifest.yaml
+  snapshot_hash: 6044cf9ffa92e0f853cb55b31689700dddad48945c7d9ae36b1aff98118e265f
+  snapshot_cache_key: b5771740fa9ecde7f92fec629ee1694c98be321708cdd1b53abdf9f3965e6ed9
+  filter_subjects: null
+  filter_recordings: null
+cross_validation:
+  strategies:
+  - subject_loo
+  - recording_loo
+  n_splits: 5
+  val_size: 2
+  random_state: 42
+baselines:
+  models:
+  - Mean
+  - SVM
+  - LightGBM
+  - MLP
+  hyperparameters:
+    Mean: {}
+    SVM:
+      probability: true
+      random_state: 42
+    LightGBM:
+      n_estimators: 100
+      n_jobs: -1
+      verbose: -1
+      random_state: 42
+    MLP:
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+      early_stopping: false
+    GazeMAE_MLP:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+gazemae:
+  model_pos: models/gazemae/pos-i3738-encoder-state.pt
+  model_vel: models/gazemae/vel-i8528-encoder-state.pt
+  screen_width: 1280
+  screen_height: 800
+  clip_to_screen: true
+  target_hz: 500
+  chunk_seconds: 2.0
+  chunk_pooling: mean_std
+  batch_size: 256
+  device: auto
+  cache_embeddings: true
+gnn:
+  model:
+    model_version: v1
+    in_channels: 7
+    hidden_channels: 128
+    head_pooling: attention
+    graph_pooling: attention
+    relation_pooling: mlp
+    use_preprocess_mlp: true
+    add_self_loops: true
+    dropout_mlp: 0.1
+    dropout_gnn: 0.1
+    dropout_head: 0.1
+    aggr: mean
+    conv_type: GCNConv
+    pooling: mean_max
+    num_layers: 3
+  training:
+    num_epochs: 500
+    batch_size: 256
+    learning_rate: 5.0e-05
+    grad_clip_max_norm: 1.0
+    device: auto
+    random_seed: 42
+    num_workers: 4
+    pin_memory: true
+    persistent_workers: true
+    use_torch_compile: false
+    early_stopping_enabled: true
+    early_stopping_patience: 20
+    early_stopping_min_delta: 0.0
+    early_stopping_restore_best: true
+metrics:
+- accuracy
+- balanced_accuracy
+- macro_precision
+- macro_recall
+- macro_f1
+- macro_auc_ovr
+- weighted_precision
+- weighted_recall
+- weighted_f1
+- weighted_auc_ovr
+logging:
+  results_dir: results/quick_v1_v2_comparison/2026-05-18_13-24-39/model_runs/2026-05-18_13-24-41
+  verbose: false
+  run_name_prefix: multiclass_table6_valence_3class_emotion-elicitation

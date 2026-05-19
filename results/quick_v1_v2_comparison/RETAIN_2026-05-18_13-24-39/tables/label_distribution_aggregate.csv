@@ -1,0 +1,13 @@
+experiment_id,experiment_display_name,cv_strategy,source_model,split,class_index,class_name,count,total,proportion
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,Random,test,0,Calm,2350,5034,0.4668255860150973
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,Random,test,1,Medium aroused,1758,5034,0.3492252681764005
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,Random,test,2,Excited/Activated,926,5034,0.1839491458085022
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,Random,test,0,Calm,2350,5034,0.4668255860150973
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,Random,test,1,Medium aroused,1758,5034,0.3492252681764005
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,Random,test,2,Excited/Activated,926,5034,0.1839491458085022
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,Random,test,0,Unpleasant,1914,5034,0.3802145411203814
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,Random,test,1,Neutral valence,1362,5034,0.27056019070321813
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,Random,test,2,Pleasant,1758,5034,0.3492252681764005
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,Random,test,0,Unpleasant,1914,5034,0.3802145411203814
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,Random,test,1,Neutral valence,1362,5034,0.27056019070321813
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,Random,test,2,Pleasant,1758,5034,0.3492252681764005
