@@ -1753,6 +1753,7 @@ def _plot_test_loss_summary(summary: pd.DataFrame, output_dir: Path) -> Path | N
         return None
 
     plot_df = summary[summary["status"] == "success"].copy()
+    plot_df = plot_df[~plot_df["model"].astype(str).isin({"Random", "Majority"})]
     plot_df["loss"] = pd.to_numeric(plot_df["loss"], errors="coerce")
     plot_df = plot_df.dropna(subset=["loss"])
     if plot_df.empty:
