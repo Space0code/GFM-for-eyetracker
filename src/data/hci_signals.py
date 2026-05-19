@@ -33,7 +33,7 @@ def resolve_optional_hci_feature_columns(
     *,
     use_distance_avg: bool = True,
     use_fixation_duration: bool = True,
-    use_relative_time: bool = False,
+    use_relative_time: bool = True,
 ) -> list[str]:
     """Resolve node feature columns with optional HCI signals appended once."""
     resolved = list(feature_columns) if feature_columns is not None else list(BASE_NODE_FEATURE_COLUMNS)

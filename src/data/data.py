@@ -198,7 +198,7 @@ class SpacioTemporalDataset(Dataset):
             target_aggregation: str = "mean",
             use_distance_avg: bool = True,
             use_fixation_duration: bool = True,
-            use_relative_time: bool = False,
+            use_relative_time: bool = True,
             use_delta_distance_edge_feature: bool = True,
             use_fixation_edges: bool = True):
         """
