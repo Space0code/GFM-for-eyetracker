@@ -116,6 +116,8 @@ recent work, plans, or decisions.
 - Decide whether the next step is tuning v2 further, running clean ablations, or aligning the experiment story with diploma writing needs after convergence follow-up.
 - Keep detailed future run notes in `docs/experiment_log.md`; keep thesis-facing conclusions in `diploma_knowledge_base.md`.
 - Continue developing the local FRI-template LaTeX diploma source in `diploma/`, separate from research notes in `docs/`, with `.tex`, `.bib`, figures, tables, and build output organized for VS Code/LaTeX Workshop and easy Overleaf synchronization.
+- 2026-05-20 diploma structure update: local LaTeX thesis uses a less-flat hierarchy with selected `\subsection`/`\subsubsection` groups in chapters 2--8 and `tocdepth=2`; `diploma/literatura.bib` was replaced with the user's Overleaf bibliography subset and current placeholder citation keys were resolved to available sources.
+- 2026-05-20 repository split decision: LaTeX thesis source is moving to the standalone sibling repository `diploma-latex`; `GFM-for-eyetracker` remains the research/code repository. The LaTeX repo entrypoint is root-level `diploma.tex`, uses only repo-local relative paths, and build output under `gradnja/` should stay ignored/untracked for GitHub/Overleaf import.
 
 ## Visualization Ideas To Implement Later
 
