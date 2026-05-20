@@ -59,6 +59,7 @@ global_overrides:
     use_fixation_duration: true
     use_delta_distance_edge_feature: true
     use_fixation_edges: true
+    fixation_dilation_k: 3
     standardize_edge_features: true
     filter_subjects: null
     exclude_subjects: [P9, P12, P15]

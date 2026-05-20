@@ -101,6 +101,81 @@ def infer_default_target_columns(df: pd.DataFrame) -> List[str]:
     return sorted(targets)
 
 
+def _round_half_up(value: float) -> int:
+    """Round halves up, matching the fixation dilation definition."""
+    return int(math.floor(float(value) + 0.5))
+
+
+def _fixation_dilation_offsets(run_length: int, dilation_k: int) -> tuple[int, ...]:
+    """Return cyclic nonzero offsets for one fixation run."""
+    if dilation_k <= 0:
+        raise ValueError("dilation_k must be > 0.")
+    if run_length <= 1:
+        return ()
+
+    dilation_step = max(1, _round_half_up(run_length / dilation_k))
+    offsets = {
+        (1 + q * dilation_step) % run_length
+        for q in range(dilation_k)
+    }
+    offsets.discard(0)
+    return tuple(sorted(offsets))
+
+
+def _build_dilated_fixation_edge_index(
+    fixation_ids: np.ndarray,
+    dilation_k: int,
+) -> torch.Tensor:
+    """Build bidirectional dilated edges for contiguous same-fixation runs."""
+    empty = torch.empty((2, 0), dtype=torch.long)
+    if len(fixation_ids) <= 1:
+        return empty
+
+    undirected_edges: set[tuple[int, int]] = set()
+    run_start: int | None = None
+    run_id: float | None = None
+
+    def add_run_edges(start: int, stop: int) -> None:
+        run_length = stop - start
+        for offset in _fixation_dilation_offsets(run_length, dilation_k):
+            for local_source in range(run_length):
+                source = start + local_source
+                target = start + ((local_source + offset) % run_length)
+                edge = (source, target) if source < target else (target, source)
+                undirected_edges.add(edge)
+
+    for local_idx, current_id in enumerate(fixation_ids):
+        if not np.isfinite(current_id):
+            if run_start is not None:
+                add_run_edges(run_start, local_idx)
+                run_start = None
+                run_id = None
+            continue
+
+        if run_start is None:
+            run_start = local_idx
+            run_id = current_id
+            continue
+
+        if current_id != run_id:
+            add_run_edges(run_start, local_idx)
+            run_start = local_idx
+            run_id = current_id
+
+    if run_start is not None:
+        add_run_edges(run_start, len(fixation_ids))
+
+    if not undirected_edges:
+        return empty
+
+    directed_edges = [
+        directed_edge
+        for source, target in sorted(undirected_edges)
+        for directed_edge in ((source, target), (target, source))
+    ]
+    return torch.tensor(directed_edges, dtype=torch.long).t().contiguous()
+
+
 def clean_dataset(
     df: pd.DataFrame,
     required_cols: Optional[List[str]] = None,
@@ -200,7 +275,8 @@ class SpacioTemporalDataset(Dataset):
             use_fixation_duration: bool = True,
             use_relative_time: bool = True,
             use_delta_distance_edge_feature: bool = True,
-            use_fixation_edges: bool = True):
+            use_fixation_edges: bool = True,
+            fixation_dilation_k: int = 3):
         """
         Load CSV files and convert to graphs.
         
@@ -258,6 +334,9 @@ class SpacioTemporalDataset(Dataset):
         self.use_relative_time = bool(use_relative_time)
         self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
         self.use_fixation_edges = bool(use_fixation_edges)
+        self.fixation_dilation_k = int(fixation_dilation_k)
+        if self.fixation_dilation_k <= 0:
+            raise ValueError("fixation_dilation_k must be > 0.")
         self.feature_columns = resolve_optional_hci_feature_columns(
             feature_columns,
             use_distance_avg=self.use_distance_avg,
@@ -413,6 +492,7 @@ class SpacioTemporalDataset(Dataset):
             f"_usereltime={self.use_relative_time}"
             f"_usedeltadistedge={self.use_delta_distance_edge_feature}"
             f"_usefixedges={self.use_fixation_edges}"
+            f"_fixdilk={self.fixation_dilation_k}"
         )
         
         # Hash the configuration
@@ -446,6 +526,7 @@ class SpacioTemporalDataset(Dataset):
                     'use_relative_time': self.use_relative_time,
                     'use_delta_distance_edge_feature': self.use_delta_distance_edge_feature,
                     'use_fixation_edges': self.use_fixation_edges,
+                    'fixation_dilation_k': self.fixation_dilation_k,
                 }, f)
             print(f"Successfully cached {len(self.graphs)} graphs")
         except Exception as e:
@@ -613,25 +694,18 @@ class SpacioTemporalDataset(Dataset):
             return torch.stack(features, dim=1)
 
         def build_fixation_edge_index(window_df: pd.DataFrame) -> torch.Tensor:
-            """Connect consecutive samples that share a fixation id, bidirectionally."""
+            """Build dilated intra-fixation edges for contiguous fixation runs."""
             empty = torch.empty((2, 0), dtype=torch.long)
             if FIXATION_INDEX_COLUMN not in window_df.columns:
                 return empty
-            fixation_ids = pd.to_numeric(window_df[FIXATION_INDEX_COLUMN], errors="coerce").to_numpy()
-            src_edges: list[int] = []
-            dst_edges: list[int] = []
-            for local_idx in range(len(fixation_ids) - 1):
-                current_id = fixation_ids[local_idx]
-                next_id = fixation_ids[local_idx + 1]
-                if not np.isfinite(current_id) or not np.isfinite(next_id):
-                    continue
-                if current_id != next_id:
-                    continue
-                src_edges.extend([local_idx, local_idx + 1])
-                dst_edges.extend([local_idx + 1, local_idx])
-            if not src_edges:
-                return empty
-            return torch.tensor([src_edges, dst_edges], dtype=torch.long)
+            fixation_ids = pd.to_numeric(
+                window_df[FIXATION_INDEX_COLUMN],
+                errors="coerce",
+            ).to_numpy(dtype=float)
+            return _build_dilated_fixation_edge_index(
+                fixation_ids,
+                self.fixation_dilation_k,
+            )
         
         #### Extract graph-level targets
         target_cols = self._resolve_target_columns(df_window)

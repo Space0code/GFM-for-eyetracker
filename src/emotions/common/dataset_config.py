@@ -121,6 +121,7 @@ def build_graph_dataset_kwargs(
         "use_relative_time": bool(dataset_cfg.get("use_relative_time", False)),
         "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
         "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
+        "fixation_dilation_k": int(dataset_cfg.get("fixation_dilation_k", 3)),
     }
 
 

@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 from torch_geometric.loader import DataLoader
 
-from data.data import SpacioTemporalDataset
+from data.data import SpacioTemporalDataset, _fixation_dilation_offsets
 from data.data_preprocess import preprocess_file
 from data.hci_signals import TIME_WINDOW_NORMALIZED_COLUMN
 from emotions.model import SpatioTemporalHeteroGNN
@@ -32,6 +32,31 @@ def _raw_hci_frame() -> pd.DataFrame:
             "emotion-id": [0] * 5,
             "emotion-derivation-status": ["ok"] * 5,
             "experiment-type": ["emotion-elicitation"] * 5,
+        }
+    )
+
+
+def _single_fixation_frame(n: int) -> pd.DataFrame:
+    """Create one contiguous fixation run for graph-construction tests."""
+    return pd.DataFrame(
+        {
+            "time-rel-seconds": [idx * 0.1 for idx in range(n)],
+            "x-avg": [float(idx) for idx in range(n)],
+            "y-avg": [float(idx % 5) for idx in range(n)],
+            "confidence-gaze-left": [1] * n,
+            "confidence-gaze-right": [1] * n,
+            "pupil-size-left-avg": [3.0 + idx * 0.01 for idx in range(n)],
+            "pupil-size-right-avg": [3.2 + idx * 0.01 for idx in range(n)],
+            "distance-left": [60.0] * n,
+            "distance-right": [62.0] * n,
+            "fixation-index": [10] * n,
+            "fixation-duration": [300.0] * n,
+            "fixation": [True] * n,
+            "subject": ["P1"] * n,
+            "recording": ["r1"] * n,
+            "emotion-id": [0] * n,
+            "emotion-derivation-status": ["ok"] * n,
+            "experiment-type": ["emotion-elicitation"] * n,
         }
     )
 
@@ -83,6 +108,7 @@ def test_dataset_builds_optional_node_and_edge_features_and_fixation_edges(tmp_p
         dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
         use_distance_avg=True,
         use_fixation_duration=True,
+        use_relative_time=False,
         use_delta_distance_edge_feature=True,
         use_fixation_edges=True,
     )
@@ -96,6 +122,70 @@ def test_dataset_builds_optional_node_and_edge_features_and_fixation_edges(tmp_p
 
     fixation_edges = set(map(tuple, graph["node", "fixation", "node"].edge_index.t().tolist()))
     assert fixation_edges == {(0, 1), (1, 0), (2, 3), (3, 2)}
+
+    spatial_edges = graph["node", "spatial", "node"].edge_index
+    spatial_edge_set = set(map(tuple, spatial_edges.t().tolist()))
+    assert spatial_edges.shape[1] == len(spatial_edge_set)
+
+
+def test_fixation_dilation_offsets_use_half_up_rounding_and_no_self_loops() -> None:
+    assert _fixation_dilation_offsets(run_length=30, dilation_k=3) == (1, 11, 21)
+    assert _fixation_dilation_offsets(run_length=30, dilation_k=10) == (
+        1,
+        4,
+        7,
+        10,
+        13,
+        16,
+        19,
+        22,
+        25,
+        28,
+    )
+    assert _fixation_dilation_offsets(run_length=2, dilation_k=3) == (1,)
+
+
+def test_dataset_builds_default_dilated_intra_fixation_edges_without_duplicates(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_single_fixation.csv"
+    _single_fixation_frame(30).to_csv(data_csv, index=False)
+
+    dataset = SpacioTemporalDataset(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=[
+            "time-rel-seconds",
+            "x-avg",
+            "y-avg",
+            "pupil-size-left-avg",
+            "pupil-size-right-avg",
+            "emotion-id",
+        ],
+        use_distance_avg=True,
+        use_fixation_duration=True,
+        use_relative_time=False,
+        use_delta_distance_edge_feature=True,
+        use_fixation_edges=True,
+    )
+
+    graph = dataset[0]
+    edge_index = graph["node", "fixation", "node"].edge_index
+    fixation_edges = set(map(tuple, edge_index.t().tolist()))
+    expected_node_zero_targets = {1, 11, 21}
+
+    assert all((0, target) in fixation_edges for target in expected_node_zero_targets)
+    assert edge_index.shape[1] == 180
+    assert edge_index.shape[1] == len(fixation_edges)
+    assert not any(source == target for source, target in fixation_edges)
 
 
 def test_dataset_uses_window_local_normalized_time_for_nodes_and_edges(tmp_path: Path) -> None:
@@ -172,6 +262,7 @@ def test_gnn_v2_forward_supports_fixation_relation_and_extended_edge_attrs(tmp_p
         ],
         use_distance_avg=True,
         use_fixation_duration=True,
+        use_relative_time=False,
         use_delta_distance_edge_feature=True,
         use_fixation_edges=True,
     )
@@ -225,6 +316,7 @@ def test_gnn_v2_forward_handles_empty_fixation_relation(tmp_path: Path) -> None:
         ],
         use_distance_avg=True,
         use_fixation_duration=True,
+        use_relative_time=False,
         use_delta_distance_edge_feature=True,
         use_fixation_edges=True,
     )

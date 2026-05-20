@@ -43,6 +43,7 @@ dataset:
   use_fixation_duration: true
   use_delta_distance_edge_feature: true
   use_fixation_edges: true
+  fixation_dilation_k: 3
   tau: 0.05 # Time decay constant for edge weights (in seconds)
   cache_dir: "data/cache"
   use_cache: false

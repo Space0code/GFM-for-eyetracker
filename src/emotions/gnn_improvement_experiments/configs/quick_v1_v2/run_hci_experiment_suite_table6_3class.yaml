@@ -69,6 +69,7 @@ global_overrides:
     use_fixation_duration: true
     use_delta_distance_edge_feature: true
     use_fixation_edges: true
+    fixation_dilation_k: 3
     standardize_edge_features: true
     # Set these to lists for quick subset runs, e.g. [P1, P8, P5] and [69.avi, 55.avi].
     filter_subjects: null
