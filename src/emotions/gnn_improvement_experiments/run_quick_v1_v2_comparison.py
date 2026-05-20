@@ -74,6 +74,17 @@ DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
 PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "GazeMAE_MLP", "MLP"]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
+MODEL_COLOR_PALETTE = {
+    "Random": "#4C72B0",
+    "Majority": "#DD8452",
+    "GNN_v1": "#55A868",
+    "GNN_v2": "#C44E52",
+    "GazeMAE_MLP": "#8172B3",
+    "MLP": "#937860",
+    "LightGBM": "#DA8BC3",
+    "SVM": "#8C8C8C",
+    "Mean": "#CCB974",
+}
 LOSS_METRIC_COLUMNS = ["train_loss", "val_loss", "test_loss"]
 LOSS_METRIC_STYLES = {
     "train_loss": {"label": "Train loss", "color": "#0072B2", "linestyle": "-"},
@@ -282,6 +293,20 @@ def _ordered_models(model_names: Iterable[str]) -> List[str]:
         unique_models,
         key=lambda name: (preferred_idx.get(name, len(preferred_idx)), str(name).lower()),
     )
+
+
+def _model_color_map(model_names: Sequence[str]) -> Dict[str, str]:
+    """Return a stable color map for model names, with fallback colors for unknown models."""
+    color_map = {
+        model_name: MODEL_COLOR_PALETTE[model_name]
+        for model_name in model_names
+        if model_name in MODEL_COLOR_PALETTE
+    }
+    missing_models = [model_name for model_name in model_names if model_name not in color_map]
+    if missing_models:
+        fallback_colors = sns.color_palette("deep", n_colors=len(missing_models)).as_hex()
+        color_map.update(dict(zip(missing_models, fallback_colors)))
+    return color_map
 
 
 def _resolve_quick_table6_experiment_ids(wrapper_cfg: Dict[str, Any]) -> List[str]:
@@ -761,7 +786,7 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
 
 
 def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path | None:
-    """Save a command-level model ranking plot from quick summary metrics."""
+    """Save a command-level metric comparison plot from quick summary metrics."""
     metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
     available_metrics = [metric for metric in metric_columns if metric in summary.columns]
     if summary.empty or not available_metrics:
@@ -793,14 +818,17 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     if long_df.empty:
         return None
 
+    metric_order = [metric for metric in metric_columns if metric in available_metrics]
+    palette = _model_color_map(model_order)
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     output_path = plots_dir / "classification_group_model_ranking.png"
 
+    n_panels = len(experiment_order) * len(strategy_order)
     fig, axes = plt.subplots(
-        len(experiment_order) * len(strategy_order),
+        n_panels,
         1,
-        figsize=(12, max(4.5, 0.65 * len(model_order)) * len(experiment_order) * len(strategy_order)),
+        figsize=(14.5, 4.35 * n_panels),
         squeeze=False,
     )
     row_idx = 0
@@ -820,28 +848,69 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
             )
             sns.barplot(
                 data=strategy_df,
-                x="value",
-                y="model",
-                hue="metric",
-                order=model_order,
+                x="metric",
+                y="value",
+                hue="model",
+                order=metric_order,
+                hue_order=model_order,
+                palette=palette,
                 ax=ax,
-                orient="h",
+                width=0.80,
             )
+            legend = ax.get_legend()
+            if legend is not None:
+                legend.remove()
+
+            for container, model_name in zip(ax.containers, model_order):
+                for patch in container:
+                    height = patch.get_height()
+                    if not pd.notna(height):
+                        continue
+                    x_pos = patch.get_x() + patch.get_width() / 2.0
+                    if height >= 0.19:
+                        ax.text(
+                            x_pos,
+                            height / 2.0,
+                            model_name,
+                            ha="center",
+                            va="center",
+                            rotation=90,
+                            color="white",
+                            fontsize=7.2,
+                            fontweight="bold",
+                            clip_on=True,
+                        )
+                    else:
+                        ax.text(
+                            x_pos,
+                            height + 0.012,
+                            model_name,
+                            ha="center",
+                            va="bottom",
+                            rotation=90,
+                            color="#222222",
+                            fontsize=6.5,
+                            fontweight="bold",
+                            clip_on=True,
+                        )
             title_suffix = f" - {strategy}" if "cv_strategy" in experiment_df.columns else ""
-            ax.set_title(f"Quick {experiment_name} Model Ranking{title_suffix}")
-            ax.set_xlabel("metric value")
-            ax.set_ylabel("model")
-            ax.set_xlim(0.0, 1.0)
-            ax.legend(loc="lower right", title="metric")
+            ax.set_title(f"Quick {experiment_name} Metrics by Model{title_suffix}", fontsize=14, pad=10)
+            ax.set_xlabel("")
+            ax.set_ylabel("metric value", fontsize=11)
+            ax.set_ylim(0.0, 1.0)
+            ax.tick_params(axis="x", rotation=20, labelsize=11)
+            ax.tick_params(axis="y", labelsize=10)
+            ax.grid(axis="y", alpha=0.30)
+            ax.grid(axis="x", visible=False)
             row_idx += 1
-    fig.tight_layout()
+    fig.subplots_adjust(top=0.965, bottom=0.035, left=0.06, right=0.995, hspace=0.50)
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
     return output_path
 
 
 def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Path) -> Path | None:
-    """Save an interactive HTML model ranking plot with legend-toggleable metrics."""
+    """Save an interactive HTML metric comparison plot with legend-toggleable models."""
     metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
     available_metrics = [metric for metric in metric_columns if metric in summary.columns]
     if summary.empty or not available_metrics:
@@ -883,6 +952,7 @@ def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Pat
     model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
     metric_order = [metric for metric in metric_columns if metric in available_metrics]
     group_order = list(dict.fromkeys(long_df["group"].astype(str).tolist()))
+    palette = _model_color_map(model_order)
 
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -895,27 +965,30 @@ def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Pat
 
     fig = px.bar(
         long_df,
-        x="value",
-        y="model",
-        color="metric",
+        x="metric",
+        y="value",
+        color="model",
+        color_discrete_map=palette,
         facet_row="group",
-        orientation="h",
         barmode="group",
+        text="model",
         category_orders={
             "model": model_order,
             "metric": metric_order,
             "group": group_order,
         },
         hover_data=hover_data,
-        title="Quick Model Ranking",
-        height=max(420, 330 * len(group_order)),
+        title="Quick Metrics by Model",
+        height=max(420, 360 * len(group_order)),
     )
-    fig.update_xaxes(range=[0.0, 1.0], title_text="metric value")
-    fig.update_yaxes(title_text="model")
+    fig.update_xaxes(title_text="metric")
+    fig.update_yaxes(range=[0.0, 1.0], title_text="metric value")
+    fig.update_traces(textangle=-90, textposition="inside", insidetextanchor="middle")
     fig.update_layout(
-        legend_title_text="metric",
+        legend_title_text="model",
+        showlegend=False,
         bargap=0.18,
-        margin={"l": 120, "r": 40, "t": 70, "b": 60},
+        margin={"l": 70, "r": 40, "t": 70, "b": 80},
     )
     fig.write_html(output_path, include_plotlyjs="cdn", full_html=True)
     return output_path

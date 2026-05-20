@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
+from emotions.gnn_improvement_experiments import run_quick_v1_v2_comparison as quick_comparison
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
     build_fixed_overrides,
@@ -164,7 +165,7 @@ def test_fixed_overrides_can_explicitly_enable_torch_compile() -> None:
     assert overrides["global_overrides"]["gnn"]["training"]["use_torch_compile"] is True
 
 
-def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
+def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> None:
     summary = pd.DataFrame(
         [
             {
@@ -215,10 +216,32 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path) -> None:
         ]
     )
 
+    barplot_calls = []
+    original_barplot = quick_comparison.sns.barplot
+
+    def recording_barplot(*args, **kwargs):
+        barplot_calls.append(kwargs.copy())
+        return original_barplot(*args, **kwargs)
+
+    monkeypatch.setattr(quick_comparison.sns, "barplot", recording_barplot)
+
     output_path = _save_group_model_ranking(summary=summary, output_dir=tmp_path)
 
     assert output_path == tmp_path / "plots" / "classification_group_model_ranking.png"
     assert output_path.exists()
+    assert barplot_calls
+    assert barplot_calls[0]["x"] == "metric"
+    assert barplot_calls[0]["y"] == "value"
+    assert barplot_calls[0]["hue"] == "model"
+    assert barplot_calls[0]["order"] == ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
+    assert barplot_calls[0]["hue_order"] == ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
+    assert barplot_calls[0]["palette"] == {
+        "Random": quick_comparison.MODEL_COLOR_PALETTE["Random"],
+        "Majority": quick_comparison.MODEL_COLOR_PALETTE["Majority"],
+        "GNN_v1": quick_comparison.MODEL_COLOR_PALETTE["GNN_v1"],
+        "GNN_v2": quick_comparison.MODEL_COLOR_PALETTE["GNN_v2"],
+        "LightGBM": quick_comparison.MODEL_COLOR_PALETTE["LightGBM"],
+    }
 
 
 def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Path) -> None:
