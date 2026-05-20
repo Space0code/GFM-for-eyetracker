@@ -1,5 +1,44 @@
 # Road to GFM4ET
 
+## 2026-05-20: Fixation Edge Construction Decision
+
+We analyzed same-fixation edge density on the latest local quick/Table-6
+MAHNOB-HCI snapshot with 22 eligible subjects and 5,034 usable 10 s windows
+(`window_length=10`, `min_samples_per_window=60`, `kt=2`, `ks=2`, excluded
+subjects `P9`, `P12`, `P15`).
+
+Main result: current sequential fixation edges are always already temporal
+edges when `kt >= 1`, so they add a relation label/parameter path but no new
+reachability. Full same-fixation cliques are too dense: they averaged 19,525
+directed fixation edges per graph and reached 360,600 edges in the worst window.
+Even a 0.1 sampled clique still reached an expected 36,060 fixation edges in the
+worst case.
+
+Decision: use **dilated intra-fixation edges**, in Slovenian
+**razširjene povezave znotraj fiksacije**. For a fixation of length $F$ and
+parameter $k_f$, define $s = \max(1, \lfloor F/k_f + 0.5 \rfloor)$ and connect
+each local node $i$ bidirectionally using cyclic offsets
+$(1 + q s) \bmod F$, $q = 0, 1, \ldots, k_f - 1$. For example, with $F = 30$ and
+$k_f = 10$, local node $0$ connects to nodes
+$1, 4, 7, 10, 13, 16, 19, 22, 25, 28$.
+
+For the final cyclic/permutation construction, `kf=2/3/5/10` gives mean
+directed fixation-edge counts of 1,956 / 2,908 / 4,163 / 7,273 per 10 s graph,
+respectively. The corresponding mean shares in `temporal + spatial + dilated`
+graphs are 36.2% / 45.7% / 54.4% / 67.1%.
+
+Reasons for this choice:
+
+- controlled number of fixation edges per graph;
+- no p99/max explosion like full cliques or 0.1 sampled cliques;
+- no edge-count implosion where too few fixation edges remain;
+- approximately uniform information spreading across each fixation;
+- local temporal communication is already covered by temporal edges;
+- no backward-compatibility mode is needed inside GNN v2; GNN v1 remains the
+  old-model reference when needed.
+
+Detailed report: `docs/fixation-edges-analysis.md`.
+
 - tried next point prediction => caught trends
 - moved on to classification/regression
 - emotion classification
