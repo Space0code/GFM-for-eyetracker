@@ -86,6 +86,7 @@ MODEL_COLOR_PALETTE = {
     "Mean": "#CCB974",
 }
 LOSS_METRIC_COLUMNS = ["train_loss", "val_loss", "test_loss"]
+LOSS_AXIS_UPPER_LIMIT = 2.0
 LOSS_METRIC_STYLES = {
     "train_loss": {"label": "Train loss", "color": "#0072B2", "linestyle": "-"},
     "val_loss": {"label": "Validation loss", "color": "#E69F00", "linestyle": "-"},
@@ -1475,7 +1476,34 @@ def _plot_band_curve(
 
 
 def _set_loss_ylim_from_values(ax: plt.Axes, values: Sequence[np.ndarray]) -> None:
-    """Set a local y-axis range from the finite loss values drawn in one subplot."""
+    """Set a local y-axis range from finite loss values, clipping extreme losses."""
+    finite_parts = [
+        np.asarray(value, dtype=float).reshape(-1)
+        for value in values
+        if np.asarray(value, dtype=float).size > 0
+    ]
+    if not finite_parts:
+        return
+    finite = np.concatenate(finite_parts)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return
+    finite = finite[finite <= LOSS_AXIS_UPPER_LIMIT]
+    if finite.size == 0:
+        ax.set_ylim(0.0, LOSS_AXIS_UPPER_LIMIT)
+        return
+
+    y_min = float(np.min(finite))
+    y_max = float(np.max(finite))
+    if np.isclose(y_min, y_max):
+        pad = max(0.05, abs(y_min) * 0.05)
+    else:
+        pad = 0.05 * (y_max - y_min)
+    ax.set_ylim(y_min - pad, LOSS_AXIS_UPPER_LIMIT)
+
+
+def _set_loss_xlim_from_values(ax: plt.Axes, values: Sequence[np.ndarray]) -> None:
+    """Set a local x-axis range from the finite epoch values drawn in one subplot."""
     finite_parts = [
         np.asarray(value, dtype=float).reshape(-1)
         for value in values
@@ -1488,13 +1516,13 @@ def _set_loss_ylim_from_values(ax: plt.Axes, values: Sequence[np.ndarray]) -> No
     if finite.size == 0:
         return
 
-    y_min = float(np.min(finite))
-    y_max = float(np.max(finite))
-    if np.isclose(y_min, y_max):
-        pad = max(0.05, abs(y_min) * 0.05)
+    x_min = float(np.min(finite))
+    x_max = float(np.max(finite))
+    if np.isclose(x_min, x_max):
+        pad = 1.0
     else:
-        pad = 0.05 * (y_max - y_min)
-    ax.set_ylim(y_min - pad, y_max + pad)
+        pad = 0.03 * (x_max - x_min)
+    ax.set_xlim(x_min - pad, x_max + pad)
 
 
 def _plot_loss_lines(
@@ -1591,7 +1619,7 @@ def _plot_training_curve_grid(
         n_rows,
         n_cols,
         figsize=(max(10.0, 4.8 * n_cols), max(4.0, 3.7 * n_rows)),
-        sharex=True,
+        sharex=False,
         sharey=False,
         squeeze=False,
     )
@@ -1608,6 +1636,7 @@ def _plot_training_curve_grid(
         ]
         for col_idx, metric in enumerate(available_metrics):
             ax = axes[row_idx, col_idx]
+            x_limit_values: List[np.ndarray] = []
             y_limit_values: List[np.ndarray] = []
             for model_name in model_order:
                 model_long_df = group_df[group_df["model"].astype(str) == model_name]
@@ -1617,6 +1646,7 @@ def _plot_training_curve_grid(
                 if curve is None:
                     continue
                 x, y, std, min_values, max_values = curve
+                x_limit_values.append(x)
                 y_limit_values.extend([min_values, max_values])
                 color = color_by_model.get(model_name)
                 _plot_band_curve(
@@ -1654,6 +1684,8 @@ def _plot_training_curve_grid(
                 ax.set_ylim(*ylim)
             elif y_limit_values:
                 _set_loss_ylim_from_values(ax, y_limit_values)
+            if x_limit_values:
+                _set_loss_xlim_from_values(ax, x_limit_values)
             _style_loss_axis(ax, ylabel=None)
 
     if len(legend_handles) > 1:
@@ -1732,7 +1764,7 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
         n_rows,
         n_cols,
         figsize=(max(7.0, 5.4 * n_cols), max(4.0, 3.8 * n_rows)),
-        sharex=True,
+        sharex=False,
         sharey=False,
         squeeze=False,
     )
@@ -1749,12 +1781,14 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
                 ax.set_visible(False)
                 continue
 
+            x_limit_values: List[np.ndarray] = []
             y_limit_values: List[np.ndarray] = []
             for metric in available_metrics:
                 curve = _compute_aggregated_metric_curve(model_df, metric)
                 if curve is None:
                     continue
                 x, y, std, min_values, max_values = curve
+                x_limit_values.append(x)
                 y_limit_values.extend([min_values, max_values])
                 style = LOSS_METRIC_STYLES[metric]
                 _plot_band_curve(
@@ -1786,6 +1820,8 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
                     )
             if y_limit_values:
                 _set_loss_ylim_from_values(ax, y_limit_values)
+            if x_limit_values:
+                _set_loss_xlim_from_values(ax, x_limit_values)
             _style_loss_axis(ax)
             ax.legend(loc="best", frameon=False, fontsize="small")
 
