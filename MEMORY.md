@@ -6,6 +6,7 @@ recent work, plans, or decisions.
 
 ## Source Map
 
+- This file lives in the `GFM-for-eyetracker/` repository root; the parent workspace also contains sibling LaTeX repository `../diploma-latex/`.
 - `AGENTS.md`: stable repo instructions for assistants.
 - `MEMORY.md`: current state, locked decisions, recent high-signal context, and next actions.
 - `MAHNOB_dataset_report.md`: canonical local MAHNOB-HCI dataset inventory, exclusions, counts, and uncertainty notes.
@@ -100,7 +101,7 @@ recent work, plans, or decisions.
 - Multiclass `MLP` baseline now uses the explicit fold validation split via a PyTorch MLP implementation, logs `train_loss` and `val_loss`, and early-stops on validation loss. This avoids sklearn MLP's internal random validation split and makes MLP loss plots comparable with GNN and `GazeMAE_MLP`.
 - `GazeMAE_MLP` is available in the quick comparison runner as a baseline model alias (`gazemae`, `gazemae_mlp`, `GazeMAE_MLP`). It uses the same suite snapshots, CV splits, Table-6 mappings, summaries, label-distribution tables, loss plots, and confusion-matrix plotting as other multiclass baselines. The Table-6 low/high wrapper lives at `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_low_high.yaml`.
 - GazeMAE embedding cache reuse is intentionally stable across timestamped quick/suite runs: when a suite snapshot manifest is available, the cache key uses `snapshot_hash`/`snapshot_cache_key` rather than the generated snapshot CSV path or modification time. The key also includes GazeMAE checkpoint file hashes and preprocessing settings, so embeddings are reused only for identical data/model/preprocessing identities. This was verified with a repeated small quick-comparison run.
-- GazeMAE runtime is now self-contained in this repository: `src/emotions/gazemae_model.py` implements the minimal inference encoder, and `models/gazemae/*-encoder-state.pt` stores converted encoder+bottleneck state dicts. The quick configs no longer depend on `/home/ppg/eyetracking/gazemae` at runtime.
+- GazeMAE runtime is now self-contained in this repository: `src/emotions/gazemae_model.py` implements the minimal inference encoder, and `models/gazemae/*-encoder-state.pt` stores converted encoder+bottleneck state dicts. The quick configs no longer depend on a machine-specific external GazeMAE checkout at runtime.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
 - 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
 

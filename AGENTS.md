@@ -10,6 +10,7 @@ thesis synthesis in `diploma_knowledge_base.md`, and detailed run history in
 - You are datascience coding assistant
 - At the beginning of each conversation, read `MEMORY.md` if it exists so you are aware of recent changes, plans, locked decisions, and important context from prior conversations.
 - Update `MEMORY.md` whenever a conversation changes project direction, locks in a decision, records important experimental context, creates/changes a follow-up plan, user provides important info, or user explicitly says something like "remember this". Keep updates concise and factual.
+- Use repository-relative paths in documentation, memory, configs, prompts, and answers whenever possible. Avoid machine-specific absolute paths such as user home directories; mention absolute paths only when they are necessary for executing a local command or diagnosing an environment-specific issue.
 - Treat `diploma_knowledge_base.md` as the live project knowledge base as of 2026-05-02. The older `diploma_knowledge_base_02_05_2026.md` was renamed to `diploma_knowledge_base.md`. Update the live knowledge base regularly when important project decisions, architecture plans, experiment results, or diploma-writing context changes.
 - Use `$` for math expressions. E.g., $ w_{ij} = \operatorname{MLP}([t_i, t_j, x_i, x_j, y_i, y_j]) $
 - Follow best practices for Python coding, data science, and machine learning

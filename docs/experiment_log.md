@@ -466,7 +466,7 @@ Additional checks:
   quick-comparison output directories.
 
 Follow-up self-contained runtime cleanup: replaced the cross-repo runtime
-dependency on `/home/ppg/eyetracking/gazemae` with a minimal local GazeMAE
+dependency on a machine-specific external GazeMAE checkout with a minimal local GazeMAE
 encoder implementation in `src/emotions/gazemae_model.py` and converted
 encoder-only checkpoints in `models/gazemae/`. The converted checkpoints keep
 only encoder and bottleneck state dicts:
