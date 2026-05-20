@@ -1,0 +1,56 @@
+\chapter{Diskusija}
+\label{sec:diskusija}
+
+\section{Ali grafovska predstavitev pomaga?}
+\label{subsec:diskusija-graf-pomaga}
+
+\TODO{
+Odgovori neposredno: ali finalni GNN premaga ne-grafovske baseline modele; če jih ne premaga, ali vseeno pokaže smiselno vedenje; pri kateri nalogi je graf najbolj koristen; ali graf prispeva več pri subject LOO ali recording LOO.
+}
+
+\section{Vloga časovnih in prostorskih povezav}
+\label{subsec:diskusija-edge-types}
+
+\TODO{
+Interpretiraj ablations: časovne povezave, prostorske povezave, forward/backward temporal separation, edge weights in kaj to pomeni za razumevanje eye-tracking signalov.
+}
+
+\section{Primerjava z \GazeMAE{}}
+\label{subsec:diskusija-gazemae}
+
+\TODO{
+Povej, ali \GazeMAE{} + MLP premaga baseline modele, ali premaga GNN, ali primerjava kaže, da je self-supervised representation learning uporabna smer, in katere so omejitve reprodukcije oziroma implementacije.
+}
+
+\section{Primerjava z izvirnim \MAHNOB{} pristopom}
+\label{subsec:diskusija-mahnob}
+
+\TODO{
+Povej previdno: izvirni paper uporablja drugačne ročno oblikovane eye-gaze značilke, drugačen pipeline izbire značilk in SVM; primerjava je metodološko motivacijska, ne neposredna reprodukcija.
+}
+
+\section{Omejitve}
+\label{subsec:omejitve}
+
+Glavne omejitve naloge so:
+\begin{itemize}
+    \item uporaba ene glavne podatkovne zbirke;
+    \item subjektivnost čustvenih oznak;
+    \item omejitev na eye-tracking signale brez drugih fizioloških modalnosti;
+    \item občutljivost grafovske konstrukcije na hiperparametre;
+    \item računska zahtevnost validacije z LOO protokoli;
+    \item možnost prekomernega glajenja v grafovskih modelih.
+\end{itemize}
+
+\section{Možnosti nadaljnjega dela}
+\label{subsec:future-work}
+
+Možne smeri nadaljnjega dela vključujejo:
+\begin{itemize}
+    \item učenje povezav namesto ročne konstrukcije grafa;
+    \item uporabo grafovskih transformerjev;
+    \item samonadzorovano predtreniranje na neoznačenih eye-tracking signalih;
+    \item razvoj grafovskega foundation modela za podatke pogleda;
+    \item razširitev na večmodalne fiziološke podatke;
+    \item evalvacijo na več podatkovnih zbirkah.
+\end{itemize}

@@ -40,3 +40,20 @@ results/**/experiments/**
 # debug files
 src/emotions/binary/temp.py
 scripts/debug_embedding_collapse_from_yaml.py
+
+# LaTeX artefakti gradnje diplome
+diploma/gradnja/
+diploma/**/*.aux
+diploma/**/*.bbl
+diploma/**/*.bcf
+diploma/**/*.blg
+diploma/**/*.fdb_latexmk
+diploma/**/*.fls
+diploma/**/*.log
+diploma/**/*.out
+diploma/**/*.run.xml
+diploma/**/*.synctex.gz
+diploma/**/*.toc
+diploma/**/*.lof
+diploma/**/*.lot
+diploma/_minted-*/

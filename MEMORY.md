@@ -29,6 +29,7 @@ recent work, plans, or decisions.
 - Current practical aim: make the GNN strong and interpretable enough to beat local baselines and ideally approach or improve on the MAHNOB eye-gaze paper result.
 - Diploma writing has started in Overleaf, covering motivation, related work, and theory. Broader multi-dataset/GFM-style experiments are deferred to post-diploma work.
 - Diploma writing workflow is moving toward a hybrid setup: VS Code + Git/GitHub as the main editing/versioning environment, with Overleaf kept for final PDF checks and submission.
+- The local LaTeX diploma source should use the official FRI template from `diploma_FRI_vzorec`, live under `diploma/`, and use Slovenian names for LaTeX-related folders/files where practical (`poglavja/`, `dodatki/`, `slike/`, `tabele/`, `uvodni_del/`, `gradnja/`). Use portable `diploma/latexmkrc`; do not add VS Code-specific LaTeX Workshop settings unless requested.
 - A thesis-support design note now exists at `docs/diploma_gnn_v2_design_notes.md`; before relying on it, ask whether any newer architecture changes should be reflected.
 
 ## Locked Decisions
@@ -114,7 +115,7 @@ recent work, plans, or decisions.
 - Inspect LOSO quick comparison confusion matrices and ranking plot from `results/quick_v1_v2_comparison/2026-05-07_14-54-32`.
 - Decide whether the next step is tuning v2 further, running clean ablations, or aligning the experiment story with diploma writing needs after convergence follow-up.
 - Keep detailed future run notes in `docs/experiment_log.md`; keep thesis-facing conclusions in `diploma_knowledge_base.md`.
-- Create a dedicated LaTeX thesis source tree in the repo, separate from research notes in `docs/`, with `.tex`, `.bib`, figures, tables, and build output organized for VS Code/LaTeX Workshop and easy Overleaf synchronization.
+- Continue developing the local FRI-template LaTeX diploma source in `diploma/`, separate from research notes in `docs/`, with `.tex`, `.bib`, figures, tables, and build output organized for VS Code/LaTeX Workshop and easy Overleaf synchronization.
 
 ## Visualization Ideas To Implement Later
 

@@ -1,0 +1,95 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Lokalna verzija diplomske naloge v repozitoriju GFM-for-eyetracker.
+% Datoteka temelji na uradni FRI LaTeX predlogi iz `diploma_FRI_vzorec`.
+%
+% !BIB program = biber
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\DocumentMetadata{
+  pdfstandard = A-4,
+  pdfversion  = 2.0,
+  lang        = sl-SI,
+  colorprofiles = {sRGB_v4_ICC_preference.icc}
+}
+
+\documentclass[a4paper,12pt,openright]{book}
+%\documentclass[a4paper,12pt,openright,draft]{book}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  PODATKI O DIPLOMI
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\tauthor}{Tomi Božak}
+\newcommand{\temail}{TODO@student.uni-lj.si}
+\newcommand{\tmentor}{TODO}
+\newcommand{\tsomentor}{TODO}
+
+% TODO: odkomentiraj oziroma prilagodi pravilen program.
+\newcommand{\tstopnja}{UNIVERZITETNI  ŠTUDIJSKI PROGRAM\\ PRVE STOPNJE\\ RAČUNALNIŠTVO IN INFORMATIKA}
+
+\newcommand{\tinst}{Fakulteta za računalništvo in informatiko}
+\newcommand{\tvrsta}{Diplomska naloga na univerzitetnem programu prve stopnje}
+
+% TODO: opis teme prepiši iz STUDIS-a, ko bo končna verzija potrjena.
+\newcommand{\tdescription}{%
+TODO: Besedilo teme diplomskega dela prepiši iz študijskega informacijskega sistema.
+}
+\newcommand{\tdescriptionEn}{%
+TODO: Prevedi uradni opis teme diplomskega dela iz STUDIS-a.
+}
+
+\newcommand{\ttitle}{Grafovska nevronska mreža za prepoznavo čustev iz sledilnika pogleda}
+\newcommand{\ttitleEn}{Graph Neural Network for Emotion Recognition from Eye-Tracking Data}
+
+\newcommand{\tkeywords}{grafovske nevronske mreže, prostorsko-časovni grafi, sledilnik pogleda, prepoznava čustev, afektivno računalništvo, strojno učenje}
+\newcommand{\tkeywordsEn}{graph neural networks, spatio-temporal graphs, eye tracking, emotion recognition, affective computing, machine learning}
+
+\newcommand{\tzahvala}{TODO: Zahvalo napiši ali odstrani pred oddajo.}
+\newcommand{\tposvetilo}{TODO: Posvetilo lahko odstraniš, če ga ne želiš.}
+
+\input{podporno/preambula.tex}
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% POVZETEK IN SEZNAM KRATIC
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\tpovzetek}{\input{uvodni_del/povzetek_sl.tex}}
+\newcommand{\tabstract}{\input{uvodni_del/povzetek_en.tex}}
+\newcommand{\tseznamkratic}{\input{uvodni_del/seznam_kratic.tex}}
+
+\input{podporno/naslovnestrani.tex}
+\mainmatter
+\setcounter{page}{1}
+\pagestyle{fancy}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% GLAVNA VSEBINA
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\input{poglavja/00_razsirjeni_povzetek.tex}
+\input{poglavja/01_uvod.tex}
+\input{poglavja/02_teoreticno_ozadje.tex}
+\input{poglavja/03_sorodna_dela.tex}
+\input{poglavja/04_podatki_in_predobdelava.tex}
+\input{poglavja/05_grafovska_predstavitev.tex}
+\input{poglavja/06_modeli.tex}
+\input{poglavja/07_eksperimentalni_protokol.tex}
+\input{poglavja/08_rezultati.tex}
+\input{poglavja/09_diskusija.tex}
+\input{poglavja/10_zakljucek.tex}
+
+\appendix
+\input{dodatki/A_dodatni_rezultati.tex}
+\input{dodatki/B_hiperparametri.tex}
+\input{dodatki/C_dodatne_vizualizacije_grafov.tex}
+\input{dodatki/D_diagnostika_predstavitev.tex}
+\input{dodatki/E_zgodovinski_poskusi_eseed.tex}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  LITERATURA
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\printbibliography[heading=bibintoc]
+
+\end{document}

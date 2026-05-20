@@ -1,0 +1,37 @@
+\chapter*{Razširjeni povzetek}
+\addcontentsline{toc}{chapter}{Razširjeni povzetek}
+
+\TODO{
+To poglavje napiši na koncu, ko bodo znani rezultati. Struktura naj bo podobna raziskovalnemu članku:
+\begin{itemize}
+    \item motivacija: zakaj grafovska predstavitev podatkov sledilnika pogleda;
+    \item predlagana metoda: kako iz časovnih oken nastanejo grafi;
+    \item eksperimentalni protokol: \MAHNOB{}, 3-razredna valenca/vzburjenje, subject LOO in recording LOO;
+    \item rezultati: primerjava z baseline modeli, \GazeMAE{} in GNN arhitekturami;
+    \item sklep: kaj grafovska predstavitev prispeva in kje so omejitve.
+\end{itemize}
+}
+
+\section*{I Grafovske nevronske mreže in motivacija}
+
+\TODO{
+Kratko povzemi, kaj so grafovske nevronske mreže, zakaj so primerne za podatke z relacijsko, prostorsko ali časovno strukturo in zakaj je eye-tracking okno smiselno obravnavati kot prostorsko-časovni graf.
+}
+
+\section*{II Grafovska predstavitev podatkov sledilnika pogleda}
+
+\TODO{
+Kratko povzemi: vozlišče = ena meritev sledilnika pogleda; značilke vozlišča = koordinate pogleda in velikosti zenic; časovne povezave = bližina vzorcev v času; prostorske povezave = bližina vzorcev v prostoru pogleda; uteži povezav kot del modela.
+}
+
+\section*{III Modeliranje in eksperimentalna evalvacija}
+
+\TODO{
+Kratko povzemi uporabljeno podatkovno zbirko \MAHNOB{}, nalogi 3-class valence in 3-class arousal, validacijo subject LOO in recording LOO ter primerjane modele: SVM, LightGBM, MLP, \GazeMAE{} + MLP, GCN, GAT in finalni heterogeni GNN.
+}
+
+\section*{IV Rezultati in sklep}
+
+\TODO{
+Dopolni po zaključku eksperimentov: kateri model je najboljši pri valenci, kateri pri vzburjenju, ali GNN izboljša rezultate glede na ne-grafovske baseline modele, katere komponente grafa najbolj prispevajo k rezultatu ter glavne omejitve in prihodnje delo.
+}

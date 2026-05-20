@@ -1,0 +1,136 @@
+\chapter{Rezultati}
+\label{sec:rezultati}
+
+\TODO{
+To poglavje napiši šele po glavnih eksperimentih. Ne mešaj rezultatov iz \ESEED{} z glavno \MAHNOB{} evalvacijo, razen če jih daš v dodatek ali kratko motivacijo.
+}
+
+\section{Porazdelitev razredov}
+\label{subsec:rezultati-class-balance}
+
+\TODO{Dodaj tabeli razredov za valenco in vzburjenje, komentar neuravnoteženosti ter večinski baseline kot referenčno točko.}
+
+\section{Rezultati za 3-razredno valenco}
+\label{subsec:rezultati-valence}
+
+\begin{table}[H]
+    \centering
+    \caption{TODO: Rezultati za 3-razredno klasifikacijo valence pri subject LOO.}
+    \label{tab:results-valence-subject-loo}
+    \begin{tabular}{lccccc}
+        \toprule
+        Model & Bal. acc. & Acc. & Macro-F1 & Weighted-F1 & AUC \\
+        \midrule
+        Majority & TODO & TODO & TODO & TODO & TODO \\
+        SVM & TODO & TODO & TODO & TODO & TODO \\
+        LightGBM & TODO & TODO & TODO & TODO & TODO \\
+        MLP & TODO & TODO & TODO & TODO & TODO \\
+        \GazeMAE{} + MLP & TODO & TODO & TODO & TODO & TODO \\
+        GCN & TODO & TODO & TODO & TODO & TODO \\
+        GAT & TODO & TODO & TODO & TODO & TODO \\
+        ST-HeteroGNN & TODO & TODO & TODO & TODO & TODO \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{TODO: Rezultati za 3-razredno klasifikacijo valence pri recording LOO.}
+    \label{tab:results-valence-recording-loo}
+    \begin{tabular}{lccccc}
+        \toprule
+        Model & Bal. acc. & Acc. & Macro-F1 & Weighted-F1 & AUC \\
+        \midrule
+        Majority & TODO & TODO & TODO & TODO & TODO \\
+        SVM & TODO & TODO & TODO & TODO & TODO \\
+        LightGBM & TODO & TODO & TODO & TODO & TODO \\
+        MLP & TODO & TODO & TODO & TODO & TODO \\
+        \GazeMAE{} + MLP & TODO & TODO & TODO & TODO & TODO \\
+        GCN & TODO & TODO & TODO & TODO & TODO \\
+        GAT & TODO & TODO & TODO & TODO & TODO \\
+        ST-HeteroGNN & TODO & TODO & TODO & TODO & TODO \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\TODO{Po tabelah napiši, kateri model je najboljši, ali GNN premaga najboljši ne-grafovski baseline, ali je razlika med subject LOO in recording LOO velika ter interpretacijo confusion matrix.}
+
+\section{Rezultati za 3-razredno vzburjenje}
+\label{subsec:rezultati-arousal}
+
+\begin{table}[H]
+    \centering
+    \caption{TODO: Rezultati za 3-razredno klasifikacijo vzburjenja pri subject LOO.}
+    \label{tab:results-arousal-subject-loo}
+    \begin{tabular}{lccccc}
+        \toprule
+        Model & Bal. acc. & Acc. & Macro-F1 & Weighted-F1 & AUC \\
+        \midrule
+        Majority & TODO & TODO & TODO & TODO & TODO \\
+        SVM & TODO & TODO & TODO & TODO & TODO \\
+        LightGBM & TODO & TODO & TODO & TODO & TODO \\
+        MLP & TODO & TODO & TODO & TODO & TODO \\
+        \GazeMAE{} + MLP & TODO & TODO & TODO & TODO & TODO \\
+        GCN & TODO & TODO & TODO & TODO & TODO \\
+        GAT & TODO & TODO & TODO & TODO & TODO \\
+        ST-HeteroGNN & TODO & TODO & TODO & TODO & TODO \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{TODO: Rezultati za 3-razredno klasifikacijo vzburjenja pri recording LOO.}
+    \label{tab:results-arousal-recording-loo}
+    \begin{tabular}{lccccc}
+        \toprule
+        Model & Bal. acc. & Acc. & Macro-F1 & Weighted-F1 & AUC \\
+        \midrule
+        Majority & TODO & TODO & TODO & TODO & TODO \\
+        SVM & TODO & TODO & TODO & TODO & TODO \\
+        LightGBM & TODO & TODO & TODO & TODO & TODO \\
+        MLP & TODO & TODO & TODO & TODO & TODO \\
+        \GazeMAE{} + MLP & TODO & TODO & TODO & TODO & TODO \\
+        GCN & TODO & TODO & TODO & TODO & TODO \\
+        GAT & TODO & TODO & TODO & TODO & TODO \\
+        ST-HeteroGNN & TODO & TODO & TODO & TODO & TODO \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Primerjava validacijskih protokolov}
+\label{subsec:primerjava-splitov}
+
+\TODO{Dodaj primerjavo subject LOO proti recording LOO in razlago posploševanja na nove subjekte oziroma nove posnetke.}
+
+\section{Ablacijska študija}
+\label{subsec:rezultati-ablation}
+
+\begin{table}[H]
+    \centering
+    \caption{TODO: Ablacijska študija finalnega modela.}
+    \label{tab:ablation}
+    \begin{tabular}{lccccc}
+        \toprule
+        Nastavitev & Bal. acc. & Acc. & Macro-F1 & Weighted-F1 & AUC \\
+        \midrule
+        Finalni model & TODO & TODO & TODO & TODO & TODO \\
+        Brez pupil značilk & TODO & TODO & TODO & TODO & TODO \\
+        Brez prostorskih povezav & TODO & TODO & TODO & TODO & TODO \\
+        Brez časovnih povezav & TODO & TODO & TODO & TODO & TODO \\
+        Brez uteži povezav & TODO & TODO & TODO & TODO & TODO \\
+        5 s okna & TODO & TODO & TODO & TODO & TODO \\
+        Brez MLP fuzije & TODO & TODO & TODO & TODO & TODO \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Analiza notranjih predstavitev modela}
+\label{subsec:rezultati-diagnostika}
+
+\TODO{Dodaj graf/tabelo variance predstavitev po plasteh, kosinusno podobnost, razpon logitov in komentar kolapsa predstavitev.}
+
+\section{Analiza napak}
+\label{subsec:analiza-napak}
+
+\TODO{Dodaj confusion matrix za najboljši model in najboljši baseline ter analizo najpogostejših zamenjav razredov.}

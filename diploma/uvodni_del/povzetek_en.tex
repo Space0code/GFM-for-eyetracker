@@ -1,0 +1,9 @@
+This thesis investigates the use of graph neural networks for affective state recognition from eye-tracking data.
+The central methodological problem is the representation of a temporal window of gaze measurements as a spatio-temporal graph, where nodes correspond to individual samples and edges encode temporal and spatial proximity between them.
+Based on this representation, we develop and evaluate a graph-based model for three-class classification of valence and arousal.
+
+The experimental evaluation is performed on the \MAHNOB{} dataset using two validation protocols: leave-one-subject-out and leave-one-recording-out evaluation.
+Graph-based models are compared against non-graph machine learning baselines and against \GazeMAE{} as a representative of modern gaze representation learning methods.
+In addition to final classification performance, we analyze the contribution of individual components of the graph construction, including temporal edges, spatial edges, pupil features, and edge weights.
+
+The main research question of the thesis is whether a spatio-temporal graph representation of eye-tracking windows can improve affective state classification compared to non-graph models trained on the same input windows.
