@@ -26,7 +26,7 @@ We compared this current construction with denser same-fixation alternatives:
 - expected sparse clique with keep probability $0.1$;
 - an earlier non-cyclic same-fixation jump estimate with $k_f = 10$;
 - the final cyclic/permutation-based dilated intra-fixation construction with
-  $k_f = 10$.
+  $k_f \in \{1, 2, 3, 5, 10\}$.
 
 ## Data And Settings
 
@@ -74,6 +74,7 @@ Analyzed subjects:
 | Full directed clique edges | 19,525 | 15,590 | 34,158 | 45,038 | 110,100 | 360,600 |
 | Expected clique edges with keep probability 0.1 | 1,953 | 1,559 | 3,416 | 4,504 | 11,010 | 36,060 |
 | Earlier non-cyclic `kf=10` jump estimate | 4,363 | 4,804 | 5,340 | 5,382 | 5,406 | 5,414 |
+| Final cyclic `kf=1` dilated fixation edges | 983 | 1,080 | 1,196 | 1,200 | 1,202 | 1,202 |
 | Final cyclic `kf=2` dilated fixation edges | 1,956 | 2,152 | 2,388 | 2,400 | 2,404 | 2,404 |
 | Final cyclic `kf=3` dilated fixation edges | 2,908 | 3,204 | 3,558 | 3,590 | 3,606 | 3,606 |
 | Final cyclic `kf=5` dilated fixation edges | 4,163 | 4,547 | 5,330 | 5,517 | 5,771 | 6,010 |
@@ -84,15 +85,41 @@ Analyzed subjects:
 
 ## Share Of Total Edges
 
-| Alternative | Mean share | Median | p95 | p99 | Max |
+Shares below use the construction-specific denominator
+`temporal_forward + temporal_backward + spatial + fixation_variant`. Percentages
+are computed per 10 s graph and then averaged. `All temporal` is
+`temporal_forward + temporal_backward`.
+
+| Construction | Temporal forward | Temporal backward | All temporal | Spatial | Fixation |
+|---|---:|---:|---:|---:|---:|
+| Current sequential fixation | 23.2% | 23.2% | 46.3% | 32.3% | 21.3% |
+| Full clique | 5.8% | 5.8% | 11.7% | 8.2% | 80.2% |
+| Keep 0.1 clique | 20.1% | 20.1% | 40.2% | 28.1% | 31.6% |
+| Earlier non-cyclic `kf=10` jumps | 13.0% | 13.0% | 26.0% | 18.2% | 55.8% |
+| Final cyclic `kf=1` dilated | 22.9% | 22.9% | 45.8% | 32.0% | 22.2% |
+| Final cyclic `kf=2` dilated | 18.8% | 18.8% | 37.6% | 26.2% | 36.2% |
+| Final cyclic `kf=3` dilated | 16.0% | 16.0% | 32.0% | 22.3% | 45.7% |
+| Final cyclic `kf=5` dilated | 13.4% | 13.4% | 26.8% | 18.8% | 54.4% |
+| Final cyclic `kf=10` dilated | 9.7% | 9.7% | 19.4% | 13.5% | 67.1% |
+
+The table below keeps the fixation-share distribution because the tail behavior
+is the main density risk for same-fixation constructions.
+
+| Fixation construction | Mean share | Median | p95 | p99 | Max |
 |---|---:|---:|---:|---:|---:|
 | Full clique / temporal + spatial + full clique | 80.2% | 81.0% | 92.0% | 96.5% | 98.9% |
 | Keep 0.1 clique / temporal + spatial + keep | 31.6% | 29.9% | 53.5% | 73.3% | 89.9% |
 | Earlier non-cyclic `kf=10` jumps / temporal + spatial + jumps | 55.8% | 56.1% | 57.1% | 57.3% | 57.6% |
+| Final cyclic `kf=1` dilated / temporal + spatial + dilated | 22.2% | 22.4% | 22.9% | 23.0% | 23.4% |
 | Final cyclic `kf=2` dilated / temporal + spatial + dilated | 36.2% | 36.4% | 37.3% | 37.4% | 37.7% |
 | Final cyclic `kf=3` dilated / temporal + spatial + dilated | 45.7% | 46.0% | 47.0% | 47.2% | 47.5% |
 | Final cyclic `kf=5` dilated / temporal + spatial + dilated | 54.4% | 54.8% | 57.9% | 58.9% | 60.1% |
 | Final cyclic `kf=10` dilated / temporal + spatial + dilated | 67.1% | 67.9% | 72.1% | 73.5% | 74.7% |
+
+`kf=1` behaves like a cyclic version of the current sequential fixation
+relation: it mostly keeps local same-fixation communication and adds only the
+wrap-around edge inside each fixation run. It is therefore useful as a very sparse
+control, but it does not provide the intended long-range same-fixation spreading.
 
 ## Topological Overlap
 
