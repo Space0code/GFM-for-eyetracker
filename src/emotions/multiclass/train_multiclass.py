@@ -77,7 +77,7 @@ from emotions.label_names import (
     build_encoded_class_name_mapping,
     resolve_multiclass_label_name_mapping,
 )
-from emotions.train_baseline import build_tabular_samples, samples_to_xy
+from emotions.train_baseline import build_tabular_samples, samples_to_xy, select_tabular_feature_columns
 from emotions.utils import (
     Logger,
     create_splitter,
@@ -957,12 +957,7 @@ def _prepare_baseline_split(
 ) -> Tuple[pd.DataFrame, np.ndarray, List[Tuple[str, str]]]:
     X, y, metadata, _, _ = samples_to_xy(samples, indices)
 
-    selected_cols: List[str] = []
-    for col in feature_columns:
-        if col in X.columns:
-            selected_cols.append(col)
-        elif f"{col}_mean" in X.columns:
-            selected_cols.append(f"{col}_mean")
+    selected_cols = select_tabular_feature_columns(X, feature_columns)
 
     if not selected_cols:
         raise ValueError(

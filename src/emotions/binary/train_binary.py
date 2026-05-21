@@ -53,7 +53,7 @@ from emotions.common.edge_scaling import (
     apply_edge_feature_scalers,
     fit_edge_feature_scalers,
 )
-from emotions.train_baseline import build_tabular_samples, samples_to_xy
+from emotions.train_baseline import build_tabular_samples, samples_to_xy, select_tabular_feature_columns
 from emotions.utils import (
     Logger,
     load_config,
@@ -732,12 +732,7 @@ def train_baselines_fold(
 
     # Keep baseline features aligned with configured signal columns.
     if feature_columns:
-        selected_feature_cols: List[str] = []
-        for col in feature_columns:
-            if col in X_train.columns:
-                selected_feature_cols.append(col)
-            elif f"{col}_mean" in X_train.columns:
-                selected_feature_cols.append(f"{col}_mean")
+        selected_feature_cols = select_tabular_feature_columns(X_train, feature_columns)
 
         if not selected_feature_cols:
             raise ValueError(

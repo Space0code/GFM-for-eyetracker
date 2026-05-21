@@ -134,11 +134,9 @@ Training-ready HCI scale in full cache (emotion-elicitation, `emotion-derivation
 Baselines use aligned windows, but convert each window into aggregated tabular features (`src/emotions/train_baseline.py`):
 
 Per-window features typically include:
-- `x-avg_mean/std/min/max`
-- `y-avg_mean/std/min/max`
-- `pupil-size-left-avg_mean/std`
-- `pupil-size-right-avg_mean/std`
-- optional confidence means
+- for each configured signal: `mean/std/min/max/range/median/q25/q75/iqr`
+- default configured signals include `x-avg`, `y-avg`, both pupil channels, `distance-avg`, and `fixation-duration`
+- fixation summaries such as fixation count, fixation sample fraction, and fixation-duration sum/mean/max when fixation data is available
 
 Targets per window:
 - `mean` or `last` target aggregation (configurable, aligned with GNN).
