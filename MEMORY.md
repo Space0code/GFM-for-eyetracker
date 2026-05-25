@@ -78,6 +78,17 @@ recent work, plans, or decisions.
 - 2026-05-20 GNN v2 dilated fixation edge implementation: `src/data/data.py` now builds deduplicated cyclic dilated intra-fixation edges for each contiguous valid `fixation-index` run when `use_fixation_edges=true`, controlled by `fixation_dilation_k` (default/config value 3). Dataset cache keys include `fixation_dilation_k`; shared dataset kwargs and active quick/suite configs pass it through. Spatial edges were already deduplicated with `torch.unique(edge_index_spatial, dim=1)`. Focused tests passed: `pytest tests/data/test_hci_optional_signals.py tests/emotions/test_relative_time_and_edge_scaling.py -q`.
 - 2026-05-18 GazeMAE transfer baseline decision: use frozen pretrained GazeMAE position and velocity encoders packaged locally as encoder-only weights under `models/gazemae/`, split each 10s MAHNOB window into 2s chunks at 500 Hz, pool chunk embeddings with mean+std into 512 features, and train only a PyTorch MLP head. Clip raw MAHNOB coordinates to the actual screen resolution `1280x800` with no scaling and no mean normalization; do not scale `y` to 1024 because that would distort position and velocity magnitudes.
 - 2026-05-21 baseline input decision: improve the non-graph baselines (`LightGBM`, `SVM`, `MLP`) by extending the current aggregated-window tabular features, not by raw signal concatenation and not by PCA as the main comparison. The tabular baseline input should include aggregate statistics for the same core signals used by the GNN node features, including `distance-avg` and fixation information such as `fixation-duration`, so the comparison tests graph structure rather than unequal signal availability.
+- 2026-05-25 diploma experiment design decision: keep an architecture-level graph baseline separate from final-model signal ablations. The basic GNN should use the same signals/windows/splits/features as the final GNN but simplify the architecture, using a small dedicated model class, homogeneous `GCNConv`, one shared message-passing path, no learned scalar edge weights, and no `GATConv` variant for the first planned comparison. Ablations should keep the final architecture mostly fixed and remove one information source at a time. When a signal is removed, remove all information derived from it: node features, edge features, and edges constructed from that signal. Planned ablation groups include temporal information, gaze-position/spatial information, pupil-size information, and screen-distance information. Initial planning placeholders live in `src/emotions/gnn_improvement_experiments/basic_gnn/TODO.md` and `src/emotions/gnn_improvement_experiments/ablations/TODO.md`; preserve user edits in those TODO files.
+- 2026-05-25 writing/naming preference: whenever listing graph relations or edge
+  types in diploma-facing text, tables, plots, configs, or experiment labels, use
+  the order temporal, spatial, fixation. If temporal is split, list
+  `temporal_forward`, `temporal_backward`, then `spatial`, then `fixation`.
+- 2026-05-25 diploma writing preference: refer to the thesis contribution as
+  "predlagani model" by default, "predlagani GNN" when emphasizing the graph
+  model type, and "predlagana arhitektura" when describing internal structure.
+  Use "končni model" only when distinguishing it from the basic GNN, ablations,
+  or intermediate experiments. Avoid "naš model" and "naš GNN" in final thesis
+  text.
 
 ## Recent High-Signal Results
 
