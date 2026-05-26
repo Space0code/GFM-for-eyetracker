@@ -49,6 +49,7 @@ recent work, plans, or decisions.
 ## Current Data Assumptions
 
 - MAHNOB-HCI-TAGGING is the main diploma dataset.
+- Original MAHNOB-HCI dataset paper baseline for emotion recognition: participant-independent leave-one-participant-out CV, one participant held out as test at a time; SVM with RBF kernel trained on remaining participants; $\gamma$ selected on the training set via 20-fold CV using average F1, $C=1$; ANOVA feature selection is done on the training set; reported `Average F1` is a per-class average (macro-style), not explicitly weighted.
 - The repository uses a reduced local eye-tracking-focused copy, not a fully verifiable copy of the original full multimodal release.
 - Default HCI configs conservatively exclude `P9`, `P12`, and `P15` via `dataset.exclude_subjects`; in the current local emotion ET copy, `P15` is already absent, so the effective exclusions are `P9` and `P12`.
 - Current default training footprint after exclusion and suite filtering is documented in `MAHNOB_dataset_report.md`: 22 subjects, 436 labeled `(subject, recording)` groups, 20 emotional recordings, 2,639,048 suite-default rows, and 5,158 usable 10-second windows.
@@ -111,6 +112,7 @@ recent work, plans, or decisions.
 - `GATConv` ignores scalar edge weights in both v1 and v2 model code, so weighted-edge comparisons should use `GCNConv` unless intentionally testing unweighted attention behavior.
 - Quick comparison supports multiple comma-separated CV strategies, class-balance diagnostics, multiclass training-history aggregation, task selection through `quick_comparison.table6_tasks`, and held-out test-loss plots.
 - Quick comparison training-progress loss plots include an aggregated split-panel plot, an aggregated combined train/validation/test plot, and per-fold combined loss plots under `plots/losses/`; aggregated loss plots use darker `mean ± std` bands and lighter min-max bands.
+- Planned Table-6 training diagnostics should track loss, early stopping, gradient norms, GNN representation statistics, logit/probability statistics, and relation-level edge-weight summaries. Main thesis reporting should stay compact, with richer diagnostic material available for appendix use.
 - Quick comparison `test_loss_by_model.png` excludes `Random` and `Majority` because their log-loss values dominate the scale and obscure trained-model differences.
 - Quick comparison `classification_group_model_ranking.png` now uses grouped vertical bars with metrics on the x-axis, metric values on the y-axis, model names printed inside bars, no overlapping legend, and centralized model color constants in the quick runner.
 - Multiclass `MLP` baseline now uses the explicit fold validation split via a PyTorch MLP implementation, logs `train_loss` and `val_loss`, and early-stops on validation loss. This avoids sklearn MLP's internal random validation split and makes MLP loss plots comparable with GNN and `GazeMAE_MLP`.
