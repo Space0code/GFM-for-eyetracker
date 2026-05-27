@@ -786,6 +786,119 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
 
 
+def _collect_fold_metrics(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Collect per-fold metrics from successful quick-run trainer outputs."""
+    records: List[pd.DataFrame] = []
+    successful_rows = [row for row in rows if row.get("status") == "success"]
+
+    for row in successful_rows:
+        experiment_id = str(row.get("experiment_id", ""))
+        cv_strategy = str(row.get("cv_strategy", ""))
+        model_name = str(row.get("model", ""))
+        summary_model_name = str(row.get("summary_model_name", ""))
+        suite_run_dir = Path(str(row.get("suite_run_dir", "")))
+        try:
+            trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+        except Exception:
+            continue
+
+        fold_metrics_path = trainer_run_dir / cv_strategy / "fold_metrics.csv"
+        if not fold_metrics_path.exists():
+            continue
+
+        fold_metrics = pd.read_csv(fold_metrics_path)
+        if fold_metrics.empty or "model" not in fold_metrics.columns:
+            continue
+
+        model_metrics = fold_metrics[fold_metrics["model"].astype(str) == summary_model_name].copy()
+        if model_metrics.empty:
+            continue
+
+        model_metrics = model_metrics.rename(columns={"model": "metric_source_model"})
+        model_metrics.insert(0, "fold_metrics_path", str(fold_metrics_path))
+        model_metrics.insert(0, "trainer_run_dir", str(trainer_run_dir))
+        model_metrics.insert(0, "suite_run_dir", str(suite_run_dir))
+        model_metrics.insert(0, "summary_model_name", summary_model_name)
+        model_metrics.insert(0, "model", model_name)
+        model_metrics.insert(0, "cv_strategy", cv_strategy)
+        model_metrics.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
+        model_metrics.insert(0, "experiment_id", experiment_id)
+        records.append(model_metrics)
+
+    if not records:
+        return pd.DataFrame()
+    return pd.concat(records, ignore_index=True)
+
+
+def _build_metric_summary_with_std(fold_metrics: pd.DataFrame) -> pd.DataFrame:
+    """Summarize fold-level metrics into long-form mean/std rows."""
+    group_columns = [
+        "experiment_id",
+        "experiment_display_name",
+        "cv_strategy",
+        "model",
+        "summary_model_name",
+        "metric_type",
+    ]
+    if fold_metrics.empty or not set(group_columns).issubset(fold_metrics.columns):
+        return pd.DataFrame()
+
+    metadata_columns = set(group_columns) | {
+        "fold_id",
+        "metric_source_model",
+        "suite_run_dir",
+        "trainer_run_dir",
+        "fold_metrics_path",
+    }
+    metric_columns = [
+        column
+        for column in fold_metrics.columns
+        if column not in metadata_columns and pd.api.types.is_numeric_dtype(fold_metrics[column])
+    ]
+    if not metric_columns:
+        return pd.DataFrame()
+
+    long_metrics = fold_metrics.melt(
+        id_vars=group_columns,
+        value_vars=metric_columns,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+    if long_metrics.empty:
+        return pd.DataFrame()
+
+    summary = (
+        long_metrics.groupby([*group_columns, "metric"], dropna=False)["value"]
+        .agg(n_folds="count", mean="mean", std="std", min="min", max="max")
+        .reset_index()
+    )
+    summary["std"] = summary["std"].fillna(0.0)
+    return summary.sort_values([*group_columns, "metric"]).reset_index(drop=True)
+
+
+def _save_fold_metric_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
+    """Save top-level fold metrics and fold-derived metric summaries."""
+    fold_metrics = _collect_fold_metrics(rows)
+    if fold_metrics.empty:
+        return []
+
+    saved_paths: List[Path] = []
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    fold_metrics_path = tables_dir / "fold_metrics.csv"
+    fold_metrics.to_csv(fold_metrics_path, index=False)
+    saved_paths.append(fold_metrics_path)
+
+    metric_summary = _build_metric_summary_with_std(fold_metrics)
+    if not metric_summary.empty:
+        metric_summary_path = tables_dir / "metric_summary_with_std.csv"
+        metric_summary.to_csv(metric_summary_path, index=False)
+        saved_paths.append(metric_summary_path)
+
+    return saved_paths
+
+
 def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path | None:
     """Save a command-level metric comparison plot from quick summary metrics."""
     metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
@@ -2177,6 +2290,85 @@ def _save_combined_confusion_matrices(
     return output_path
 
 
+def _build_confusion_matrix_table(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Build absolute and row-normalized confusion-matrix records from saved predictions."""
+    records: List[Dict[str, Any]] = []
+    successful_rows = [row for row in rows if row.get("status") == "success"]
+
+    for row in successful_rows:
+        experiment_id = str(row.get("experiment_id", ""))
+        cv_strategy = str(row.get("cv_strategy", ""))
+        model_name = str(row.get("model", ""))
+        summary_model_name = str(row.get("summary_model_name", ""))
+        suite_run_dir = Path(str(row.get("suite_run_dir", "")))
+
+        try:
+            trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+            class_display_names = _load_class_display_names(trainer_run_dir)
+            y_true, y_pred = _collect_predictions_for_variant(
+                trainer_run_dir=trainer_run_dir,
+                cv_strategy=cv_strategy,
+                summary_model_name=summary_model_name,
+            )
+        except Exception:
+            continue
+
+        if y_true.size == 0:
+            continue
+
+        observed_classes = {int(class_idx) for class_idx in np.unique(np.concatenate([y_true, y_pred])).tolist()}
+        classes = np.asarray(sorted(observed_classes | set(class_display_names.keys())), dtype=int)
+        if classes.size == 0:
+            continue
+
+        cm = confusion_matrix(y_true, y_pred, labels=classes)
+        row_sums = cm.sum(axis=1, keepdims=True)
+        cm_norm = np.divide(cm, row_sums, out=np.zeros_like(cm, dtype=float), where=row_sums != 0)
+
+        for true_position, true_class_idx in enumerate(classes):
+            for pred_position, pred_class_idx in enumerate(classes):
+                records.append(
+                    {
+                        "experiment_id": experiment_id,
+                        "experiment_display_name": EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id),
+                        "cv_strategy": cv_strategy,
+                        "model": model_name,
+                        "summary_model_name": summary_model_name,
+                        "true_class_index": int(true_class_idx),
+                        "true_class_name": class_display_names.get(int(true_class_idx), str(int(true_class_idx))),
+                        "pred_class_index": int(pred_class_idx),
+                        "pred_class_name": class_display_names.get(int(pred_class_idx), str(int(pred_class_idx))),
+                        "count": int(cm[true_position, pred_position]),
+                        "row_normalized": float(cm_norm[true_position, pred_position]),
+                    }
+                )
+
+    if not records:
+        return pd.DataFrame()
+    return pd.DataFrame(records).sort_values(
+        [
+            "experiment_id",
+            "cv_strategy",
+            "model",
+            "true_class_index",
+            "pred_class_index",
+        ]
+    ).reset_index(drop=True)
+
+
+def _save_confusion_matrix_table(rows: Sequence[Dict[str, Any]], output_dir: Path) -> Path | None:
+    """Save a top-level numeric confusion-matrix table for thesis figures."""
+    confusion_table = _build_confusion_matrix_table(rows)
+    if confusion_table.empty:
+        return None
+
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+    output_path = tables_dir / "confusion_matrices.csv"
+    confusion_table.to_csv(output_path, index=False)
+    return output_path
+
+
 def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = None) -> Path:
     """Run or generate the quick comparison configs and summary."""
     base_config_path = Path(args.base_config)
@@ -2295,9 +2487,13 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     interactive_ranking_path = _save_group_model_ranking_interactive(summary=summary, output_dir=output_dir)
     test_loss_path = _plot_test_loss_summary(summary=summary, output_dir=output_dir)
     confusion_paths: List[Path] = []
+    confusion_table_path: Path | None = None
+    fold_metric_paths: List[Path] = []
     label_distribution_paths: List[Path] = []
     training_history_paths: List[Path] = []
     if not args.dry_run:
+        fold_metric_paths = _save_fold_metric_outputs(rows=rows, output_dir=output_dir)
+        confusion_table_path = _save_confusion_matrix_table(rows=rows, output_dir=output_dir)
         label_distribution_paths = _save_label_distribution_outputs(rows=rows, output_dir=output_dir)
         training_history_paths = _save_training_history_outputs(rows=rows, output_dir=output_dir)
         successful_pairs = list(
@@ -2329,6 +2525,10 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
         print(f"Saved interactive ranking plot: {interactive_ranking_path}")
     if test_loss_path is not None:
         print(f"Saved test loss plot: {test_loss_path}")
+    for fold_metric_path in fold_metric_paths:
+        print(f"Saved fold metric output: {fold_metric_path}")
+    if confusion_table_path is not None:
+        print(f"Saved confusion matrix table: {confusion_table_path}")
     for label_distribution_path in label_distribution_paths:
         print(f"Saved label distribution output: {label_distribution_path}")
     for training_history_path in training_history_paths:

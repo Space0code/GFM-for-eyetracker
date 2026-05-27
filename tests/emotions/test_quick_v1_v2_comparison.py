@@ -17,6 +17,8 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     _parse_cv_strategies,
     _parse_models,
     _save_combined_confusion_matrices,
+    _save_confusion_matrix_table,
+    _save_fold_metric_outputs,
     _save_group_model_ranking,
     _save_label_distribution_outputs,
     _save_training_history_outputs,
@@ -334,6 +336,77 @@ def test_test_loss_summary_plot_is_written(tmp_path: Path) -> None:
     assert output_path.exists()
 
 
+def test_fold_metric_outputs_include_top_level_metrics_and_std(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "subject_loo"
+    strategy_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "model": "GNN",
+                "fold_id": "s_P1",
+                "metric_type": "aggregated",
+                "accuracy": 0.5,
+                "macro_f1": 0.4,
+                "loss": 1.1,
+            },
+            {
+                "model": "GNN",
+                "fold_id": "s_P2",
+                "metric_type": "aggregated",
+                "accuracy": 0.7,
+                "macro_f1": 0.6,
+                "loss": 0.9,
+            },
+        ]
+    ).to_csv(strategy_dir / "fold_metrics.csv", index=False)
+
+    paths = _save_fold_metric_outputs(
+        rows=[
+            {
+                "model": "GNN_v2",
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "cv_strategy": "subject_loo",
+                "status": "success",
+                "suite_run_dir": str(suite_run_dir),
+                "summary_model_name": "GNN",
+            }
+        ],
+        output_dir=tmp_path,
+    )
+
+    assert {
+        tmp_path / "tables" / "fold_metrics.csv",
+        tmp_path / "tables" / "metric_summary_with_std.csv",
+    }.issubset(set(paths))
+
+    fold_metrics = pd.read_csv(tmp_path / "tables" / "fold_metrics.csv")
+    assert fold_metrics["model"].tolist() == ["GNN_v2", "GNN_v2"]
+    assert fold_metrics["metric_source_model"].tolist() == ["GNN", "GNN"]
+    assert fold_metrics["fold_id"].tolist() == ["s_P1", "s_P2"]
+
+    metric_summary = pd.read_csv(tmp_path / "tables" / "metric_summary_with_std.csv")
+    accuracy_row = metric_summary[
+        (metric_summary["model"] == "GNN_v2")
+        & (metric_summary["metric_type"] == "aggregated")
+        & (metric_summary["metric"] == "accuracy")
+    ].iloc[0]
+    assert accuracy_row["n_folds"] == 2
+    assert np.isclose(accuracy_row["mean"], 0.6)
+    assert np.isclose(accuracy_row["std"], np.std([0.5, 0.7], ddof=1))
+
+
 def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path) -> None:
     suite_run_dir = tmp_path / "suite"
     trainer_run_dir = suite_run_dir / "trainer"
@@ -446,6 +519,66 @@ def test_combined_confusion_matrices_can_use_strategy_suffix(tmp_path: Path) -> 
 
     assert output_path == tmp_path / "figures" / "confusion_matrices_table6_arousal_recording_loo.png"
     assert output_path.exists()
+
+
+def test_confusion_matrix_table_contains_counts_and_row_normalized_values(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "subject_loo" / "fold_0"
+    model_dir = strategy_dir / "baselines" / "Random"
+    model_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    (trainer_run_dir / "class_metadata.yaml").write_text(
+        "index_to_name:\n  0: Low\n  1: Medium\n  2: High\n",
+        encoding="utf-8",
+    )
+    np.save(model_dir / "test_targets.npy", np.asarray([0, 1, 1, 2]))
+    np.save(
+        model_dir / "test_predictions.npy",
+        np.asarray(
+            [
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ]
+        ),
+    )
+
+    output_path = _save_confusion_matrix_table(
+        rows=[
+            {
+                "model": "Random",
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "cv_strategy": "subject_loo",
+                "status": "success",
+                "suite_run_dir": str(suite_run_dir),
+                "summary_model_name": "Random",
+            }
+        ],
+        output_dir=tmp_path,
+    )
+
+    assert output_path == tmp_path / "tables" / "confusion_matrices.csv"
+    table = pd.read_csv(output_path)
+    medium_to_low = table[
+        (table["model"] == "Random")
+        & (table["true_class_index"] == 1)
+        & (table["pred_class_index"] == 0)
+    ].iloc[0]
+    assert medium_to_low["true_class_name"] == "Medium"
+    assert medium_to_low["pred_class_name"] == "Low"
+    assert medium_to_low["count"] == 1
+    assert np.isclose(medium_to_low["row_normalized"], 0.5)
 
 
 def test_label_distribution_outputs_include_tables_and_plots(tmp_path: Path) -> None:
