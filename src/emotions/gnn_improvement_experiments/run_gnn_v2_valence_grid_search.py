@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import gc
+import os
 import platform
 import sys
 import time
@@ -35,6 +37,8 @@ from typing import Any, Dict, Iterable, Iterator, List, Sequence, TextIO
 import numpy as np
 import pandas as pd
 import yaml
+
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
 if __package__ in {None, ""}:
     src_dir = Path(__file__).resolve().parents[2]
@@ -139,6 +143,12 @@ def parse_args() -> argparse.Namespace:
         help="Validation-loss early stopping patience.",
     )
     parser.add_argument("--batch-size", type=int, default=256, help="GNN batch size.")
+    parser.add_argument(
+        "--oom-retry-batch-sizes",
+        type=str,
+        default="128,64",
+        help="Comma-separated smaller batch sizes to try when a variant hits CUDA OOM.",
+    )
     parser.add_argument("--num-workers", type=int, default=4, help="Fast DataLoader worker count.")
     parser.add_argument(
         "--stable-num-workers",
@@ -216,6 +226,11 @@ def _loader_overrides(*, num_workers: int, pin_memory: bool, persistent_workers:
             }
         }
     }
+
+
+def _training_overrides(**training_values: Any) -> Dict[str, Any]:
+    """Build focused GNN training overrides for retry attempts."""
+    return {"global_overrides": {"gnn": {"training": dict(training_values)}}}
 
 
 def _fixed_overrides(args: argparse.Namespace, run_output_dir: Path) -> Dict[str, Any]:
@@ -472,6 +487,40 @@ def _is_loader_failure(error_text: str) -> bool:
     return any(indicator in lowered for indicator in indicators)
 
 
+def _is_cuda_oom(error_text: str) -> bool:
+    """Return true when an error is a CUDA out-of-memory failure."""
+    lowered = error_text.lower()
+    return "cuda out of memory" in lowered or "torch.outofmemoryerror" in lowered
+
+
+def _parse_oom_retry_batch_sizes(args: argparse.Namespace) -> List[int]:
+    """Parse retry batch sizes smaller than the primary batch size."""
+    values: List[int] = []
+    for raw_value in str(args.oom_retry_batch_sizes).split(","):
+        raw_value = raw_value.strip()
+        if not raw_value:
+            continue
+        value = int(raw_value)
+        if value <= 0:
+            raise ValueError("--oom-retry-batch-sizes must contain positive integers.")
+        if value < int(args.batch_size) and value not in values:
+            values.append(value)
+    return values
+
+
+def _release_cuda_cache() -> None:
+    """Best-effort cleanup between failed CUDA attempts in the same process."""
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+
 def _suite_run_dirs(results_dir: Path) -> set[Path]:
     """Return currently existing suite run directories."""
     if not results_dir.exists():
@@ -601,8 +650,39 @@ def _run_variant(
         print(f"Completed {variant.variant_id} with fast loader")
         return fast_row
 
+    if _is_cuda_oom(str(fast_row.get("error", ""))):
+        last_row = fast_row
+        for batch_size in _parse_oom_retry_batch_sizes(args):
+            _release_cuda_cache()
+            loader_mode = f"oom_batch{batch_size}"
+            print(f"Retrying {variant.variant_id} after CUDA OOM with batch_size={batch_size}")
+            retry_overrides = merge_many(
+                _training_overrides(batch_size=int(batch_size)),
+                _loader_overrides(
+                    num_workers=int(args.stable_num_workers),
+                    pin_memory=False,
+                    persistent_workers=False,
+                ),
+            )
+            last_row = _run_variant_once(
+                base_cfg=base_cfg,
+                fixed_overrides=fixed_overrides,
+                variant=variant,
+                generated_dir=generated_dir,
+                loader_mode=loader_mode,
+                loader_overrides=retry_overrides,
+            )
+            if last_row["status"] == "success":
+                print(f"Completed {variant.variant_id} with CUDA OOM retry batch_size={batch_size}")
+                return last_row
+            if not _is_cuda_oom(str(last_row.get("error", ""))):
+                break
+        print(f"FAILED {variant.variant_id} after CUDA OOM retries")
+        return last_row
+
     if _is_loader_failure(str(fast_row.get("error", ""))):
         print(f"Retrying {variant.variant_id} with stable DataLoader settings after loader failure")
+        _release_cuda_cache()
         stable_overrides = _loader_overrides(
             num_workers=int(args.stable_num_workers),
             pin_memory=False,
@@ -965,6 +1045,7 @@ def run_grid(args: argparse.Namespace, *, run_timestamp: str | None = None) -> P
         "learning_rate": float(args.learning_rate),
         "early_stopping_patience": int(args.early_stopping_patience),
         "batch_size": int(args.batch_size),
+        "oom_retry_batch_sizes": _parse_oom_retry_batch_sizes(args),
         "fast_num_workers": int(args.num_workers),
         "stable_num_workers": int(args.stable_num_workers),
         "only_phase": args.only_phase,
