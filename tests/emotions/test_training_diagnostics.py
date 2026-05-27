@@ -109,4 +109,3 @@ def test_save_gnn_fold_diagnostics_writes_one_row_per_split(tmp_path: Path) -> N
     assert list(saved["split"]) == ["train", "val"]
     assert list(reloaded["split"]) == ["train", "val"]
     assert set(reloaded["best_epoch"]) == {3}
-
