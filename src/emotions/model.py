@@ -1,4 +1,4 @@
-"""Spatio-temporal heterogenous GNN building block for emotion tasks."""
+"""Spatio-temporal GNN building blocks for emotion tasks."""
 
 import torch
 import torch.nn as nn
@@ -155,6 +155,165 @@ class SpatioTemporalHeteroGNNV1(nn.Module):
         out = self.head(graph_emb)                    # [num_graphs, out_channels]
         out = out * self.output_scale                 # Scale to [0, 10], for binary, output scale is 1.0 so no scaling
 
+        if return_graph_embedding:
+            return out, graph_emb
+        return out
+
+
+class BasicGCN(nn.Module):
+    """Homogeneous GCN baseline over the v2 spatio-temporal graph schema.
+
+    BasicGCN uses the same v2 graph construction as the proposed model, but
+    collapses all node-node relations into one deduplicated edge index and
+    ignores edge attributes and learned scalar edge weights.
+    """
+
+    RELATIONS = ("temporal_forward", "temporal_backward", "spatial", "fixation")
+
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: int,
+        out_channels: int,
+        output_scale: float,
+        use_preprocess_mlp: bool = True,
+        use_edge_weights: bool = False,
+        add_self_loops: bool = False,
+        dropout_mlp: float = 0.1,
+        dropout_gnn: float = 0.1,
+        dropout_head: float = 0.1,
+        conv_type: str = "GCNConv",
+        num_layers: int = 2,
+        readout: str = "attention",
+        pooling: str | None = None,
+        graph_pooling: str | None = None,
+        head_pooling: str | None = None,
+        **_: object,
+    ) -> None:
+        super().__init__()
+        if num_layers < 1:
+            raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
+        if conv_type != "GCNConv":
+            raise ValueError("BasicGCN supports only conv_type='GCNConv'.")
+
+        resolved_readout = (
+            readout
+            if readout is not None
+            else graph_pooling
+            if graph_pooling is not None
+            else head_pooling
+            if head_pooling is not None
+            else pooling
+            if pooling is not None
+            else "attention"
+        )
+        if resolved_readout not in {"attention", "mean"}:
+            raise ValueError(
+                f"Unsupported BasicGCN readout: {resolved_readout}. Choose 'attention' or 'mean'."
+            )
+
+        self.use_edge_weights = False
+        self.readout = resolved_readout
+        self.use_preprocess_mlp = use_preprocess_mlp
+        if use_edge_weights:
+            # Kept as an attribute for config compatibility; intentionally not
+            # consumed by forward because BasicGCN is an unweighted baseline.
+            self.use_edge_weights = False
+
+        if self.use_preprocess_mlp:
+            self.preprocess_mlp = nn.Sequential(
+                nn.Linear(in_channels, hidden_channels),
+                nn.GELU(),
+                nn.LayerNorm(hidden_channels),
+                nn.Dropout(p=dropout_mlp),
+                nn.Linear(hidden_channels, hidden_channels),
+                nn.LayerNorm(hidden_channels),
+            )
+            conv1_in_channels = hidden_channels
+        else:
+            conv1_in_channels = in_channels
+
+        self.convs = nn.ModuleList()
+        self.layer_norms = nn.ModuleList()
+        for layer_idx in range(num_layers):
+            layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
+            self.convs.append(
+                GCNConv(
+                    layer_in_channels,
+                    hidden_channels,
+                    add_self_loops=add_self_loops,
+                )
+            )
+            self.layer_norms.append(nn.LayerNorm(hidden_channels))
+
+        self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
+        self.gnn_activation = nn.GELU()
+        self.gnn_dropout = nn.Dropout(p=dropout_gnn)
+
+        if self.readout == "attention":
+            self.attention_pool = nn.Sequential(
+                nn.Linear(hidden_channels, hidden_channels),
+                nn.GELU(),
+                nn.Dropout(p=dropout_head),
+                nn.Linear(hidden_channels, 1),
+            )
+
+        self.head = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels),
+            nn.GELU(),
+            nn.Dropout(p=dropout_head),
+            nn.Linear(hidden_channels, out_channels),
+        )
+        self.output_scale = output_scale
+
+    @staticmethod
+    def _edge_type(relation: str) -> tuple[str, str, str]:
+        """Return the heterograph edge type tuple for one node-node relation."""
+        return ("node", relation, "node")
+
+    @classmethod
+    def collapse_edge_index(cls, data) -> torch.Tensor:
+        """Collapse v2 relations into one deduplicated homogeneous edge index."""
+        edge_indices = []
+        edge_index_dict = data.edge_index_dict
+        device = data["node"].x.device
+        for relation in cls.RELATIONS:
+            edge_index = edge_index_dict.get(cls._edge_type(relation))
+            if edge_index is not None and edge_index.numel() > 0:
+                edge_indices.append(edge_index.to(device=device, dtype=torch.long))
+
+        if not edge_indices:
+            return torch.empty((2, 0), dtype=torch.long, device=device)
+
+        edge_index = torch.cat(edge_indices, dim=1)
+        return torch.unique(edge_index, dim=1)
+
+    def forward(self, data, return_graph_embedding: bool = False):
+        x_node = data["node"].x
+        if self.use_preprocess_mlp:
+            x_node = self.preprocess_mlp(x_node)
+
+        x0_node = x_node
+        edge_index = self.collapse_edge_index(data)
+
+        for layer_idx, conv in enumerate(self.convs):
+            layer_out = self.gnn_activation(conv(x_node, edge_index))
+            residual = self.input_residual_proj(x0_node) if layer_idx == 0 else x_node
+            x_node = self.layer_norms[layer_idx](layer_out + residual)
+            x_node = self.gnn_dropout(x_node)
+
+        batch = data["node"].batch
+        if self.readout == "mean":
+            graph_emb = global_mean_pool(x_node, batch)
+        elif self.readout == "attention":
+            scores = self.attention_pool(x_node)
+            alpha = softmax(scores, batch)
+            graph_emb = global_add_pool(alpha * x_node, batch)
+        else:
+            raise ValueError(f"Unsupported BasicGCN readout: {self.readout}.")
+
+        out = self.head(graph_emb)
+        out = out * self.output_scale
         if return_graph_embedding:
             return out, graph_emb
         return out

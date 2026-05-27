@@ -1,6 +1,6 @@
-"""Binary classification GNN model for emotion recognition."""
+"""Binary classification GNN models for emotion recognition."""
 
-from emotions.model import SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
+from emotions.model import BasicGCN, SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
 
 
 class BinarySpatioTemporalGNNV1(SpatioTemporalHeteroGNNV1):
@@ -66,6 +66,9 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         edge_weight_mode: str = "learned_signed",
         use_delta_distance_edge_feature: bool = True,
         use_fixation_edges: bool = True,
+        spatial_edge_attr_dim: int | None = None,
+        temporal_edge_attr_dim: int | None = None,
+        fixation_edge_attr_dim: int | None = None,
     ):
         """
         Initialize binary classification GNN.
@@ -105,6 +108,9 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
             edge_weight_mode=edge_weight_mode,
             use_delta_distance_edge_feature=use_delta_distance_edge_feature,
             use_fixation_edges=use_fixation_edges,
+            spatial_edge_attr_dim=spatial_edge_attr_dim,
+            temporal_edge_attr_dim=temporal_edge_attr_dim,
+            fixation_edge_attr_dim=fixation_edge_attr_dim,
         )
     
     def forward(self, data, return_graph_embedding: bool = False):
@@ -122,3 +128,45 @@ class BinarySpatioTemporalGNN(SpatioTemporalHeteroGNN):
         # Parent returns raw regression-style head outputs; binary trainer
         # applies BCE-with-logits and sigmoid for metrics.
         return super().forward(data, return_graph_embedding=return_graph_embedding)
+
+
+class BinaryBasicGCN(BasicGCN):
+    """BasicGCN configured for binary logits output."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: int,
+        use_preprocess_mlp: bool = True,
+        use_edge_weights: bool = False,
+        add_self_loops: bool = False,
+        dropout_mlp: float = 0.1,
+        dropout_gnn: float = 0.1,
+        dropout_head: float = 0.1,
+        conv_type: str = "GCNConv",
+        num_layers: int = 2,
+        readout: str = "attention",
+        pooling: str | None = None,
+        graph_pooling: str | None = None,
+        head_pooling: str | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(
+            in_channels=in_channels,
+            hidden_channels=hidden_channels,
+            out_channels=1,
+            output_scale=1.0,
+            use_preprocess_mlp=use_preprocess_mlp,
+            use_edge_weights=use_edge_weights,
+            add_self_loops=add_self_loops,
+            dropout_mlp=dropout_mlp,
+            dropout_gnn=dropout_gnn,
+            dropout_head=dropout_head,
+            conv_type=conv_type,
+            num_layers=num_layers,
+            readout=readout,
+            pooling=pooling,
+            graph_pooling=graph_pooling,
+            head_pooling=head_pooling,
+            **kwargs,
+        )
