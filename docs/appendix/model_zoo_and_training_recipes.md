@@ -97,11 +97,17 @@ Important protocol guarantees:
 Default wrapper config:
 - `src/emotions/suite/configs/run_hci_experiment_suite.yaml`
 
-## 5.3 GNN ablation runner
+## 5.3 Signal ablation runner
 
-- `src/emotions/gnn_improvement_experiments/run_gnn_ablation_suite.py`
+- `src/emotions/gnn_improvement_experiments/ablations/run_signal_ablation_suite.py`
+- Generates final-GNN signal ablations for temporal, spatial/gaze, fixation, pupil, and screen-distance sources
+- Defaults to Table-6 3-class valence/arousal subject k-fold; use `--base-config` for low/high follow-up runs
+
+## 5.4 Legacy GNN sweep runner
+
+- `archive/src/emotions/gnn_improvement_experiments/run_gnn_ablation_suite_legacy_hparam_sweep.py`
 - Generates one-factor variants (depth, pooling, edge weights, `kt/ks`, conv type, target aggregation, early stopping)
-- Runs valence/arousal-focused suite variants and summarizes deltas
+- Historical hyperparameter/architecture sweep; not the active signal-ablation workflow
 
 ## 6. Historical predecessor (for context)
 
@@ -129,7 +135,10 @@ python src/emotions/regression/train_regression.py \
 python src/emotions/suite/run_hci_experiment_suite.py \
   --config src/emotions/suite/configs/run_hci_experiment_suite.yaml
 
-# Focused GNN ablations
-python src/emotions/gnn_improvement_experiments/run_gnn_ablation_suite.py \
+# Signal ablations
+python src/emotions/gnn_improvement_experiments/ablations/run_signal_ablation_suite.py
+
+# Legacy focused GNN hyperparameter sweep
+python archive/src/emotions/gnn_improvement_experiments/run_gnn_ablation_suite_legacy_hparam_sweep.py \
   --base-config src/emotions/gnn_improvement_experiments/configs/run_hci_experiment_suite_small.yaml
 ```
