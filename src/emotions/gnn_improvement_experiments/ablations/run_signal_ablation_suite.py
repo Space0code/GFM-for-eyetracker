@@ -16,6 +16,7 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -256,6 +257,24 @@ def _parse_variants(raw_variants: str) -> List[str]:
     return list(dict.fromkeys(variants))
 
 
+def _suite_registry_status(suite_run_dir: Path) -> tuple[str, str]:
+    """Return aggregate status and message from a suite registry."""
+    registry_path = suite_run_dir / "suite_experiment_registry.csv"
+    if not registry_path.exists():
+        return "failed", f"Missing suite registry: {registry_path}"
+
+    with registry_path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return "failed", f"Empty suite registry: {registry_path}"
+
+    failed = [row for row in rows if str(row.get("status", "")).lower() != "success"]
+    if failed:
+        failed_ids = [str(row.get("experiment_id", "<unknown>")) for row in failed]
+        return "failed", "Failed suite experiment(s): " + ", ".join(failed_ids)
+    return "success", ""
+
+
 def run_signal_ablation_suite(args: argparse.Namespace) -> List[Dict[str, str]]:
     """Generate and optionally execute suite configs for signal ablations."""
     base_config_path = Path(args.base_config)
@@ -279,13 +298,15 @@ def run_signal_ablation_suite(args: argparse.Namespace) -> List[Dict[str, str]]:
 
         suite_run_dir = ""
         status = "dry_run"
+        error = ""
         if not args.dry_run:
             status = "success"
             try:
                 suite_run_dir = run_suite(str(config_path))
+                status, error = _suite_registry_status(Path(suite_run_dir))
             except Exception as exc:
                 status = "failed"
-                suite_run_dir = str(exc)
+                error = str(exc)
 
         rows.append(
             {
@@ -294,6 +315,7 @@ def run_signal_ablation_suite(args: argparse.Namespace) -> List[Dict[str, str]]:
                 "config_path": str(config_path),
                 "status": status,
                 "suite_run_dir": suite_run_dir,
+                "error": error,
             }
         )
 

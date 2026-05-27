@@ -8,6 +8,7 @@ from emotions.gnn_improvement_experiments.ablations.run_signal_ablation_suite im
     build_command_overrides,
     build_signal_ablation_variant,
     build_variant_payload,
+    _suite_registry_status,
 )
 
 
@@ -87,3 +88,32 @@ def test_signal_ablation_payload_forces_subject_kfold_five_splits() -> None:
     }
     assert payload["global_overrides"]["run_experiments"] == {"baselines": False, "gnn": True}
     assert payload["suite"]["results_dir"] == "results/test_signal_ablation/run/baseline_full/suite"
+
+
+def test_suite_registry_status_reports_failed_experiments(tmp_path: Path) -> None:
+    registry = tmp_path / "suite_experiment_registry.csv"
+    registry.write_text(
+        "experiment_id,status\n"
+        "multiclass_table6_valence_3class,success\n"
+        "multiclass_table6_arousal_3class,failed\n",
+        encoding="utf-8",
+    )
+
+    status, error = _suite_registry_status(tmp_path)
+
+    assert status == "failed"
+    assert "multiclass_table6_arousal_3class" in error
+
+
+def test_suite_registry_status_accepts_all_success(tmp_path: Path) -> None:
+    registry = tmp_path / "suite_experiment_registry.csv"
+    registry.write_text(
+        "experiment_id,status\n"
+        "multiclass_table6_valence_3class,success\n",
+        encoding="utf-8",
+    )
+
+    status, error = _suite_registry_status(tmp_path)
+
+    assert status == "success"
+    assert error == ""
