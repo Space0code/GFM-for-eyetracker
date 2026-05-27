@@ -1,9 +1,9 @@
-"""Run a quick Table-6 arousal/valence comparison for GNN v1, GNN v2, and baselines.
+"""Run a quick Table-6 arousal/valence comparison for graph models and baselines.
 
 This script generates focused suite-wrapper configs and optionally runs them
 sequentially with the dataset, cross-validation, and training parameters from
 the selected YAML suite config. By default it compares frozen
-`Random`, `Majority`, frozen `GNN_v1`, current `GNN_v2`, and `LightGBM` on the
+`Random`, `Majority`, frozen `GNN_v1`, `BasicGCN`, current `GNN_v2`, and `LightGBM` on the
 Table-6 three-class arousal and/or valence tasks with proper k-fold splitting.
 Select tasks in the wrapper config with `quick_comparison.table6_tasks`, for
 example `[arousal]`, `[valence]`, or `[arousal, valence]`. Requested baseline
@@ -15,7 +15,7 @@ Example:
 
 Useful options:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
-      --models Random,Majority,GNN_v1,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
+      --models Random,Majority,GNN_v1,BasicGCN,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
       --num-epochs 20 \
       --dry-run
 """
@@ -72,12 +72,14 @@ EXPERIMENT_DISPLAY_NAMES = {
 }
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
-PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "GNN_v2", "GazeMAE_MLP", "MLP"]
+GNN_MODELS = {"GNN_v1", "BasicGCN", "GNN_v2"}
+PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "GazeMAE_MLP", "MLP"]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 MODEL_COLOR_PALETTE = {
     "Random": "#4C72B0",
     "Majority": "#DD8452",
     "GNN_v1": "#55A868",
+    "BasicGCN": "#64B5CD",
     "GNN_v2": "#C44E52",
     "GazeMAE_MLP": "#8172B3",
     "MLP": "#937860",
@@ -111,6 +113,10 @@ MODEL_ALIASES = {
     "gnn_v1": "GNN_v1",
     "gnn-v1": "GNN_v1",
     "v1": "GNN_v1",
+    "basicgcn": "BasicGCN",
+    "basic_gcn": "BasicGCN",
+    "basic-gcn": "BasicGCN",
+    "gcn": "BasicGCN",
     "gnn2": "GNN_v2",
     "gnn_v2": "GNN_v2",
     "gnn-v2": "GNN_v2",
@@ -162,8 +168,8 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=",".join(DEFAULT_MODELS),
         help=(
-            "Comma-separated models: Random,Majority,GNN_v1,GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
-            "Common lowercase aliases like random, majority, gnn1, gnn2, and lgbm are accepted."
+            "Comma-separated models: Random,Majority,GNN_v1,BasicGCN,GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
+            "Common lowercase aliases like random, majority, gnn1, basicgcn, gnn2, and lgbm are accepted."
         ),
     )
     parser.add_argument(
@@ -266,7 +272,7 @@ def _parse_models(raw_models: str) -> List[str]:
     """Parse and validate requested model names."""
     raw_tokens = [token.strip() for token in raw_models.split(",") if token.strip()]
     models = [MODEL_ALIASES.get(token.lower(), token) for token in raw_tokens]
-    allowed = {"GNN_v1", "GNN_v2"} | BASELINE_MODELS
+    allowed = GNN_MODELS | BASELINE_MODELS
     unknown = sorted(set(models) - allowed)
     if unknown:
         raise ValueError(f"Unknown model(s): {unknown}. Allowed: {sorted(allowed)}")
@@ -461,6 +467,32 @@ def build_variant(model_name: str) -> QuickVariant:
                 }
             },
         )
+    if model_name == "BasicGCN":
+        return QuickVariant(
+            model_name=model_name,
+            description=(
+                "Homogeneous GCN baseline over the v2 graph schema with collapsed, "
+                "deduplicated relations and no edge attributes."
+            ),
+            summary_model_name="GNN",
+            overrides={
+                "global_overrides": {
+                    "run_experiments": {"baselines": False, "gnn": True},
+                    "dataset": {
+                        "graph_version": "v2",
+                        "edge_weight_mode": "learned_signed",
+                        "use_edge_weights": True,
+                    },
+                    "gnn": {
+                        "model": {
+                            "model_version": "BasicGCN",
+                            "conv_type": "GCNConv",
+                            "readout": "attention",
+                        }
+                    },
+                }
+            },
+        )
     if model_name in BASELINE_MODELS:
         return QuickVariant(
             model_name=model_name,
@@ -479,7 +511,7 @@ def build_variant(model_name: str) -> QuickVariant:
 def build_quick_runs(model_names: Sequence[str]) -> List[QuickRun]:
     """Group requested models into the minimum safe set of suite invocations."""
     baseline_names = [name for name in model_names if name in BASELINE_MODELS]
-    gnn_names = [name for name in model_names if name in {"GNN_v1", "GNN_v2"}]
+    gnn_names = [name for name in model_names if name in GNN_MODELS]
     if baseline_names and len(gnn_names) == 1:
         gnn_variant = build_variant(gnn_names[0])
         return [
@@ -1441,6 +1473,54 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
     return pd.concat(records, ignore_index=True)
 
 
+def _collect_training_diagnostics(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Collect available fold-level GNN diagnostics from trainer outputs."""
+    records: List[pd.DataFrame] = []
+    successful_rows = [row for row in rows if row.get("status") == "success"]
+
+    for row in successful_rows:
+        model_name = str(row.get("model", ""))
+        summary_model_name = str(row.get("summary_model_name", ""))
+        if summary_model_name != "GNN":
+            continue
+
+        experiment_id = str(row.get("experiment_id", ""))
+        cv_strategy = str(row.get("cv_strategy", ""))
+        suite_run_dir = Path(str(row.get("suite_run_dir", "")))
+        try:
+            trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+        except Exception:
+            continue
+
+        strategy_dir = trainer_run_dir / cv_strategy
+        if not strategy_dir.exists():
+            continue
+
+        for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+            diagnostics_path = fold_dir / "gnn_fold_diagnostics.csv"
+            if not diagnostics_path.exists():
+                continue
+
+            diagnostics = pd.read_csv(diagnostics_path)
+            if diagnostics.empty or "split" not in diagnostics.columns:
+                continue
+
+            diagnostics.insert(0, "diagnostics_path", str(diagnostics_path))
+            diagnostics.insert(0, "trainer_run_dir", str(trainer_run_dir))
+            diagnostics.insert(0, "suite_run_dir", str(suite_run_dir))
+            diagnostics.insert(0, "fold_id", fold_dir.name)
+            diagnostics.insert(0, "model", model_name)
+            diagnostics.insert(0, "summary_model_name", summary_model_name)
+            diagnostics.insert(0, "cv_strategy", cv_strategy)
+            diagnostics.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
+            diagnostics.insert(0, "experiment_id", experiment_id)
+            records.append(diagnostics)
+
+    if not records:
+        return pd.DataFrame()
+    return pd.concat(records, ignore_index=True)
+
+
 def _compute_saved_prediction_log_loss(prediction_path: Path, target_path: Path) -> float | None:
     """Compute multiclass log loss from saved probabilities and encoded targets."""
     if not prediction_path.exists() or not target_path.exists():
@@ -2151,7 +2231,7 @@ def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: P
     """Save command-level training-history table and plots."""
     history = _collect_training_history(rows)
     if history.empty:
-        return []
+        return _save_training_diagnostics_outputs(rows=rows, output_dir=output_dir)
 
     saved_paths: List[Path] = []
     tables_dir = output_dir / "tables"
@@ -2183,6 +2263,49 @@ def _save_training_history_outputs(rows: Sequence[Dict[str, Any]], output_dir: P
             saved_paths.append(plot_path)
 
     saved_paths.extend(_save_fold_loss_plots(history=history, output_dir=output_dir))
+    saved_paths.extend(_save_training_diagnostics_outputs(rows=rows, output_dir=output_dir))
+
+    return saved_paths
+
+
+def _save_training_diagnostics_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
+    """Save command-level GNN diagnostic tables when fold diagnostics exist."""
+    diagnostics = _collect_training_diagnostics(rows)
+    if diagnostics.empty:
+        return []
+
+    saved_paths: List[Path] = []
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    diagnostics_path = tables_dir / "training_diagnostics.csv"
+    diagnostics.to_csv(diagnostics_path, index=False)
+    saved_paths.append(diagnostics_path)
+
+    group_columns = [
+        "experiment_id",
+        "experiment_display_name",
+        "cv_strategy",
+        "model",
+        "split",
+    ]
+    numeric_columns = [
+        column
+        for column in diagnostics.columns
+        if column not in set(group_columns)
+        and pd.api.types.is_numeric_dtype(diagnostics[column])
+    ]
+    if numeric_columns:
+        summary = (
+            diagnostics[group_columns + numeric_columns]
+            .groupby(group_columns, dropna=False)
+            .agg(["mean", "std"])
+        )
+        summary.columns = [f"{column}_{stat}" for column, stat in summary.columns]
+        summary = summary.reset_index()
+        summary_path = tables_dir / "training_diagnostics_summary.csv"
+        summary.to_csv(summary_path, index=False)
+        saved_paths.append(summary_path)
 
     return saved_paths
 

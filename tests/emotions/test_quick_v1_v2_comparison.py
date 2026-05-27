@@ -40,11 +40,18 @@ def _args() -> Namespace:
 
 def test_quick_variants_set_expected_gnn_versions() -> None:
     v1 = build_variant("GNN_v1")
+    basic = build_variant("BasicGCN")
     v2 = build_variant("GNN_v2")
 
     assert v1.overrides["global_overrides"]["dataset"]["graph_version"] == "v1"
     assert v1.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "handcrafted"
     assert v1.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "v1"
+
+    assert basic.overrides["global_overrides"]["dataset"]["graph_version"] == "v2"
+    assert basic.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
+    assert basic.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
+    assert basic.overrides["global_overrides"]["gnn"]["model"]["conv_type"] == "GCNConv"
+    assert basic.overrides["global_overrides"]["gnn"]["model"]["readout"] == "attention"
 
     assert v2.overrides["global_overrides"]["dataset"]["graph_version"] == "v2"
     assert v2.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
@@ -98,9 +105,9 @@ def test_quick_variants_support_random_and_majority() -> None:
 
 
 def test_quick_model_parser_accepts_common_aliases() -> None:
-    parsed = _parse_models("random,majority,gnn1,gnn2,lgbm")
+    parsed = _parse_models("random,majority,gnn1,basicgcn,gnn2,lgbm")
 
-    assert parsed == ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
+    assert parsed == ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "LightGBM"]
 
 
 def test_quick_cv_parser_accepts_multiple_strategies() -> None:
@@ -110,21 +117,30 @@ def test_quick_cv_parser_accepts_multiple_strategies() -> None:
 
 
 def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
-    ordered = _ordered_models(["LightGBM", "GNN_v2", "Random", "MLP", "Majority", "SVM", "GNN_v1"])
+    ordered = _ordered_models(["LightGBM", "GNN_v2", "Random", "MLP", "Majority", "SVM", "BasicGCN", "GNN_v1"])
 
-    assert ordered == ["Random", "Majority", "GNN_v1", "GNN_v2", "MLP", "LightGBM", "SVM"]
+    assert ordered == ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "MLP", "LightGBM", "SVM"]
 
 
 def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
-    runs = build_quick_runs(["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"])
+    runs = build_quick_runs(["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "LightGBM"])
 
-    assert [run.run_name for run in runs] == ["Baselines", "GNN_v1", "GNN_v2"]
+    assert [run.run_name for run in runs] == ["Baselines", "GNN_v1", "BasicGCN", "GNN_v2"]
     assert runs[0].model_names == ["Random", "Majority", "LightGBM"]
     assert runs[0].overrides["global_overrides"]["baselines"]["models"] == [
         "Random",
         "Majority",
         "LightGBM",
     ]
+
+
+def test_quick_runs_group_basic_gcn_with_baselines_when_it_is_the_only_gnn() -> None:
+    runs = build_quick_runs(["Random", "BasicGCN", "LightGBM"])
+
+    assert [run.run_name for run in runs] == ["BasicGCN_and_Baselines"]
+    assert runs[0].model_names == ["Random", "LightGBM", "BasicGCN"]
+    assert runs[0].summary_model_names["BasicGCN"] == "GNN"
+    assert runs[0].overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
 
 
 def test_fixed_overrides_can_target_command_output_dir() -> None:
@@ -281,6 +297,18 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
             },
         ]
     ).to_csv(fold_dir / "gnn_training_history.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "split": "val",
+                "graph_embedding_variance": 0.12,
+                "graph_embedding_mean_pairwise_cosine_similarity": 0.34,
+                "logit_mean": 0.1,
+                "prediction_entropy_mean": 0.9,
+                "temporal_forward_edge_weight_mean": 0.01,
+            }
+        ]
+    ).to_csv(fold_dir / "gnn_fold_diagnostics.csv", index=False)
 
     paths = _save_training_history_outputs(
         rows=[
@@ -302,6 +330,8 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
         tmp_path / "plots" / "training_progress_loss.png",
         tmp_path / "plots" / "training_progress_validation_metrics.png",
         tmp_path / "plots" / "best_epoch_distribution.png",
+        tmp_path / "tables" / "training_diagnostics.csv",
+        tmp_path / "tables" / "training_diagnostics_summary.csv",
     }
     assert expected_paths.issubset(set(paths))
     for path in expected_paths:

@@ -46,12 +46,17 @@ from emotions.common.dataset_config import (
     resolve_dropna_columns,
     resolve_feature_columns,
     resolve_min_samples_per_window,
+    sync_gnn_edge_attr_dims,
     sync_gnn_in_channels,
 )
 from emotions.common.edge_scaling import (
     EdgeScalerDict,
     apply_edge_feature_scalers,
     fit_edge_feature_scalers,
+)
+from emotions.common.training_diagnostics import (
+    collect_gradient_norm_stats,
+    save_gnn_fold_diagnostics,
 )
 from emotions.train_baseline import build_tabular_samples, samples_to_xy, select_tabular_feature_columns
 from emotions.utils import (
@@ -61,7 +66,7 @@ from emotions.utils import (
     save_comparison_csv,
     print_comparison_table
 )
-from emotions.binary.model_binary import BinarySpatioTemporalGNN, BinarySpatioTemporalGNNV1
+from emotions.binary.model_binary import BinaryBasicGCN, BinarySpatioTemporalGNN, BinarySpatioTemporalGNNV1
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
 from emotions.binary.results_plotting import generate_and_save_binary_results_plots
@@ -296,6 +301,8 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
     """
     model.train()
     total_loss = 0
+    grad_norm_means = []
+    grad_norm_maxes = []
     
     for data in loader:
         data = data.to(device)
@@ -307,13 +314,21 @@ def train_gnn_epoch(model, loader, optimizer, device, grad_clip_max_norm=1.0):
         # Binary cross-entropy with logits (includes sigmoid internally)
         loss = F.binary_cross_entropy_with_logits(out, target)
         loss.backward()
-        
+
+        grad_stats = collect_gradient_norm_stats(model.parameters())
+        grad_norm_means.append(float(grad_stats.mean))
+        grad_norm_maxes.append(float(grad_stats.max))
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip_max_norm)
         optimizer.step()
         
         total_loss += loss.item()
-    
-    return total_loss / len(loader)
+
+    finite_means = [value for value in grad_norm_means if np.isfinite(value)]
+    finite_maxes = [value for value in grad_norm_maxes if np.isfinite(value)]
+    return total_loss / max(len(loader), 1), {
+        "grad_norm_mean": float(np.mean(finite_means)) if finite_means else float("nan"),
+        "grad_norm_max": float(np.max(finite_maxes)) if finite_maxes else float("nan"),
+    }
 
 
 def evaluate_gnn(
@@ -565,6 +580,9 @@ def train_gnn_fold(
             model_kwargs.pop("relation_pooling", None)
             model_kwargs.pop("use_delta_distance_edge_feature", None)
             model_kwargs.pop("use_fixation_edges", None)
+            model_kwargs.pop("spatial_edge_attr_dim", None)
+            model_kwargs.pop("temporal_edge_attr_dim", None)
+            model_kwargs.pop("fixation_edge_attr_dim", None)
         elif model_version == "v2":
             model_cls = BinarySpatioTemporalGNN
             model_kwargs.setdefault(
@@ -585,8 +603,21 @@ def train_gnn_fold(
                 model_kwargs.get("head_pooling", model_kwargs.get("pooling", "attention")),
             )
             model_kwargs.setdefault("relation_pooling", "mlp")
+        elif model_version in {"basicgcn", "basic_gcn", "basic-gcn"}:
+            model_cls = BinaryBasicGCN
+            model_kwargs["use_edge_weights"] = False
+            model_kwargs["conv_type"] = "GCNConv"
+            model_kwargs.setdefault("readout", "attention")
+            model_kwargs.pop("aggr", None)
+            model_kwargs.pop("edge_weight_mode", None)
+            model_kwargs.pop("relation_pooling", None)
+            model_kwargs.pop("use_delta_distance_edge_feature", None)
+            model_kwargs.pop("use_fixation_edges", None)
         else:
-            raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
+            raise ValueError(
+                f"Unsupported gnn.model.model_version='{model_version}'. "
+                "Choose 'v1', 'v2', or 'BasicGCN'."
+            )
         model = model_cls(**model_kwargs).to(device)
         if use_compile and hasattr(torch, "compile"):
             model = torch.compile(model, mode="default")
@@ -603,6 +634,7 @@ def train_gnn_fold(
         no_improve_epochs = 0
         early_stopped = False
         start_time = time.time()
+        history_rows: List[Dict[str, Any]] = []
         early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
         early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
         early_stopping_min_delta = float(training_cfg.get("early_stopping_min_delta", 0.0))
@@ -615,7 +647,8 @@ def train_gnn_fold(
         print(f"Training GNN for {test_name}{mode_note}...")
 
         for epoch in range(training_cfg["num_epochs"]):
-            train_loss = train_gnn_epoch(
+            epoch_start_time = time.time()
+            train_loss, grad_norm_stats = train_gnn_epoch(
                 model,
                 train_loader,
                 optimizer,
@@ -631,9 +664,10 @@ def train_gnn_fold(
                 decision_threshold,
                 collect_analysis_artifacts=False,
             )
+            val_aggregated = val_metrics["standard"]["aggregated"]
 
             if verbose and ((epoch + 1) % 10 == 0 or epoch == training_cfg["num_epochs"] - 1 or epoch == 0):
-                val_acc = val_metrics["standard"]["aggregated"]["accuracy"]
+                val_acc = val_aggregated["accuracy"]
                 print(
                     f"  Epoch {epoch+1}/{training_cfg['num_epochs']}: "
                     f"train_loss={train_loss:.4f}, val_loss={val_loss:.4f}, val_acc={val_acc:.4f}"
@@ -647,6 +681,20 @@ def train_gnn_fold(
             else:
                 no_improve_epochs += 1
 
+            history_rows.append(
+                {
+                    "epoch": epoch + 1,
+                    "train_loss": float(train_loss),
+                    "val_loss": float(val_loss),
+                    "val_balanced_accuracy": float(val_aggregated.get("balanced_accuracy", np.nan)),
+                    "val_macro_f1": float(val_aggregated.get("macro_f1", np.nan)),
+                    "epoch_runtime_seconds": round(time.time() - epoch_start_time, 3),
+                    "learning_rate": float(optimizer.param_groups[0]["lr"]),
+                    "grad_norm_mean": float(grad_norm_stats["grad_norm_mean"]),
+                    "grad_norm_max": float(grad_norm_stats["grad_norm_max"]),
+                }
+            )
+
             if early_stopping_enabled and no_improve_epochs >= early_stopping_patience:
                 early_stopped = True
                 if verbose:
@@ -655,6 +703,13 @@ def train_gnn_fold(
                         f"no val_loss improvement for {early_stopping_patience} epoch(s)."
                     )
                 break
+
+        for row in history_rows:
+            row["is_best_epoch"] = int(int(row["epoch"]) == best_epoch + 1)
+            row["best_epoch"] = best_epoch + 1
+            row["best_val_loss"] = float(best_val_loss)
+            row["early_stopped"] = int(early_stopped)
+        pd.DataFrame(history_rows).to_csv(os.path.join(fold_dir, "gnn_training_history.csv"), index=False)
 
         print(f"  Best model at epoch {best_epoch+1}")
         if early_stopped:
@@ -667,6 +722,18 @@ def train_gnn_fold(
         print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
 
         model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
+        save_gnn_fold_diagnostics(
+            model=model,
+            loaders={"train": train_loader, "val": val_loader, "test": test_loader},
+            device=device,
+            output_path=os.path.join(fold_dir, "gnn_fold_diagnostics.csv"),
+            task_kind="binary",
+            metadata={
+                "best_epoch": best_epoch + 1,
+                "best_val_loss": float(best_val_loss),
+                "early_stopped": int(early_stopped),
+            },
+        )
         test_metrics, _, test_pred, test_true, test_artifacts = evaluate_gnn(
             model,
             test_loader,
@@ -940,6 +1007,7 @@ def run_training_from_config(config_path: str) -> str:
         target_columns = [target_column]
         feature_columns = resolve_feature_columns(dataset_cfg)
         sync_gnn_in_channels(config["gnn"]["model"], feature_columns)
+        sync_gnn_edge_attr_dims(config["gnn"]["model"], dataset_cfg)
         dropna_columns = resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
         min_samples_per_window = resolve_min_samples_per_window(dataset_cfg)
         with open(os.path.join(run_dir, "config.yaml"), "w", encoding="utf-8") as f:
