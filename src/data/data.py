@@ -15,6 +15,7 @@ from torch_geometric.data import Data, HeteroData
 from data.hci_signals import (
     DISTANCE_AVG_COLUMN,
     FIXATION_INDEX_COLUMN,
+    GAZE_NODE_FEATURE_COLUMNS,
     TIME_WINDOW_NORMALIZED_COLUMN,
     feature_interpolation_columns,
     prepare_hci_eye_tracking_signals,
@@ -276,6 +277,16 @@ class SpacioTemporalDataset(Dataset):
             use_relative_time: bool = True,
             use_delta_distance_edge_feature: bool = True,
             use_fixation_edges: bool = True,
+            use_temporal_node_feature: Optional[bool] = None,
+            use_temporal_edge_features: bool = True,
+            use_temporal_edges: bool = True,
+            use_spatial_edges: bool = True,
+            use_gaze_node_features: bool = True,
+            use_gaze_edge_features: bool = True,
+            use_pupil_node_features: bool = True,
+            use_screen_distance_node_feature: Optional[bool] = None,
+            use_screen_distance_edge_feature: Optional[bool] = None,
+            use_fixation_node_feature: Optional[bool] = None,
             fixation_dilation_k: int = 3):
         """
         Load CSV files and convert to graphs.
@@ -329,16 +340,38 @@ class SpacioTemporalDataset(Dataset):
         self.graphs = []
         self.emotion_names = []  # Store emotion column names
         self.dropping_emotion_threshold = dropping_emotion_threshold
-        self.use_distance_avg = bool(use_distance_avg)
-        self.use_fixation_duration = bool(use_fixation_duration)
-        self.use_relative_time = bool(use_relative_time)
-        self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
+        self.use_temporal_node_feature = bool(
+            use_relative_time if use_temporal_node_feature is None else use_temporal_node_feature
+        )
+        self.use_relative_time = self.use_temporal_node_feature
+        self.use_temporal_edge_features = bool(use_temporal_edge_features)
+        self.use_temporal_edges = bool(use_temporal_edges)
+        self.use_spatial_edges = bool(use_spatial_edges)
+        self.use_gaze_node_features = bool(use_gaze_node_features)
+        self.use_gaze_edge_features = bool(use_gaze_edge_features)
+        self.use_pupil_node_features = bool(use_pupil_node_features)
+        self.use_screen_distance_node_feature = bool(
+            use_distance_avg if use_screen_distance_node_feature is None else use_screen_distance_node_feature
+        )
+        self.use_distance_avg = self.use_screen_distance_node_feature
+        self.use_fixation_node_feature = bool(
+            use_fixation_duration if use_fixation_node_feature is None else use_fixation_node_feature
+        )
+        self.use_fixation_duration = self.use_fixation_node_feature
+        self.use_screen_distance_edge_feature = bool(
+            use_delta_distance_edge_feature
+            if use_screen_distance_edge_feature is None
+            else use_screen_distance_edge_feature
+        )
+        self.use_delta_distance_edge_feature = self.use_screen_distance_edge_feature
         self.use_fixation_edges = bool(use_fixation_edges)
         self.fixation_dilation_k = int(fixation_dilation_k)
         if self.fixation_dilation_k <= 0:
             raise ValueError("fixation_dilation_k must be > 0.")
         self.feature_columns = resolve_optional_hci_feature_columns(
             feature_columns,
+            use_gaze_node_features=self.use_gaze_node_features,
+            use_pupil_node_features=self.use_pupil_node_features,
             use_distance_avg=self.use_distance_avg,
             use_fixation_duration=self.use_fixation_duration,
             use_relative_time=self.use_relative_time,
@@ -492,6 +525,16 @@ class SpacioTemporalDataset(Dataset):
             f"_usereltime={self.use_relative_time}"
             f"_usedeltadistedge={self.use_delta_distance_edge_feature}"
             f"_usefixedges={self.use_fixation_edges}"
+            f"_usetempnode={self.use_temporal_node_feature}"
+            f"_usetempedgefeat={self.use_temporal_edge_features}"
+            f"_usetempedges={self.use_temporal_edges}"
+            f"_usespatialedges={self.use_spatial_edges}"
+            f"_usegazenode={self.use_gaze_node_features}"
+            f"_usegazeedgefeat={self.use_gaze_edge_features}"
+            f"_usepupilnode={self.use_pupil_node_features}"
+            f"_usescreendistnode={self.use_screen_distance_node_feature}"
+            f"_usescreendistedge={self.use_screen_distance_edge_feature}"
+            f"_usefixnode={self.use_fixation_node_feature}"
             f"_fixdilk={self.fixation_dilation_k}"
         )
         
@@ -526,6 +569,16 @@ class SpacioTemporalDataset(Dataset):
                     'use_relative_time': self.use_relative_time,
                     'use_delta_distance_edge_feature': self.use_delta_distance_edge_feature,
                     'use_fixation_edges': self.use_fixation_edges,
+                    'use_temporal_node_feature': self.use_temporal_node_feature,
+                    'use_temporal_edge_features': self.use_temporal_edge_features,
+                    'use_temporal_edges': self.use_temporal_edges,
+                    'use_spatial_edges': self.use_spatial_edges,
+                    'use_gaze_node_features': self.use_gaze_node_features,
+                    'use_gaze_edge_features': self.use_gaze_edge_features,
+                    'use_pupil_node_features': self.use_pupil_node_features,
+                    'use_screen_distance_node_feature': self.use_screen_distance_node_feature,
+                    'use_screen_distance_edge_feature': self.use_screen_distance_edge_feature,
+                    'use_fixation_node_feature': self.use_fixation_node_feature,
                     'fixation_dilation_k': self.fixation_dilation_k,
                 }, f)
             print(f"Successfully cached {len(self.graphs)} graphs")
@@ -557,11 +610,29 @@ class SpacioTemporalDataset(Dataset):
             return df
 
         df = prepare_hci_eye_tracking_signals(df)
-        required_clean_cols = ["time-rel-seconds"] + raw_signal_feature_columns(self.feature_columns)
+        graph_signal_cols: List[str] = []
+        if self.use_spatial_edges or self.use_gaze_edge_features:
+            graph_signal_cols.extend(GAZE_NODE_FEATURE_COLUMNS)
+        if self.use_screen_distance_edge_feature:
+            graph_signal_cols.append(DISTANCE_AVG_COLUMN)
+
+        required_clean_cols = list(
+            dict.fromkeys(
+                ["time-rel-seconds"]
+                + raw_signal_feature_columns(self.feature_columns)
+                + graph_signal_cols
+            )
+        )
+        interpolation_cols = list(
+            dict.fromkeys(
+                feature_interpolation_columns(self.feature_columns)
+                + [col for col in graph_signal_cols if col != TIME_WINDOW_NORMALIZED_COLUMN]
+            )
+        )
         df = clean_dataset(
             df,
             required_cols=required_clean_cols,
-            interpolation_cols=feature_interpolation_columns(self.feature_columns),
+            interpolation_cols=interpolation_cols,
         )
         df = prepare_hci_eye_tracking_signals(df)
 
@@ -644,23 +715,25 @@ class SpacioTemporalDataset(Dataset):
             df_features = df_window
         X = torch.tensor(df_features[feature_cols].values, dtype=torch.float32)
 
-        # Resolve spatial coordinates by feature name to avoid silent column-order bugs.
-        if "x-avg" not in feature_cols or "y-avg" not in feature_cols:
-            raise ValueError(
-                "Spatial kNN graph construction requires 'x-avg' and 'y-avg' in feature_columns. "
-                f"Got feature_columns={feature_cols}"
-            )
-        x_idx = feature_cols.index("x-avg")
-        y_idx = feature_cols.index("y-avg")
-        x_values = X[:, x_idx]
-        y_values = X[:, y_idx]
+        if self.use_spatial_edges or self.use_gaze_edge_features:
+            missing_xy = [column for column in GAZE_NODE_FEATURE_COLUMNS if column not in df_window.columns]
+            if missing_xy:
+                raise ValueError(
+                    "Spatial/gaze graph construction requires raw gaze columns "
+                    f"{GAZE_NODE_FEATURE_COLUMNS}. Missing: {missing_xy}"
+                )
+            x_values = torch.tensor(pd.to_numeric(df_window["x-avg"], errors="coerce").values, dtype=torch.float32)
+            y_values = torch.tensor(pd.to_numeric(df_window["y-avg"], errors="coerce").values, dtype=torch.float32)
+        else:
+            x_values = torch.empty(n, dtype=torch.float32)
+            y_values = torch.empty(n, dtype=torch.float32)
 
         distance_avg_values = None
-        if self.use_delta_distance_edge_feature:
+        if self.use_screen_distance_edge_feature:
             if DISTANCE_AVG_COLUMN not in df_window.columns:
                 raise ValueError(
                     f"{DISTANCE_AVG_COLUMN!r} is required when "
-                    "use_delta_distance_edge_feature=True."
+                    "use_screen_distance_edge_feature=True."
                 )
             distance_avg_values = torch.tensor(
                 pd.to_numeric(df_window[DISTANCE_AVG_COLUMN], errors="coerce").values,
@@ -670,27 +743,26 @@ class SpacioTemporalDataset(Dataset):
         def build_edge_features(edge_index: torch.Tensor, direction: float | None = None) -> torch.Tensor:
             """Build relation features for learned edge-weight MLPs."""
             src_idx, dst_idx = edge_index[0], edge_index[1]
-            delta_t = t_window[dst_idx] - t_window[src_idx]
-            delta_x = x_values[dst_idx] - x_values[src_idx]
-            delta_y = y_values[dst_idx] - y_values[src_idx]
-            distance = torch.sqrt(delta_x.square() + delta_y.square())
-            features = [
-                t_window[src_idx],
-                t_window[dst_idx],
-                delta_t,
-                delta_x,
-                delta_y,
-                distance,
-            ]
-            if self.use_delta_distance_edge_feature:
+            features = []
+            if self.use_temporal_edge_features:
+                delta_t = t_window[dst_idx] - t_window[src_idx]
+                features.extend([t_window[src_idx], t_window[dst_idx], delta_t])
+            if self.use_gaze_edge_features:
+                delta_x = x_values[dst_idx] - x_values[src_idx]
+                delta_y = y_values[dst_idx] - y_values[src_idx]
+                distance = torch.sqrt(delta_x.square() + delta_y.square())
+                features.extend([delta_x, delta_y, distance])
+            if self.use_screen_distance_edge_feature:
                 if distance_avg_values is None:
                     raise ValueError(
                         f"{DISTANCE_AVG_COLUMN!r} is required when "
-                        "use_delta_distance_edge_feature=True."
+                        "use_screen_distance_edge_feature=True."
                     )
                 features.append(distance_avg_values[dst_idx] - distance_avg_values[src_idx])
-            if direction is not None:
+            if direction is not None and self.use_temporal_edge_features:
                 features.append(torch.full_like(delta_t, float(direction)))
+            if not features:
+                return torch.empty((edge_index.shape[1], 0), dtype=torch.float32)
             return torch.stack(features, dim=1)
 
         def build_fixation_edge_index(window_df: pd.DataFrame) -> torch.Tensor:
@@ -728,23 +800,25 @@ class SpacioTemporalDataset(Dataset):
         recording = df_window["recording"].iloc[0] if "recording" in df_window.columns else None
         
         #### creating TEMPORAL edge_index matrix
-        idx = torch.arange(n)          # [0, 1, ..., n-1]
+        edge_index_temporal = torch.empty((2, 0), dtype=torch.long)
+        if self.use_temporal_edges:
+            idx = torch.arange(n)          # [0, 1, ..., n-1]
 
-        # relative offsets: -k..-1 and 1..k  (both directions)
-        rel = torch.arange(-kt, kt + 1)
-        rel = rel[rel != 0]            # drop 0
+            # relative offsets: -k..-1 and 1..k  (both directions)
+            rel = torch.arange(-kt, kt + 1)
+            rel = rel[rel != 0]            # drop 0
 
-        # all candidate (src, dst) pairs before boundary check
-        src = idx.repeat_interleave(len(rel))         # shape [n * (2k)]
-        dst = (idx.view(-1, 1) + rel.view(1, -1)).reshape(-1)
+            # all candidate (src, dst) pairs before boundary check
+            src = idx.repeat_interleave(len(rel))         # shape [n * (2k)]
+            dst = (idx.view(-1, 1) + rel.view(1, -1)).reshape(-1)
 
-        # mask out invalid indices (outside [0, n-1])
-        valid = (dst >= 0) & (dst < n)
-        src = src[valid]
-        dst = dst[valid]
+            # mask out invalid indices (outside [0, n-1])
+            valid = (dst >= 0) & (dst < n)
+            src = src[valid]
+            dst = dst[valid]
 
-        edge_index_temporal = torch.stack([src, dst], dim=0)  # [2, E]
-        if self.use_edge_weights:
+            edge_index_temporal = torch.stack([src, dst], dim=0)  # [2, E]
+        if self.use_temporal_edges and self.use_edge_weights:
             src, dst = edge_index_temporal[0], edge_index_temporal[1]
             df_temporal = (t_raw[dst] - t_raw[src]).abs()
             w_temporal = torch.exp(-df_temporal / self.tau)  # shape [E]
@@ -754,27 +828,29 @@ class SpacioTemporalDataset(Dataset):
             temporal_backward_mask = edge_index_temporal[1] < edge_index_temporal[0]
             edge_index_temporal_forward = edge_index_temporal[:, temporal_forward_mask]
             edge_index_temporal_backward = edge_index_temporal[:, temporal_backward_mask]
-            if self.use_edge_weights:
+            if self.use_temporal_edges and self.use_edge_weights:
                 w_temporal_forward = w_temporal[temporal_forward_mask]
                 w_temporal_backward = w_temporal[temporal_backward_mask]
 
         #### creating SPATIAL edge_index matrix
-        xy = X[:, [x_idx, y_idx]].cpu().numpy()
+        edge_index_spatial = torch.empty((2, 0), dtype=torch.long)
+        if self.use_spatial_edges:
+            xy = torch.stack([x_values, y_values], dim=1).cpu().numpy()
 
-        tree = KDTree(xy)  # use (x, y) for spatial neighbors
-        _, idx = tree.query(xy, k=ks + 1)  # +1 to include self at idx[:, 0], then drop it
-        neighbors = idx[:, 1:].reshape(-1)          # drop self, flatten
-        src = np.repeat(np.arange(n), ks)            # each node repeated k times
+            tree = KDTree(xy)  # use (x, y) for spatial neighbors
+            _, idx = tree.query(xy, k=ks + 1)  # +1 to include self at idx[:, 0], then drop it
+            neighbors = idx[:, 1:].reshape(-1)          # drop self, flatten
+            src = np.repeat(np.arange(n), ks)            # each node repeated k times
 
-        edge_index_spatial = torch.tensor(
-            np.vstack([np.concatenate([src, neighbors]),
-                    np.concatenate([neighbors, src])]),
-            dtype=torch.long,
-        )
+            edge_index_spatial = torch.tensor(
+                np.vstack([np.concatenate([src, neighbors]),
+                        np.concatenate([neighbors, src])]),
+                dtype=torch.long,
+            )
 
-        # remove duplicate spatial edges
-        edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
-        if self.use_edge_weights:
+            # remove duplicate spatial edges
+            edge_index_spatial = torch.unique(edge_index_spatial, dim=1)
+        if self.use_spatial_edges and self.use_edge_weights:
             src, dst = edge_index_spatial[0], edge_index_spatial[1]
             df_spatial = (t_raw[dst] - t_raw[src]).abs()
             w_spatial = torch.exp(-df_spatial / self.tau)  # shape [E]
@@ -783,35 +859,43 @@ class SpacioTemporalDataset(Dataset):
         data["node"].x = X
         data["node"].num_nodes = n
         if self.graph_version == "v1":
-            data["node", "temporal", "node"].edge_index = edge_index_temporal
+            if self.use_temporal_edges:
+                data["node", "temporal", "node"].edge_index = edge_index_temporal
         else:
-            data["node", "temporal_forward", "node"].edge_index = edge_index_temporal_forward
-            data["node", "temporal_backward", "node"].edge_index = edge_index_temporal_backward
+            if self.use_temporal_edges:
+                data["node", "temporal_forward", "node"].edge_index = edge_index_temporal_forward
+                data["node", "temporal_backward", "node"].edge_index = edge_index_temporal_backward
             if self.use_fixation_edges:
                 edge_index_fixation = build_fixation_edge_index(df_window)
                 data["node", "fixation", "node"].edge_index = edge_index_fixation
-        data["node", "spatial", "node"].edge_index = edge_index_spatial
+        if self.use_spatial_edges:
+            data["node", "spatial", "node"].edge_index = edge_index_spatial
         if self.use_edge_weights:
             if self.graph_version == "v1":
-                data["node", "temporal", "node"].edge_attr = w_temporal
+                if self.use_temporal_edges:
+                    data["node", "temporal", "node"].edge_attr = w_temporal
             elif self.edge_weight_mode == "handcrafted":
-                data["node", "temporal_forward", "node"].edge_attr = w_temporal_forward
-                data["node", "temporal_backward", "node"].edge_attr = w_temporal_backward
+                if self.use_temporal_edges:
+                    data["node", "temporal_forward", "node"].edge_attr = w_temporal_forward
+                    data["node", "temporal_backward", "node"].edge_attr = w_temporal_backward
             else:
-                data["node", "temporal_forward", "node"].edge_attr = build_edge_features(
-                    edge_index_temporal_forward,
-                    direction=1.0,
-                )
-                data["node", "temporal_backward", "node"].edge_attr = build_edge_features(
-                    edge_index_temporal_backward,
-                    direction=-1.0,
-                )
+                if self.use_temporal_edges:
+                    data["node", "temporal_forward", "node"].edge_attr = build_edge_features(
+                        edge_index_temporal_forward,
+                        direction=1.0,
+                    )
+                    data["node", "temporal_backward", "node"].edge_attr = build_edge_features(
+                        edge_index_temporal_backward,
+                        direction=-1.0,
+                    )
             if self.edge_weight_mode == "learned_signed" and self.graph_version == "v2":
-                data["node", "spatial", "node"].edge_attr = build_edge_features(edge_index_spatial)
+                if self.use_spatial_edges:
+                    data["node", "spatial", "node"].edge_attr = build_edge_features(edge_index_spatial)
                 if self.use_fixation_edges:
                     data["node", "fixation", "node"].edge_attr = build_edge_features(edge_index_fixation)
             else:
-                data["node", "spatial", "node"].edge_attr = w_spatial
+                if self.use_spatial_edges:
+                    data["node", "spatial", "node"].edge_attr = w_spatial
         
         # Add emotion targets if available
         if y is not None:

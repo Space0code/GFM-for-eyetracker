@@ -128,6 +128,164 @@ def test_dataset_builds_optional_node_and_edge_features_and_fixation_edges(tmp_p
     assert spatial_edges.shape[1] == len(spatial_edge_set)
 
 
+def test_dataset_can_remove_temporal_signal_from_nodes_edges_and_edge_attrs(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_without_temporal.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    dataset = SpacioTemporalDataset(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
+        use_temporal_node_feature=False,
+        use_temporal_edge_features=False,
+        use_temporal_edges=False,
+        use_distance_avg=True,
+        use_fixation_duration=True,
+        use_delta_distance_edge_feature=True,
+        use_fixation_edges=True,
+    )
+
+    graph = dataset[0]
+    assert TIME_WINDOW_NORMALIZED_COLUMN not in dataset.feature_columns
+    assert ("node", "temporal_forward", "node") not in graph.edge_types
+    assert ("node", "temporal_backward", "node") not in graph.edge_types
+    assert graph["node", "spatial", "node"].edge_attr.shape[1] == 4
+    assert graph["node", "fixation", "node"].edge_attr.shape[1] == 4
+
+
+def test_dataset_can_remove_gaze_nodes_gaze_edge_features_and_spatial_edges(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_without_gaze.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    dataset = SpacioTemporalDataset(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
+        use_gaze_node_features=False,
+        use_gaze_edge_features=False,
+        use_spatial_edges=False,
+        use_relative_time=True,
+        use_distance_avg=True,
+        use_fixation_duration=True,
+        use_delta_distance_edge_feature=True,
+        use_fixation_edges=True,
+    )
+
+    graph = dataset[0]
+    assert "x-avg" not in dataset.feature_columns
+    assert "y-avg" not in dataset.feature_columns
+    assert ("node", "spatial", "node") not in graph.edge_types
+    assert graph["node", "temporal_forward", "node"].edge_attr.shape[1] == 5
+    assert graph["node", "fixation", "node"].edge_attr.shape[1] == 4
+
+
+def test_dataset_can_remove_fixation_pupil_and_screen_distance_sources(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_without_optional_sources.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    dataset = SpacioTemporalDataset(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "emotion-id"],
+        use_pupil_node_features=False,
+        use_screen_distance_node_feature=False,
+        use_screen_distance_edge_feature=False,
+        use_fixation_node_feature=False,
+        use_fixation_edges=False,
+        use_relative_time=True,
+    )
+
+    graph = dataset[0]
+    assert "pupil-size-left-avg" not in dataset.feature_columns
+    assert "pupil-size-right-avg" not in dataset.feature_columns
+    assert "distance-avg" not in dataset.feature_columns
+    assert "fixation-duration" not in dataset.feature_columns
+    assert ("node", "fixation", "node") not in graph.edge_types
+    assert graph["node", "spatial", "node"].edge_attr.shape[1] == 6
+    assert graph["node", "temporal_forward", "node"].edge_attr.shape[1] == 7
+
+
+def test_signal_ablation_flags_participate_in_dataset_cache_key(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_cache_key.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    common_kwargs = dict(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
+    )
+    full = SpacioTemporalDataset(**common_kwargs)
+    without_temporal = SpacioTemporalDataset(
+        **common_kwargs,
+        use_temporal_node_feature=False,
+        use_temporal_edge_features=False,
+        use_temporal_edges=False,
+    )
+
+    full_cache_path = full._get_cache_path(
+        root_dir=None,
+        data_filepath=str(data_csv),
+        filter_subjects=None,
+        filter_recordings=None,
+        exclude_subjects=None,
+        recursive=False,
+        ignore_dirs=None,
+        file_list=None,
+    )
+    ablated_cache_path = without_temporal._get_cache_path(
+        root_dir=None,
+        data_filepath=str(data_csv),
+        filter_subjects=None,
+        filter_recordings=None,
+        exclude_subjects=None,
+        recursive=False,
+        ignore_dirs=None,
+        file_list=None,
+    )
+
+    assert full_cache_path != ablated_cache_path
+
+
 def test_fixation_dilation_offsets_use_half_up_rounding_and_no_self_loops() -> None:
     assert _fixation_dilation_offsets(run_length=30, dilation_k=3) == (1, 11, 21)
     assert _fixation_dilation_offsets(run_length=30, dilation_k=10) == (

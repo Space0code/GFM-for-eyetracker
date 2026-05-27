@@ -52,6 +52,7 @@ from emotions.common.dataset_config import (
     resolve_dropna_columns,
     resolve_feature_columns,
     resolve_min_samples_per_window,
+    sync_gnn_edge_attr_dims,
     sync_gnn_in_channels,
 )
 from emotions.common.edge_scaling import (
@@ -297,6 +298,9 @@ def _train_gnn_fold(
             "use_fixation_edges",
             bool(config["dataset"].get("use_fixation_edges", True)),
         )
+        model_kwargs["spatial_edge_attr_dim"] = model_cfg.get("spatial_edge_attr_dim")
+        model_kwargs["temporal_edge_attr_dim"] = model_cfg.get("temporal_edge_attr_dim")
+        model_kwargs["fixation_edge_attr_dim"] = model_cfg.get("fixation_edge_attr_dim")
 
     model = model_cls(**model_kwargs).to(device)
 
@@ -609,6 +613,7 @@ def run_training_from_config(config_path: str) -> str:
 
         feature_columns = resolve_feature_columns(dataset_cfg)
         sync_gnn_in_channels(config["gnn"]["model"], feature_columns)
+        sync_gnn_edge_attr_dims(config["gnn"]["model"], dataset_cfg)
         dropna_columns = resolve_dropna_columns(dataset_cfg, target_columns=target_columns)
         min_samples_per_window = resolve_min_samples_per_window(dataset_cfg)
         with open(os.path.join(run_dir, "config.yaml"), "w", encoding="utf-8") as handle:

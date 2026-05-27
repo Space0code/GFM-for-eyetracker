@@ -26,9 +26,17 @@ def resolve_feature_columns(dataset_cfg: Mapping[str, Any]) -> list[str]:
         raise ValueError("dataset.feature_columns must be a non-empty list.")
     return resolve_optional_hci_feature_columns(
         [str(column) for column in raw],
-        use_distance_avg=bool(dataset_cfg.get("use_distance_avg", True)),
-        use_fixation_duration=bool(dataset_cfg.get("use_fixation_duration", True)),
-        use_relative_time=bool(dataset_cfg.get("use_relative_time", False)),
+        use_gaze_node_features=bool(dataset_cfg.get("use_gaze_node_features", True)),
+        use_pupil_node_features=bool(dataset_cfg.get("use_pupil_node_features", True)),
+        use_distance_avg=bool(
+            dataset_cfg.get("use_screen_distance_node_feature", dataset_cfg.get("use_distance_avg", True))
+        ),
+        use_fixation_duration=bool(
+            dataset_cfg.get("use_fixation_node_feature", dataset_cfg.get("use_fixation_duration", True))
+        ),
+        use_relative_time=bool(
+            dataset_cfg.get("use_temporal_node_feature", dataset_cfg.get("use_relative_time", False))
+        ),
     )
 
 
@@ -42,6 +50,41 @@ def sync_gnn_in_channels(model_cfg: MutableMapping[str, Any], feature_columns: S
             f"{configured} to {resolved} based on resolved dataset feature_columns."
         )
     model_cfg["in_channels"] = resolved
+
+
+def resolve_edge_attr_dims(dataset_cfg: Mapping[str, Any]) -> Dict[str, int]:
+    """Resolve learned edge-attribute widths from enabled signal groups."""
+    use_temporal_edge_features = bool(dataset_cfg.get("use_temporal_edge_features", True))
+    use_gaze_edge_features = bool(dataset_cfg.get("use_gaze_edge_features", True))
+    use_screen_distance_edge_feature = bool(
+        dataset_cfg.get(
+            "use_screen_distance_edge_feature",
+            dataset_cfg.get("use_delta_distance_edge_feature", True),
+        )
+    )
+
+    non_temporal_dim = 0
+    if use_temporal_edge_features:
+        non_temporal_dim += 3  # t_i, t_j, delta_t
+    if use_gaze_edge_features:
+        non_temporal_dim += 3  # delta_x, delta_y, screen-plane distance
+    if use_screen_distance_edge_feature:
+        non_temporal_dim += 1  # delta screen distance
+
+    return {
+        "spatial_edge_attr_dim": non_temporal_dim,
+        "temporal_edge_attr_dim": non_temporal_dim + (1 if use_temporal_edge_features else 0),
+        "fixation_edge_attr_dim": non_temporal_dim,
+    }
+
+
+def sync_gnn_edge_attr_dims(model_cfg: MutableMapping[str, Any], dataset_cfg: Mapping[str, Any]) -> None:
+    """Keep v2 learned edge-weight MLP input widths aligned with dataset flags."""
+    for key, value in resolve_edge_attr_dims(dataset_cfg).items():
+        configured = model_cfg.get(key)
+        if configured is not None and int(configured) != value:
+            print(f"Updating gnn.model.{key} from {configured} to {value} based on dataset edge-feature flags.")
+        model_cfg[key] = value
 
 
 def resolve_dropna_columns(
@@ -121,6 +164,16 @@ def build_graph_dataset_kwargs(
         "use_relative_time": bool(dataset_cfg.get("use_relative_time", False)),
         "use_delta_distance_edge_feature": bool(dataset_cfg.get("use_delta_distance_edge_feature", True)),
         "use_fixation_edges": bool(dataset_cfg.get("use_fixation_edges", True)),
+        "use_temporal_node_feature": dataset_cfg.get("use_temporal_node_feature"),
+        "use_temporal_edge_features": bool(dataset_cfg.get("use_temporal_edge_features", True)),
+        "use_temporal_edges": bool(dataset_cfg.get("use_temporal_edges", True)),
+        "use_spatial_edges": bool(dataset_cfg.get("use_spatial_edges", True)),
+        "use_gaze_node_features": bool(dataset_cfg.get("use_gaze_node_features", True)),
+        "use_gaze_edge_features": bool(dataset_cfg.get("use_gaze_edge_features", True)),
+        "use_pupil_node_features": bool(dataset_cfg.get("use_pupil_node_features", True)),
+        "use_screen_distance_node_feature": dataset_cfg.get("use_screen_distance_node_feature"),
+        "use_screen_distance_edge_feature": dataset_cfg.get("use_screen_distance_edge_feature"),
+        "use_fixation_node_feature": dataset_cfg.get("use_fixation_node_feature"),
         "fixation_dilation_k": int(dataset_cfg.get("fixation_dilation_k", 3)),
     }
 

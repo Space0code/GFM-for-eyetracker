@@ -20,6 +20,8 @@ BASE_NODE_FEATURE_COLUMNS = [
     "pupil-size-left-avg",
     "pupil-size-right-avg",
 ]
+GAZE_NODE_FEATURE_COLUMNS = ["x-avg", "y-avg"]
+PUPIL_NODE_FEATURE_COLUMNS = ["pupil-size-left-avg", "pupil-size-right-avg"]
 DISTANCE_AVG_COLUMN = "distance-avg"
 FIXATION_DURATION_COLUMN = "fixation-duration"
 FIXATION_INDEX_COLUMN = "fixation-index"
@@ -31,12 +33,18 @@ DISTANCE_SOURCE_COLUMNS = ["distance-left", "distance-right"]
 def resolve_optional_hci_feature_columns(
     feature_columns: Sequence[str] | None,
     *,
+    use_gaze_node_features: bool = True,
+    use_pupil_node_features: bool = True,
     use_distance_avg: bool = True,
     use_fixation_duration: bool = True,
     use_relative_time: bool = True,
 ) -> list[str]:
     """Resolve node feature columns with optional HCI signals appended once."""
     resolved = list(feature_columns) if feature_columns is not None else list(BASE_NODE_FEATURE_COLUMNS)
+    if not use_gaze_node_features:
+        resolved = [column for column in resolved if column not in set(GAZE_NODE_FEATURE_COLUMNS)]
+    if not use_pupil_node_features:
+        resolved = [column for column in resolved if column not in set(PUPIL_NODE_FEATURE_COLUMNS)]
     if use_relative_time and TIME_WINDOW_NORMALIZED_COLUMN not in resolved:
         resolved.append(TIME_WINDOW_NORMALIZED_COLUMN)
     if use_distance_avg and DISTANCE_AVG_COLUMN not in resolved:
