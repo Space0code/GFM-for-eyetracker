@@ -161,6 +161,7 @@ def _dataset_overrides(
 def _fixed_gnn_overrides() -> Dict[str, Any]:
     """Return GNN v2 overrides shared by all ablations."""
     return {
+        "benchmarking": {"enabled": False},
         "run_experiments": {"baselines": False, "gnn": True},
         "gnn": {
             "model": {

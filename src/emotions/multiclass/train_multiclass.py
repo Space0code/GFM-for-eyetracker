@@ -63,6 +63,17 @@ from emotions.common.edge_scaling import (
     apply_edge_feature_scalers,
     fit_edge_feature_scalers,
 )
+from emotions.common.model_benchmarking import (
+    count_gazemae_encoder_parameters,
+    count_torch_parameters,
+    describe_classical_model_scale,
+    measure_gazemae_encoder_head_time,
+    measure_gnn_inference_time,
+    measure_predict_proba_time,
+    resolve_benchmark_config,
+    save_strategy_benchmark_outputs,
+    write_benchmark_record,
+)
 from emotions.common.training_diagnostics import (
     collect_gradient_norm_stats,
     save_gnn_fold_diagnostics,
@@ -71,6 +82,7 @@ from emotions.gazemae_baseline import (
     GAZEMAE_FEATURE_COLUMNS,
     GAZEMAE_MODEL_NAME,
     build_gazemae_tabular_samples,
+    resolve_gazemae_config,
 )
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
@@ -733,6 +745,7 @@ def _train_gnn_fold(
     standardize_features: bool,
     verbose: bool,
 ) -> Dict[str, Any]:
+    benchmark_cfg = resolve_benchmark_config(config)
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
@@ -748,6 +761,12 @@ def _train_gnn_fold(
             f"Unsupported gnn.model.model_version='{model_version}'. "
             "Choose 'v1', 'v2', or 'BasicGCN'."
         )
+    if model_version == "v1":
+        benchmark_model_name = "GNN_v1"
+    elif model_version == "v2":
+        benchmark_model_name = "GNN_v2"
+    else:
+        benchmark_model_name = "BasicGCN"
 
     model_kwargs = {
         "in_channels": model_cfg["in_channels"],
@@ -794,6 +813,7 @@ def _train_gnn_fold(
         model_kwargs["graph_pooling"] = model_cfg.get("graph_pooling")
 
     model = model_cls(**model_kwargs).to(device)
+    parameter_counts = count_torch_parameters(model)
 
     use_compile = training_cfg.get("use_torch_compile", True)
     if use_compile and hasattr(torch, "compile"):
@@ -855,7 +875,7 @@ def _train_gnn_fold(
     best_epoch = 0
     no_improve_epochs = 0
     early_stopped = False
-    start_time = time.time()
+    start_time = time.perf_counter()
     history_rows: List[Dict[str, Any]] = []
     early_stopping_enabled = bool(training_cfg.get("early_stopping_enabled", False))
     early_stopping_patience = int(training_cfg.get("early_stopping_patience", 7))
@@ -867,7 +887,7 @@ def _train_gnn_fold(
 
     print(f"Training multiclass GNN for {test_name}...")
     for epoch in range(int(training_cfg["num_epochs"])):
-        epoch_start_time = time.time()
+        epoch_start_time = time.perf_counter()
         train_loss, grad_norm_stats = _train_gnn_epoch(
             model=model,
             loader=train_loader,
@@ -886,7 +906,7 @@ def _train_gnn_fold(
         val_aggregated = val_metrics["standard"]["aggregated"]
         val_balanced_accuracy = val_aggregated.get("balanced_accuracy", np.nan)
         val_macro_f1 = val_aggregated.get("macro_f1", np.nan)
-        epoch_runtime_seconds = round(time.time() - epoch_start_time, 3)
+        epoch_runtime_seconds = round(time.perf_counter() - epoch_start_time, 3)
 
         if verbose and ((epoch + 1) % 10 == 0 or epoch == 0 or epoch + 1 == int(training_cfg["num_epochs"])):
             val_acc = val_aggregated.get("accuracy", np.nan)
@@ -941,7 +961,8 @@ def _train_gnn_fold(
             "  NOTE: early_stopping_restore_best=false requested, "
             "but evaluation still uses the best checkpoint for comparability."
         )
-    print(f"  GNN train time: {time.time() - start_time:.2f} seconds")
+    fit_seconds = time.perf_counter() - start_time
+    print(f"  GNN train time: {fit_seconds:.2f} seconds")
 
     model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
     save_gnn_fold_diagnostics(
@@ -969,6 +990,48 @@ def _train_gnn_fold(
     if verbose:
         test_acc = test_metrics["standard"]["aggregated"].get("accuracy", np.nan)
         print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
+
+    if benchmark_cfg["enabled"]:
+        aggregated = test_metrics["standard"]["aggregated"]
+        benchmark_record: Dict[str, Any] = {
+            "task_name": str(task_def["task_name"]),
+            "cv_strategy": str(fold_context.get("cv_strategy", "")),
+            "fold_id": Path(fold_dir).name,
+            "model": "GNN",
+            "model_display_name": benchmark_model_name,
+            "model_family": "gnn",
+            "parameter_scope": "torch_model",
+            "device": str(device),
+            "batch_size": int(training_cfg["batch_size"]),
+            "train_windows": int(len(train_graphs)),
+            "val_windows": int(len(val_graphs)),
+            "test_windows": int(len(test_graphs)),
+            "epochs_completed": int(len(history_rows)),
+            "best_epoch": int(best_epoch + 1),
+            "fit_seconds": float(fit_seconds),
+            "train_seconds_per_window": float(fit_seconds / max(1, len(train_graphs))),
+            "train_window_epochs": int(len(train_graphs) * max(1, len(history_rows))),
+            "train_seconds_per_window_epoch": float(
+                fit_seconds / max(1, len(train_graphs) * max(1, len(history_rows)))
+            ),
+            "accuracy": float(aggregated.get("accuracy", np.nan)),
+            "macro_f1": float(aggregated.get("macro_f1", np.nan)),
+            **parameter_counts,
+        }
+        try:
+            benchmark_record.update(
+                measure_gnn_inference_time(
+                    model=model,
+                    loader=test_loader,
+                    device=device,
+                    n_items=len(test_graphs),
+                    warmup_runs=int(benchmark_cfg["warmup_runs"]),
+                    timed_runs=int(benchmark_cfg["timed_runs"]),
+                )
+            )
+        except Exception as benchmark_exc:
+            benchmark_record["benchmark_error"] = str(benchmark_exc)
+        write_benchmark_record(Path(fold_dir) / "model_benchmark.json", benchmark_record)
 
     return test_metrics
 
@@ -1049,6 +1112,9 @@ def _prepare_baseline_split(
 
 def _train_baselines_fold(
     baseline_cfg: Dict[str, Any],
+    benchmark_cfg: Dict[str, Any],
+    gazemae_cfg: Dict[str, Any],
+    window_seconds: float,
     train_idx: np.ndarray,
     val_idx: np.ndarray,
     test_idx: np.ndarray,
@@ -1140,31 +1206,136 @@ def _train_baselines_fold(
             **baseline_cfg.get("hyperparameters", {}).get(model_name, {}),
         )
 
+        fit_started = time.perf_counter()
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, message=".*Stochastic Optimizer.*")
             if hasattr(model, "fit_with_validation"):
                 model.fit_with_validation(X_train=X_train, y_train=y_train, X_val=X_val, y_val=y_val)
             else:
                 model.fit(X_train, y_train)
+        fit_seconds = time.perf_counter() - fit_started
         if model_name in {"MLP", GAZEMAE_MODEL_NAME}:
             _save_mlp_training_history(
                 model=model,
                 output_path=os.path.join(model_dir, "mlp_training_history.csv"),
             )
 
-        test_metrics = model.evaluate(
-            X=X_test,
-            y=y_test,
-            all_classes=class_labels_array,
+        test_pred = model.predict_proba(X_test, all_classes=class_labels_array)
+        test_metrics = evaluate_multiclass_classification(
+            y_pred_proba=test_pred,
+            y_true=y_test,
+            class_labels=class_labels,
             metadata=test_metadata,
         )
-        test_pred = model.predict_proba(X_test, all_classes=class_labels_array)
         try:
             test_metrics["standard"]["aggregated"]["loss"] = float(
                 log_loss(y_test, test_pred, labels=class_labels_array)
             )
         except ValueError:
             test_metrics["standard"]["aggregated"]["loss"] = float("nan")
+
+        if benchmark_cfg["enabled"]:
+            estimator = getattr(model, "model", None)
+            if isinstance(estimator, torch.nn.Module):
+                parameter_counts = count_torch_parameters(estimator)
+                parameter_scope = "torch_head"
+            else:
+                parameter_counts = {"trainable_parameters": None, "total_parameters": None}
+                parameter_scope = "not_applicable_for_classical_model"
+
+            resolved_gazemae = None
+            if model_name == GAZEMAE_MODEL_NAME:
+                resolved_gazemae = resolve_gazemae_config(gazemae_cfg, dataset_cfg={})
+                frozen_encoder_parameters = count_gazemae_encoder_parameters(
+                    [resolved_gazemae.model_pos, resolved_gazemae.model_vel]
+                )
+                head_trainable = parameter_counts["trainable_parameters"] or 0
+                head_total = parameter_counts["total_parameters"] or 0
+                parameter_counts = {
+                    "trainable_parameters": int(head_trainable),
+                    "total_parameters": int(head_total + frozen_encoder_parameters),
+                    "frozen_parameters": int(frozen_encoder_parameters),
+                    "head_total_parameters": int(head_total),
+                }
+                parameter_scope = "frozen_gazemae_encoders_plus_trainable_mlp_head"
+
+            training_history = getattr(model, "training_history_", None) or []
+            epochs_completed = len(training_history) if training_history else None
+            benchmark_record: Dict[str, Any] = {
+                "task_name": str(task_def["task_name"]),
+                "cv_strategy": str(fold_context.get("cv_strategy", "")),
+                "fold_id": Path(fold_dir).name,
+                "model": model_name,
+                "model_display_name": model_name,
+                "model_family": "baseline",
+                "parameter_scope": parameter_scope,
+                "device": str(getattr(model, "device", "cpu")),
+                "batch_size": int(getattr(model, "batch_size", len(X_test))),
+                "train_windows": int(len(X_train)),
+                "val_windows": int(len(X_val)),
+                "test_windows": int(len(X_test)),
+                "epochs_completed": int(epochs_completed) if epochs_completed is not None else None,
+                "fit_seconds": float(fit_seconds),
+                "train_seconds_per_window": float(fit_seconds / max(1, len(X_train))),
+                "train_window_epochs": (
+                    int(len(X_train) * epochs_completed) if epochs_completed is not None else None
+                ),
+                "train_seconds_per_window_epoch": (
+                    float(fit_seconds / max(1, len(X_train) * epochs_completed))
+                    if epochs_completed is not None
+                    else None
+                ),
+                "accuracy": float(test_metrics["standard"]["aggregated"].get("accuracy", np.nan)),
+                "macro_f1": float(test_metrics["standard"]["aggregated"].get("macro_f1", np.nan)),
+                **parameter_counts,
+                **describe_classical_model_scale(model),
+            }
+            try:
+                benchmark_device = getattr(model, "device", None)
+                benchmark_record.update(
+                    measure_predict_proba_time(
+                        predict_proba=lambda: model.predict_proba(
+                            X_test,
+                            all_classes=class_labels_array,
+                        ),
+                        n_items=len(X_test),
+                        warmup_runs=int(benchmark_cfg["warmup_runs"]),
+                        timed_runs=int(benchmark_cfg["timed_runs"]),
+                        device=benchmark_device,
+                        inference_scope=(
+                            "cached_gazemae_embedding_mlp_head_predict_proba"
+                            if model_name == GAZEMAE_MODEL_NAME
+                            else "tabular_predict_proba"
+                        ),
+                    )
+                )
+            except Exception as benchmark_exc:
+                benchmark_record["benchmark_error"] = str(benchmark_exc)
+            if (
+                model_name == GAZEMAE_MODEL_NAME
+                and resolved_gazemae is not None
+                and isinstance(estimator, torch.nn.Module)
+            ):
+                try:
+                    benchmark_record.update(
+                        measure_gazemae_encoder_head_time(
+                            head_model=estimator,
+                            model_pos_path=resolved_gazemae.model_pos,
+                            model_vel_path=resolved_gazemae.model_vel,
+                            device=getattr(model, "device", "cpu"),
+                            window_seconds=float(window_seconds),
+                            target_hz=int(resolved_gazemae.target_hz),
+                            chunk_seconds=float(resolved_gazemae.chunk_seconds),
+                            synthetic_windows_per_run=int(
+                                benchmark_cfg.get("synthetic_windows_per_run", 16)
+                            ),
+                            warmup_runs=int(benchmark_cfg["warmup_runs"]),
+                            timed_runs=int(benchmark_cfg["timed_runs"]),
+                        )
+                    )
+                except Exception as benchmark_exc:
+                    benchmark_record["encoder_head_benchmark_error"] = str(benchmark_exc)
+            write_benchmark_record(Path(model_dir) / "model_benchmark.json", benchmark_record)
 
         if hasattr(model, "move_to_cpu"):
             model.move_to_cpu()
@@ -1566,6 +1737,7 @@ def run_training_from_config(config_path: str) -> str:
                     train_raw = _extract_tabular_raw_targets(base_tabular_samples, baseline_train_idx, target_columns)
 
                 fold_context = _resolve_fold_context(task_def=task_def, train_raw_targets=train_raw)
+                fold_context["cv_strategy"] = strategy
                 if task_def["mode"] == "va-quadrant":
                     print(
                         "  Fold VA thresholds: "
@@ -1577,6 +1749,9 @@ def run_training_from_config(config_path: str) -> str:
                     print("Training baselines...")
                     baseline_results = _train_baselines_fold(
                         baseline_cfg=config["baselines"],
+                        benchmark_cfg=resolve_benchmark_config(config),
+                        gazemae_cfg=config.get("gazemae", {}),
+                        window_seconds=float(dataset_cfg.get("window_length", 10)),
                         train_idx=baseline_train_idx,
                         val_idx=baseline_val_idx,
                         test_idx=baseline_test_idx,
@@ -1654,6 +1829,8 @@ def run_training_from_config(config_path: str) -> str:
             print_comparison_table(combined_results, metric_names, strategy)
             save_comparison_csv(combined_results, metric_names, os.path.join(strategy_dir, "summary.csv"))
             save_fold_metrics_csv(combined_results, metric_names, os.path.join(strategy_dir, "fold_metrics.csv"))
+            for benchmark_path in save_strategy_benchmark_outputs(strategy_dir):
+                print(f"Saved benchmark output: {benchmark_path}")
 
         print("\nGenerating multiclass result plots...")
         models_for_cm: List[str] = []

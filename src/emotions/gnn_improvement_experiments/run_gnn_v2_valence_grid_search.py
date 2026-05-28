@@ -248,6 +248,7 @@ def _fixed_overrides(args: argparse.Namespace, run_output_dir: Path) -> Dict[str
                 "val_size": int(args.val_size),
                 "random_state": int(args.seed),
             },
+            "benchmarking": {"enabled": False},
             "run_experiments": {"baselines": False, "gnn": True},
             "dataset": {
                 "use_cache": True,

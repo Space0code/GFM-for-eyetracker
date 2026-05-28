@@ -48,6 +48,7 @@ if __package__ in {None, ""}:
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
+from emotions.common.model_benchmarking import load_benchmark_records, summarize_benchmark_records
 from emotions.suite.config_merge import merge_many
 from emotions.suite.run_hci_experiment_suite import run_suite
 from emotions.utils import TimestampedLineWriter
@@ -927,6 +928,177 @@ def _save_fold_metric_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) 
         metric_summary_path = tables_dir / "metric_summary_with_std.csv"
         metric_summary.to_csv(metric_summary_path, index=False)
         saved_paths.append(metric_summary_path)
+
+    return saved_paths
+
+
+def _collect_model_benchmark_records(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
+    """Collect per-fold benchmark artifacts from successful quick-comparison runs."""
+    records: List[pd.DataFrame] = []
+    for row in rows:
+        if str(row.get("status")) != "success":
+            continue
+
+        model_name = str(row.get("model", ""))
+        summary_model_name = str(row.get("summary_model_name", ""))
+        experiment_id = str(row.get("experiment_id", ""))
+        cv_strategy = str(row.get("cv_strategy", ""))
+        suite_run_dir = Path(str(row.get("suite_run_dir", "")))
+        try:
+            trainer_run_dir = _resolve_trainer_run_dir(suite_run_dir, experiment_id=experiment_id)
+        except Exception:
+            continue
+
+        strategy_dir = trainer_run_dir / cv_strategy
+        if not strategy_dir.exists():
+            continue
+
+        benchmark_paths: List[Path] = []
+        for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
+            if summary_model_name == "GNN":
+                benchmark_paths.append(fold_dir / "model_benchmark.json")
+            else:
+                benchmark_paths.append(fold_dir / "baselines" / model_name / "model_benchmark.json")
+
+        benchmark_df = load_benchmark_records(benchmark_paths)
+        if benchmark_df.empty:
+            continue
+
+        benchmark_df.insert(0, "trainer_model", benchmark_df.get("model", ""))
+        benchmark_df["model"] = model_name
+        benchmark_df["summary_model_name"] = summary_model_name
+        benchmark_df["experiment_id"] = experiment_id
+        benchmark_df["experiment_display_name"] = EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id)
+        benchmark_df["cv_strategy"] = cv_strategy
+        benchmark_df["suite_run_dir"] = str(suite_run_dir)
+        benchmark_df["trainer_run_dir"] = str(trainer_run_dir)
+        records.append(benchmark_df)
+
+    if not records:
+        return pd.DataFrame()
+    return pd.concat(records, ignore_index=True)
+
+
+def _format_accuracy_macro_f1(accuracy: Any, macro_f1: Any) -> str:
+    """Format the compact main-text metric column."""
+    accuracy_value = pd.to_numeric(pd.Series([accuracy]), errors="coerce").iloc[0]
+    macro_f1_value = pd.to_numeric(pd.Series([macro_f1]), errors="coerce").iloc[0]
+    if pd.isna(accuracy_value) and pd.isna(macro_f1_value):
+        return ""
+    return f"{accuracy_value:.4f} / {macro_f1_value:.4f}"
+
+
+def _write_markdown_table(df: pd.DataFrame, output_path: Path) -> None:
+    """Write a small GitHub-flavored markdown table without extra dependencies."""
+    if df.empty:
+        output_path.write_text("", encoding="utf-8")
+        return
+
+    text_df = df.fillna("").astype(str)
+    headers = text_df.columns.tolist()
+    rows = text_df.values.tolist()
+    widths = [
+        max(len(str(header)), *(len(str(row[idx])) for row in rows))
+        for idx, header in enumerate(headers)
+    ]
+
+    def fmt_row(values: Sequence[str]) -> str:
+        return "| " + " | ".join(str(value).ljust(widths[idx]) for idx, value in enumerate(values)) + " |"
+
+    lines = [
+        fmt_row(headers),
+        "| " + " | ".join("-" * width for width in widths) + " |",
+    ]
+    lines.extend(fmt_row(row) for row in rows)
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _save_model_benchmark_outputs(
+    *,
+    rows: Sequence[Dict[str, Any]],
+    quick_summary: pd.DataFrame,
+    output_dir: Path,
+) -> List[Path]:
+    """Save raw, summary, and main-text benchmark tables."""
+    records = _collect_model_benchmark_records(rows)
+    if records.empty:
+        return []
+
+    tables_dir = output_dir / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: List[Path] = []
+
+    raw_path = tables_dir / "model_benchmark_raw.csv"
+    records.to_csv(raw_path, index=False)
+    saved_paths.append(raw_path)
+
+    group_columns = ["experiment_id", "experiment_display_name", "cv_strategy", "model"]
+    benchmark_summary = summarize_benchmark_records(records, group_columns=group_columns)
+    if benchmark_summary.empty:
+        return saved_paths
+
+    metric_columns = ["experiment_id", "cv_strategy", "model", "accuracy", "macro_f1"]
+    if not quick_summary.empty and set(metric_columns).issubset(quick_summary.columns):
+        metrics = quick_summary[quick_summary["status"] == "success"].loc[:, metric_columns].copy()
+        for metric in ["accuracy", "macro_f1"]:
+            metrics[metric] = pd.to_numeric(metrics[metric], errors="coerce")
+        benchmark_summary = benchmark_summary.drop(
+            columns=[column for column in ["accuracy", "macro_f1"] if column in benchmark_summary.columns],
+            errors="ignore",
+        ).merge(metrics, on=["experiment_id", "cv_strategy", "model"], how="left")
+
+    summary_path = tables_dir / "model_benchmark_summary.csv"
+    benchmark_summary.to_csv(summary_path, index=False)
+    saved_paths.append(summary_path)
+
+    main_models = ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"]
+    main_report = benchmark_summary[benchmark_summary["model"].isin(main_models)].copy()
+    if not main_report.empty:
+        if "encoder_head_inference_ms_per_window" in main_report.columns:
+            encoder_head_time = pd.to_numeric(
+                main_report["encoder_head_inference_ms_per_window"],
+                errors="coerce",
+            )
+            main_report["inference_ms_per_window"] = np.where(
+                (main_report["model"] == "GazeMAE_MLP") & encoder_head_time.notna(),
+                encoder_head_time,
+                main_report["inference_ms_per_window"],
+            )
+        model_order = {model: idx for idx, model in enumerate(main_models)}
+        main_report["model_order"] = main_report["model"].map(model_order)
+        main_report["accuracy / macro-F1"] = [
+            _format_accuracy_macro_f1(row.accuracy, row.macro_f1)
+            for row in main_report[["accuracy", "macro_f1"]].itertuples(index=False)
+        ]
+        main_report = main_report.sort_values(
+            ["experiment_id", "cv_strategy", "model_order"]
+        ).rename(
+            columns={
+                "experiment_display_name": "task",
+                "model": "model",
+                "trainable_parameters": "trainable_parameters",
+                "total_parameters": "total_parameters",
+                "train_ms_per_window": "train_ms_per_window",
+                "inference_ms_per_window": "inference_ms_per_window",
+            }
+        )
+        main_report = main_report[
+            [
+                "task",
+                "cv_strategy",
+                "model",
+                "trainable_parameters",
+                "total_parameters",
+                "train_ms_per_window",
+                "inference_ms_per_window",
+                "accuracy / macro-F1",
+            ]
+        ]
+        main_csv_path = tables_dir / "main_model_complexity_report.csv"
+        main_md_path = tables_dir / "main_model_complexity_report.md"
+        main_report.to_csv(main_csv_path, index=False)
+        _write_markdown_table(main_report, main_md_path)
+        saved_paths.extend([main_csv_path, main_md_path])
 
     return saved_paths
 
@@ -2612,10 +2784,16 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     confusion_paths: List[Path] = []
     confusion_table_path: Path | None = None
     fold_metric_paths: List[Path] = []
+    benchmark_paths: List[Path] = []
     label_distribution_paths: List[Path] = []
     training_history_paths: List[Path] = []
     if not args.dry_run:
         fold_metric_paths = _save_fold_metric_outputs(rows=rows, output_dir=output_dir)
+        benchmark_paths = _save_model_benchmark_outputs(
+            rows=rows,
+            quick_summary=summary,
+            output_dir=output_dir,
+        )
         confusion_table_path = _save_confusion_matrix_table(rows=rows, output_dir=output_dir)
         label_distribution_paths = _save_label_distribution_outputs(rows=rows, output_dir=output_dir)
         training_history_paths = _save_training_history_outputs(rows=rows, output_dir=output_dir)
@@ -2650,6 +2828,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
         print(f"Saved test loss plot: {test_loss_path}")
     for fold_metric_path in fold_metric_paths:
         print(f"Saved fold metric output: {fold_metric_path}")
+    for benchmark_path in benchmark_paths:
+        print(f"Saved benchmark output: {benchmark_path}")
     if confusion_table_path is not None:
         print(f"Saved confusion matrix table: {confusion_table_path}")
     for label_distribution_path in label_distribution_paths:

@@ -20,6 +20,11 @@ quick_comparison:
   #   table6_tasks: [arousal, valence]
 
 global_overrides:
+  benchmarking:
+    enabled: true
+    warmup_runs: 1
+    timed_runs: 3
+    synthetic_windows_per_run: 16
   cross_validation:
     strategies:
       # - "subject_kfold"

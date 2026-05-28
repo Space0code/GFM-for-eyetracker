@@ -33,5 +33,20 @@ This directory is the canonical config home for scripts under
   wrapper config `quick_v1_v2/run_hci_experiment_suite_table6_3class.yaml`
   under `global_overrides.gnn.model`. In particular, switch both GNN_v1 and
   GNN_v2 between GCN and GAT by changing only `conv_type` there.
+- The Table-6 multiclass quick configs enable `benchmarking` by default. During
+  a normal quick-comparison run, the multiclass trainer writes per-fold
+  `model_benchmark.json` files with parameter counts, training time, inference
+  time, and the fold's accuracy/macro-F1. Each trainer strategy also writes
+  `model_benchmark_raw.csv` and `model_benchmark_summary.csv`. The quick
+  comparison runner then aggregates these into `tables/model_benchmark_raw.csv`,
+  `tables/model_benchmark_summary.csv`, and the thesis-facing
+  `tables/main_model_complexity_report.csv`/`.md`.
+- Benchmark timings are measured during the current run, not recovered from old
+  `.log` files. Training time covers model fitting for the fold, not dataset or
+  graph construction. Inference time is measured after training on the fold's
+  test split with warmup and repeated timed passes. For `GazeMAE_MLP`, raw
+  artifacts include both cached-embedding head-only inference and a synthetic
+  frozen-encoder-plus-head forward timing; the main report uses the encoder-plus-
+  head timing when available.
 - The old `run_gnn_ablation_suite.py` hyperparameter sweep was archived under
   `archive/src/emotions/gnn_improvement_experiments/`.
