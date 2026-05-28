@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import gc
 import os
 import platform
@@ -87,13 +88,21 @@ class _TeeStream:
         self.log_writer = TimestampedLineWriter(log_handle)
 
     def write(self, message: str) -> int:
-        self.stream.write(message)
+        try:
+            self.stream.write(message)
+        except OSError as exc:
+            if exc.errno != errno.EPIPE:
+                raise
         self.log_writer.write(message)
         self.log_handle.flush()
         return len(message)
 
     def flush(self) -> None:
-        self.stream.flush()
+        try:
+            self.stream.flush()
+        except OSError as exc:
+            if exc.errno != errno.EPIPE:
+                raise
         self.log_handle.flush()
 
 
@@ -130,6 +139,15 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="results/gnn_v2_valence_grid_search",
         help="Output directory for generated configs, model runs, and summaries.",
+    )
+    parser.add_argument(
+        "--resume-run-dir",
+        type=str,
+        default=None,
+        help=(
+            "Existing timestamped run directory to continue. Successful rows from "
+            "grid_summary_partial.csv are kept and skipped; failed/missing variants rerun."
+        ),
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument("--n-splits", type=int, default=5, help="Subject k-fold split count.")
@@ -757,6 +775,28 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     return df[columns].sort_values(["phase", "variant_id"]).reset_index(drop=True)
 
 
+def _load_resume_rows(output_dir: Path) -> List[Dict[str, Any]]:
+    """Load successful partial rows from an interrupted run."""
+    for filename in ("grid_summary_partial.csv", "grid_summary.csv"):
+        path = output_dir / filename
+        if path.exists():
+            df = pd.read_csv(path)
+            if "status" not in df.columns:
+                return []
+            successful = df[df["status"] == "success"].copy()
+            return successful.to_dict("records")
+    return []
+
+
+def _successful_variant_keys(rows: Sequence[Dict[str, Any]]) -> set[tuple[str, str]]:
+    """Return phase/variant ids that already completed successfully."""
+    return {
+        (str(row.get("phase", "")), str(row.get("variant_id", "")))
+        for row in rows
+        if row.get("status") == "success"
+    }
+
+
 def _successful_variant_count(rows: Sequence[Dict[str, Any]]) -> int:
     """Count successful variant rows."""
     return sum(1 for row in rows if row.get("status") == "success")
@@ -875,12 +915,15 @@ def _run_or_dry_variants(
     output_dir: Path,
 ) -> None:
     """Run or dry-run variants and continuously save partial results."""
+    completed = _successful_variant_keys(rows)
     for variant in variants:
         config_path = generated_dir / f"{variant.phase}_{variant.variant_id}.yaml"
         payload = _build_payload(base_cfg=base_cfg, fixed_overrides=fixed_overrides, variant=variant)
         _write_yaml(config_path, payload)
 
-        if args.dry_run:
+        if (variant.phase, variant.variant_id) in completed and not args.dry_run:
+            print(f"Skipping {variant.phase} | {variant.variant_id}; successful row already exists.")
+        elif args.dry_run:
             rows.append(_dry_run_row(variant, config_path=config_path))
         else:
             rows.append(
@@ -892,6 +935,7 @@ def _run_or_dry_variants(
                     generated_dir=generated_dir,
                 )
             )
+            completed = _successful_variant_keys(rows)
 
         partial_df = _rows_to_dataframe(rows)
         partial_df.to_csv(output_dir / "grid_summary_partial.csv", index=False)
@@ -921,17 +965,23 @@ def run_grid(args: argparse.Namespace, *, run_timestamp: str | None = None) -> P
     base_config_path = Path(args.base_config)
     base_cfg = _load_yaml(base_config_path)
 
-    timestamp = run_timestamp or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = Path(args.output_root) / timestamp
+    if args.resume_run_dir:
+        output_dir = Path(args.resume_run_dir)
+        timestamp = output_dir.name
+    else:
+        timestamp = run_timestamp or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = Path(args.output_root) / timestamp
     generated_dir = output_dir / "generated_wrapper_configs"
     log_path = output_dir / "gnn_v2_valence_grid_search.log"
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_dir.mkdir(parents=True, exist_ok=True)
 
     fixed_overrides = _fixed_overrides(args, run_output_dir=output_dir)
-    rows: List[Dict[str, Any]] = []
+    rows: List[Dict[str, Any]] = _load_resume_rows(output_dir) if args.resume_run_dir else []
 
     _print_run_header(args=args, output_dir=output_dir, log_path=log_path)
+    if rows:
+        print(f"Loaded {len(rows)} successful rows from existing summary for resume.")
     run_warnings: List[str] = []
 
     phase1_variants = _filter_variants(_phase1_variants(), args.only_variant)
@@ -1039,6 +1089,7 @@ def run_grid(args: argparse.Namespace, *, run_timestamp: str | None = None) -> P
         "base_config": str(base_config_path),
         "output_dir": str(output_dir),
         "log_path": str(log_path),
+        "resume_run_dir": args.resume_run_dir,
         "seed": int(args.seed),
         "n_splits": int(args.n_splits),
         "val_size": int(args.val_size),
@@ -1079,8 +1130,11 @@ def run_grid(args: argparse.Namespace, *, run_timestamp: str | None = None) -> P
 def main() -> None:
     """CLI entry point."""
     args = parse_args()
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_path = Path(args.output_root) / timestamp / "gnn_v2_valence_grid_search.log"
+    timestamp = None if args.resume_run_dir else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    if args.resume_run_dir:
+        log_path = Path(args.resume_run_dir) / "gnn_v2_valence_grid_search.log"
+    else:
+        log_path = Path(args.output_root) / str(timestamp) / "gnn_v2_valence_grid_search.log"
     with _tee_output(log_path):
         output_dir = run_grid(args, run_timestamp=timestamp)
         print(f"GNN v2 valence grid-search directory: {output_dir}")
