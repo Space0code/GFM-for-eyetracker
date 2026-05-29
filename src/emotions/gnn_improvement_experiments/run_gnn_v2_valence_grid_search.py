@@ -777,14 +777,21 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
 
 def _load_resume_rows(output_dir: Path) -> List[Dict[str, Any]]:
     """Load successful partial rows from an interrupted run."""
-    for filename in ("grid_summary_partial.csv", "grid_summary.csv"):
+    for filename in ("grid_summary_partial.csv", "grid_summary.csv", "phase1_summary.csv", "phase2_summary.csv"):
         path = output_dir / filename
         if path.exists():
-            df = pd.read_csv(path)
+            try:
+                df = pd.read_csv(path)
+            except pd.errors.EmptyDataError:
+                print(f"WARNING: Resume summary is empty; ignoring {path}")
+                continue
             if "status" not in df.columns:
-                return []
+                print(f"WARNING: Resume summary has no status column; ignoring {path}")
+                continue
             successful = df[df["status"] == "success"].copy()
-            return successful.to_dict("records")
+            if not successful.empty:
+                print(f"Loaded resume rows from {path}")
+                return successful.to_dict("records")
     return []
 
 
