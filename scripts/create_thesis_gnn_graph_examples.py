@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,14 +50,14 @@ RELATION_STYLES = {
     "temporal_forward": {
         "label": "časovne naprej",
         "color": PALETTE["orange"],
-        "rad": 0.12,
+        "rad": 0.18,
         "alpha": 0.80,
         "linewidth": 1.8,
     },
     "temporal_backward": {
         "label": "časovne nazaj",
         "color": PALETTE["pink"],
-        "rad": -0.12,
+        "rad": 0.18,
         "alpha": 0.72,
         "linewidth": 1.8,
     },
@@ -78,11 +79,19 @@ RELATION_STYLES = {
 
 NODE_FILL_COLORS = [
     PALETTE["teal"],
-    PALETTE["blue"],
-    PALETTE["purple"],
     PALETTE["orange"],
+    PALETTE["purple"],
     PALETTE["pink"],
+    PALETTE["blue"],
 ]
+
+FIGURE_TITLE = "Majhen primer konstrukcije grafa iz podatkov sledilnika pogleda"
+PANEL_FILE_STEMS = {
+    "all": "vse_povezave",
+    "temporal": "casovne",
+    "spatial": "prostorske",
+    "fixation": "fiksacijske",
+}
 
 REQUIRED_COLUMNS = [
     "time-rel-seconds",
@@ -117,7 +126,11 @@ class CandidateGraph:
     fixation_count: int
     spread: float
     min_pairwise_distance: float
+    fixation_cluster_quality: float
     total_edges: int
+    kt: int
+    ks: int
+    fixation_dilation_k: int
     temporary_path: Path | None = None
 
 
@@ -143,8 +156,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--keep-per-kind", type=int, default=3, help="Selected figures per view type.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-    parser.add_argument("--kt", type=int, default=2, help="Temporal neighborhood size.")
-    parser.add_argument("--ks", type=int, default=2, help="Spatial kNN neighborhood size.")
+    parser.add_argument("--kt", type=int, default=1, help="Temporal neighborhood size.")
+    parser.add_argument("--ks", type=int, default=1, help="Spatial kNN neighborhood size.")
     parser.add_argument("--screen-width", type=float, default=1280.0, help="Maximum valid gaze x-coordinate.")
     parser.add_argument("--screen-height", type=float, default=800.0, help="Maximum valid gaze y-coordinate.")
     parser.add_argument(
@@ -351,7 +364,43 @@ def _build_fixation_edges(nodes: pd.DataFrame, dilation_k: int) -> list[tuple[in
     return _dedupe_edges(edges)
 
 
-def _score_candidate(kind: str, nodes: pd.DataFrame, edges: dict[str, list[tuple[int, int]]]) -> tuple[float, float, float, int]:
+def _fixation_cluster_quality(nodes: pd.DataFrame) -> float:
+    xy = nodes[["x-avg", "y-avg"]].to_numpy(dtype=float)
+    fixation_ids = nodes["fixation-index"].to_numpy(dtype=float)
+    centroids: list[np.ndarray] = []
+    radii: list[float] = []
+    weights: list[int] = []
+
+    for fixation_id in dict.fromkeys(fixation_ids.tolist()):
+        cluster_xy = xy[np.isclose(fixation_ids, fixation_id)]
+        if len(cluster_xy) == 0:
+            continue
+        centroid = np.mean(cluster_xy, axis=0)
+        centroids.append(centroid)
+        weights.append(len(cluster_xy))
+        if len(cluster_xy) == 1:
+            radii.append(0.0)
+        else:
+            radii.append(float(np.mean(np.linalg.norm(cluster_xy - centroid, axis=1))))
+
+    if not centroids:
+        return 0.0
+
+    mean_radius = float(np.average(radii, weights=weights))
+    compactness = 1.0 / (1.0 + mean_radius / 18.0)
+    if len(centroids) == 1:
+        return compactness
+
+    centroid_xy = np.vstack(centroids)
+    centroid_distances = distance_matrix(centroid_xy, centroid_xy)
+    centroid_distances[centroid_distances == 0.0] = np.inf
+    min_centroid_distance = float(np.min(centroid_distances))
+    max_radius = max(float(np.max(radii)), 1.0)
+    separation = min_centroid_distance / (min_centroid_distance + 2.0 * max_radius)
+    return 0.55 * compactness + 0.45 * separation
+
+
+def _score_candidate(kind: str, nodes: pd.DataFrame, edges: dict[str, list[tuple[int, int]]]) -> tuple[float, float, float, float, int]:
     xy = nodes[["x-avg", "y-avg"]].to_numpy(dtype=float)
     spread = float(np.linalg.norm(np.ptp(xy, axis=0)))
     if len(xy) > 1:
@@ -370,8 +419,10 @@ def _score_candidate(kind: str, nodes: pd.DataFrame, edges: dict[str, list[tuple
     else:
         spread_term = 1.3 - min(abs(spread - 60.0) / 80.0, 1.3)
         distance_term = min(min_pairwise / 18.0, 1.0)
-    score = relation_bonus + spread_term + distance_term - edge_penalty - node_penalty
-    return score, spread, min_pairwise, total_edges
+    cluster_quality = _fixation_cluster_quality(nodes)
+    cluster_bonus = 0.8 * cluster_quality
+    score = relation_bonus + spread_term + distance_term + cluster_bonus - edge_penalty - node_penalty
+    return score, spread, min_pairwise, cluster_quality, total_edges
 
 
 def _build_candidate(
@@ -399,7 +450,7 @@ def _build_candidate(
     }
     if any(not relation_edges for relation_edges in edges.values()):
         return None
-    score, spread, min_pairwise, total_edges = _score_candidate(kind, nodes, edges)
+    score, spread, min_pairwise, cluster_quality, total_edges = _score_candidate(kind, nodes, edges)
     subject = str(nodes["subject"].iloc[0]) if "subject" in nodes.columns else "neznan subjekt"
     recording = str(nodes["recording"].iloc[0]) if "recording" in nodes.columns else path.stem
     return CandidateGraph(
@@ -414,7 +465,11 @@ def _build_candidate(
         fixation_count=target_fixation_count,
         spread=spread,
         min_pairwise_distance=min_pairwise,
+        fixation_cluster_quality=cluster_quality,
         total_edges=total_edges,
+        kt=args.kt,
+        ks=args.ks,
+        fixation_dilation_k=args.fixation_dilation_k,
     )
 
 
@@ -422,7 +477,14 @@ def _edge_label(relation: str) -> str:
     return RELATION_STYLES[relation]["label"]
 
 
-def _draw_edges(ax: Axes, nodes: pd.DataFrame, edges: list[tuple[int, int]], relation: str) -> None:
+def _draw_edges(
+    ax: Axes,
+    nodes: pd.DataFrame,
+    edges: list[tuple[int, int]],
+    relation: str,
+    linewidth_scale: float = 1.0,
+    arrow_scale: float = 1.0,
+) -> None:
     style = RELATION_STYLES[relation]
     xy = nodes[["x-avg", "y-avg"]].to_numpy(dtype=float)
     for src, dst in edges:
@@ -430,12 +492,12 @@ def _draw_edges(ax: Axes, nodes: pd.DataFrame, edges: list[tuple[int, int]], rel
             xy[src],
             xy[dst],
             arrowstyle="-|>",
-            mutation_scale=8,
+            mutation_scale=8 * arrow_scale,
             color=style["color"],
             alpha=style["alpha"],
-            linewidth=style["linewidth"],
-            shrinkA=6,
-            shrinkB=6,
+            linewidth=style["linewidth"] * linewidth_scale,
+            shrinkA=6 * arrow_scale,
+            shrinkB=6 * arrow_scale,
             connectionstyle=f"arc3,rad={style['rad']}",
             zorder=1,
         )
@@ -447,8 +509,50 @@ def _node_color_map(nodes: pd.DataFrame) -> dict[float, str]:
     return {fixation_id: NODE_FILL_COLORS[idx % len(NODE_FILL_COLORS)] for idx, fixation_id in enumerate(ids)}
 
 
-def _draw_nodes(ax: Axes, nodes: pd.DataFrame, detailed_labels: bool) -> None:
+def _draw_nodes(
+    ax: Axes,
+    nodes: pd.DataFrame,
+    detailed_labels: bool,
+    node_size: float = 165.0,
+    detailed_node_size: float = 118.0,
+    node_fontsize: float = 10.2,
+    detailed_node_fontsize: float = 9.2,
+    detail_label_fontsize: float = 8.2,
+    label_box_pad: float = 0.18,
+    label_vertical_span_factor: float = 0.58,
+    label_side_offset_factor: float = 0.56,
+) -> None:
     colors = _node_color_map(nodes)
+    x_values = nodes["x-avg"].to_numpy(dtype=float)
+    y_values = nodes["y-avg"].to_numpy(dtype=float)
+    x_span = max(float(np.ptp(x_values)), 45.0)
+    y_span = max(float(np.ptp(y_values)), 45.0)
+    label_positions: dict[int, tuple[float, float]] = {}
+    if detailed_labels:
+        midpoint = float(np.median(x_values))
+        left_indices = [int(row["local_index"]) for _, row in nodes.iterrows() if float(row["x-avg"]) <= midpoint]
+        right_indices = [int(row["local_index"]) for _, row in nodes.iterrows() if float(row["x-avg"]) > midpoint]
+        if not left_indices or not right_indices:
+            ordered = [int(idx) for idx in np.argsort(x_values)]
+            split = max(1, len(ordered) // 2)
+            left_indices = ordered[:split]
+            right_indices = ordered[split:]
+
+        y_min = float(np.min(y_values))
+        y_max = float(np.max(y_values))
+        label_y_min = y_min - label_vertical_span_factor * y_span
+        label_y_max = y_max + label_vertical_span_factor * y_span
+        label_x_left = float(np.min(x_values)) - label_side_offset_factor * x_span
+        label_x_right = float(np.max(x_values)) + label_side_offset_factor * x_span
+        node_y_by_idx = {
+            int(row["local_index"]): float(row["y-avg"])
+            for _, row in nodes.iterrows()
+        }
+        for side_indices, label_x in [(left_indices, label_x_left), (right_indices, label_x_right)]:
+            ordered_side = sorted(side_indices, key=lambda idx: node_y_by_idx[idx])
+            slots = np.linspace(label_y_min, label_y_max, len(ordered_side))
+            for idx, label_y in zip(ordered_side, slots):
+                label_positions[idx] = (label_x, float(label_y))
     for _, row in nodes.iterrows():
         idx = int(row["local_index"])
         fixation_id = float(row["fixation-index"])
@@ -456,53 +560,89 @@ def _draw_nodes(ax: Axes, nodes: pd.DataFrame, detailed_labels: bool) -> None:
         y = float(row["y-avg"])
         if detailed_labels:
             label = (
-                f"{idx}\n"
                 f"x={x:.0f}, y={y:.0f}\n"
-                f"zen.={row['pupil-size-left-avg']:.2f}/{row['pupil-size-right-avg']:.2f}\n"
-                f"čas={row['time-window-normalized']:.2f}, d={row['distance-avg'] / 10.0:.1f} cm\n"
-                f"fiks.={row['fixation-duration']:.0f} ms"
+                f"zen={row['pupil-size-left-avg']:.2f}/{row['pupil-size-right-avg']:.2f}, "
+                f"čas={row['time-window-normalized']:.2f}\n"
+                f"d={row['distance-avg'] / 10.0:.1f} cm, fiks={row['fixation-duration']:.0f} ms"
+            )
+            ax.scatter(
+                [x],
+                [y],
+                s=detailed_node_size,
+                color=colors[fixation_id],
+                edgecolor=PALETTE["dark"],
+                linewidth=0.9,
+                zorder=4,
             )
             ax.text(
                 x,
                 y,
-                label,
+                str(idx),
                 ha="center",
                 va="center",
-                fontsize=5.5,
+                fontsize=detailed_node_fontsize,
                 color=PALETTE["dark"],
-                zorder=4,
+                zorder=6,
+            )
+            label_x, label_y = label_positions[idx]
+            ax.annotate(
+                label,
+                xy=(x, y),
+                xytext=(label_x, label_y),
+                ha="center",
+                va="center",
+                fontsize=detail_label_fontsize,
+                color=PALETTE["dark"],
+                zorder=5,
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": PALETTE["dark"],
+                    "alpha": 0.55,
+                    "linewidth": 0.65,
+                    "shrinkA": 4,
+                    "shrinkB": 4,
+                },
                 bbox={
-                    "boxstyle": "round,pad=0.18,rounding_size=0.08",
+                    "boxstyle": f"round,pad={label_box_pad},rounding_size=0.08",
                     "facecolor": colors[fixation_id],
                     "edgecolor": PALETTE["dark"],
                     "linewidth": 0.65,
-                    "alpha": 0.96,
+                    "alpha": 1.0,
                 },
             )
         else:
             ax.scatter(
                 [x],
                 [y],
-                s=120,
+                s=node_size,
                 color=colors[fixation_id],
                 edgecolor=PALETTE["dark"],
-                linewidth=0.8,
+                linewidth=0.9,
                 zorder=3,
             )
-            ax.text(x, y, str(idx), ha="center", va="center", fontsize=7, color=PALETTE["dark"], zorder=4)
+            ax.text(x, y, str(idx), ha="center", va="center", fontsize=node_fontsize, color=PALETTE["dark"], zorder=4)
 
 
-def _style_axis(ax: Axes, nodes: pd.DataFrame, title: str) -> None:
+def _style_axis(
+    ax: Axes,
+    nodes: pd.DataFrame,
+    title: str,
+    padding_factor: float = 0.32,
+    title_fontsize: float = 14.0,
+    axis_label_fontsize: float = 12.0,
+    tick_fontsize: float = 10.0,
+    title_pad: float = 11.0,
+) -> None:
     x_values = nodes["x-avg"].to_numpy(dtype=float)
     y_values = nodes["y-avg"].to_numpy(dtype=float)
     x_span = max(float(np.ptp(x_values)), 45.0)
     y_span = max(float(np.ptp(y_values)), 45.0)
-    ax.set_xlim(float(np.min(x_values)) - 0.32 * x_span, float(np.max(x_values)) + 0.32 * x_span)
-    ax.set_ylim(float(np.max(y_values)) + 0.32 * y_span, float(np.min(y_values)) - 0.32 * y_span)
-    ax.set_title(title, fontsize=10, color=PALETTE["dark"], pad=8)
-    ax.set_xlabel("x-koordinata pogleda", fontsize=8, color=PALETTE["dark"])
-    ax.set_ylabel("y-koordinata pogleda", fontsize=8, color=PALETTE["dark"])
-    ax.tick_params(axis="both", labelsize=7, colors=PALETTE["dark"])
+    ax.set_xlim(float(np.min(x_values)) - padding_factor * x_span, float(np.max(x_values)) + padding_factor * x_span)
+    ax.set_ylim(float(np.max(y_values)) + padding_factor * y_span, float(np.min(y_values)) - padding_factor * y_span)
+    ax.set_title(title, fontsize=title_fontsize, color=PALETTE["dark"], pad=title_pad)
+    ax.set_xlabel("x-koordinata pogleda", fontsize=axis_label_fontsize, color=PALETTE["dark"])
+    ax.set_ylabel("y-koordinata pogleda", fontsize=axis_label_fontsize, color=PALETTE["dark"])
+    ax.tick_params(axis="both", labelsize=tick_fontsize, colors=PALETTE["dark"])
     ax.grid(True, color="#DDE4E6", linewidth=0.7, alpha=0.9)
     ax.set_facecolor(PALETTE["background"])
     for spine in ax.spines.values():
@@ -510,84 +650,136 @@ def _style_axis(ax: Axes, nodes: pd.DataFrame, title: str) -> None:
         spine.set_linewidth(0.7)
 
 
-def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: str) -> None:
+def _panel_title(candidate: CandidateGraph, panel: str) -> str:
+    if panel == "all":
+        return "vse povezave; barva vozlišča = fiksacija"
+    if panel == "temporal":
+        return f"časovne povezave, $k_t={candidate.kt}$"
+    if panel == "spatial":
+        return f"prostorske povezave, $k_s={candidate.ks}$"
+    if panel == "fixation":
+        return f"fiksacijske povezave, $k_f={candidate.fixation_dilation_k}$"
+    raise ValueError(f"Unknown panel: {panel}")
+
+
+def _panel_relations(panel: str) -> list[str]:
+    if panel == "all":
+        return ["temporal_forward", "temporal_backward", "spatial", "fixation"]
+    if panel == "temporal":
+        return ["temporal_forward", "temporal_backward"]
+    if panel == "spatial":
+        return ["spatial"]
+    if panel == "fixation":
+        return ["fixation"]
+    raise ValueError(f"Unknown panel: {panel}")
+
+
+def _draw_panel(
+    ax: Axes,
+    candidate: CandidateGraph,
+    panel: str,
+    single_panel: bool = False,
+) -> None:
     nodes = candidate.nodes
-    fig = plt.figure(figsize=(13.2, 9.0), facecolor=PALETTE["background"])
-    grid = GridSpec(2, 2, figure=fig, width_ratios=[1.18, 1.0], height_ratios=[1.0, 1.0])
+    edge_linewidth_scale = 1.42 if single_panel else 1.0
+    edge_arrow_scale = 1.32 if single_panel else 1.0
+    for relation in _panel_relations(panel):
+        _draw_edges(
+            ax,
+            nodes,
+            candidate.edges[relation],
+            relation,
+            linewidth_scale=edge_linewidth_scale,
+            arrow_scale=edge_arrow_scale,
+        )
+
+    if panel == "all":
+        _draw_nodes(
+            ax,
+            nodes,
+            detailed_labels=True,
+            detailed_node_size=185.0 if single_panel else 118.0,
+            detailed_node_fontsize=12.6 if single_panel else 9.2,
+            detail_label_fontsize=19.5 if single_panel else 8.2,
+            label_box_pad=0.26 if single_panel else 0.18,
+            label_vertical_span_factor=1.05 if single_panel else 0.58,
+            label_side_offset_factor=0.82 if single_panel else 0.56,
+        )
+    else:
+        _draw_nodes(
+            ax,
+            nodes,
+            detailed_labels=False,
+            node_size=420.0 if single_panel else 165.0,
+            node_fontsize=15.4 if single_panel else 10.2,
+        )
+
+    if single_panel:
+        padding_factor = 1.80 if panel == "all" else 0.43
+        _style_axis(
+            ax,
+            nodes,
+            _panel_title(candidate, panel),
+            padding_factor=padding_factor,
+            title_fontsize=21.0,
+            axis_label_fontsize=18.0,
+            tick_fontsize=15.0,
+            title_pad=17.0,
+        )
+    else:
+        padding_factor = 0.90 if panel == "all" else 0.32
+        _style_axis(ax, nodes, _panel_title(candidate, panel), padding_factor=padding_factor)
+
+
+def _add_legend(fig: plt.Figure, relations: list[str], fontsize: float, y_anchor: float) -> None:
+    legend_handles = []
+    for relation in relations:
+        style = RELATION_STYLES[relation]
+        handle = plt.Line2D([0], [0], color=style["color"], lw=3.0, label=_edge_label(relation))
+        legend_handles.append(handle)
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        ncol=min(4, len(legend_handles)),
+        frameon=False,
+        fontsize=fontsize,
+        bbox_to_anchor=(0.5, y_anchor),
+    )
+
+
+def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: str) -> None:
+    fig = plt.figure(figsize=(16.0, 12.4), facecolor=PALETTE["background"])
+    grid = GridSpec(
+        2,
+        2,
+        figure=fig,
+        width_ratios=[1.0, 1.0],
+        height_ratios=[1.0, 1.0],
+        wspace=0.22,
+        hspace=0.32,
+    )
     axes = {
-        "all": fig.add_subplot(grid[:, 0]),
+        "all": fig.add_subplot(grid[0, 0]),
         "temporal": fig.add_subplot(grid[0, 1]),
-        "spatial": fig.add_subplot(grid[1, 1]),
+        "spatial": fig.add_subplot(grid[1, 0]),
+        "fixation": fig.add_subplot(grid[1, 1]),
     }
-    fixation_ax = axes["spatial"].inset_axes([0.58, 0.08, 0.39, 0.36])
 
-    all_edges = [
-        ("temporal_forward", candidate.edges["temporal_forward"]),
-        ("temporal_backward", candidate.edges["temporal_backward"]),
-        ("spatial", candidate.edges["spatial"]),
-        ("fixation", candidate.edges["fixation"]),
-    ]
-    for relation, relation_edges in all_edges:
-        _draw_edges(axes["all"], nodes, relation_edges, relation)
-    _draw_nodes(axes["all"], nodes, detailed_labels=True)
-    _style_axis(axes["all"], nodes, "vse povezave")
+    for panel, ax in axes.items():
+        _draw_panel(ax, candidate, panel)
 
-    for relation in ["temporal_forward", "temporal_backward"]:
-        _draw_edges(axes["temporal"], nodes, candidate.edges[relation], relation)
-    _draw_nodes(axes["temporal"], nodes, detailed_labels=False)
-    _style_axis(axes["temporal"], nodes, "časovne povezave, $k_t=2$")
-
-    _draw_edges(axes["spatial"], nodes, candidate.edges["spatial"], "spatial")
-    _draw_nodes(axes["spatial"], nodes, detailed_labels=False)
-    _style_axis(axes["spatial"], nodes, "prostorske povezave, $k_s=2$")
-
-    _draw_edges(fixation_ax, nodes, candidate.edges["fixation"], "fixation")
-    _draw_nodes(fixation_ax, nodes, detailed_labels=False)
-    _style_axis(fixation_ax, nodes, "fiksacijske, $k_f=3$")
-    fixation_ax.set_xlabel("")
-    fixation_ax.set_ylabel("")
-    fixation_ax.tick_params(axis="both", labelsize=5)
-
-    kind_label = "od daleč" if candidate.kind == "far" else "od blizu"
-    time_start = float(nodes["time-rel-seconds"].iloc[0])
-    time_end = float(nodes["time-rel-seconds"].iloc[-1])
     fig.text(
         0.5,
-        0.92,
-        (
-            f"Primer grafa {kind_label}: {candidate.subject}, {candidate.recording}, "
-            f"t={time_start:.2f}-{time_end:.2f} s, "
-            f"fiksacije={candidate.fixation_count}, vozlišča={len(nodes)}"
-        ),
-        fontsize=12,
+        0.965,
+        FIGURE_TITLE,
+        fontsize=18,
         color=PALETTE["dark"],
         ha="center",
         va="top",
     )
 
-    legend_handles = []
-    for relation in ["temporal_forward", "temporal_backward", "spatial", "fixation"]:
-        style = RELATION_STYLES[relation]
-        handle = plt.Line2D([0], [0], color=style["color"], lw=2.0, label=_edge_label(relation))
-        legend_handles.append(handle)
-    fig.legend(
-        handles=legend_handles,
-        loc="lower center",
-        ncol=4,
-        frameon=False,
-        fontsize=8,
-        bbox_to_anchor=(0.5, 0.075),
-    )
-    fig.text(
-        0.5,
-        0.13,
-        "Vozlišče prikazuje: lokalni indeks, koordinati pogleda, velikost leve/desne zenice, "
-        "normalizirani čas, razdaljo do sledilnika in trajanje fiksacije.",
-        ha="center",
-        color=PALETTE["dark"],
-        fontsize=8,
-    )
-    fig.tight_layout(rect=[0.02, 0.20, 0.98, 0.86])
+    _add_legend(fig, _panel_relations("all"), fontsize=13, y_anchor=0.04)
+    fig.tight_layout(rect=[0.035, 0.14, 0.965, 0.79])
     fig.savefig(
         output_path,
         format=image_format,
@@ -597,6 +789,46 @@ def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: 
     plt.close(fig)
 
 
+def _plot_candidate_panel(
+    candidate: CandidateGraph,
+    panel: str,
+    output_path: Path,
+    image_format: str,
+) -> None:
+    figure_size = (18.5, 12.4) if panel == "all" else (10.8, 8.4)
+    fig, ax = plt.subplots(figsize=figure_size, facecolor=PALETTE["background"])
+    _draw_panel(ax, candidate, panel, single_panel=True)
+    relations = _panel_relations(panel)
+    _add_legend(fig, relations, fontsize=15.5, y_anchor=0.03)
+    fig.tight_layout(rect=[0.055, 0.12, 0.97, 0.94])
+    fig.savefig(
+        output_path,
+        format=image_format,
+        dpi=300,
+        facecolor=PALETTE["background"],
+    )
+    plt.close(fig)
+
+
+def _filename_slug(value: object) -> str:
+    text = str(value).strip()
+    text = re.sub(r"[^0-9A-Za-zčČšŠžŽ_-]+", "_", text)
+    return text.strip("_") or "neznano"
+
+
+def _candidate_file_stem(kind: str, rank: int, candidate: CandidateGraph) -> str:
+    nodes = candidate.nodes
+    time_start = _filename_slug(f"{float(nodes['time-rel-seconds'].iloc[0]):.2f}")
+    time_end = _filename_slug(f"{float(nodes['time-rel-seconds'].iloc[-1]):.2f}")
+    subject = _filename_slug(candidate.subject)
+    recording = _filename_slug(candidate.recording)
+    return (
+        f"gnn_graph_{kind}_{rank:02d}_{subject}_{recording}_"
+        f"t{time_start}-{time_end}_kt{candidate.kt}_ks{candidate.ks}_"
+        f"kf{candidate.fixation_dilation_k}_f{candidate.fixation_count}_n{len(nodes)}"
+    )
+
+
 def _copy_selected_figures(
     selected: dict[str, list[CandidateGraph]],
     output_dir: Path,
@@ -604,22 +836,32 @@ def _copy_selected_figures(
 ) -> list[Path]:
     saved: list[Path] = []
     output_dir.mkdir(parents=True, exist_ok=True)
-    for old_path in output_dir.glob("gnn_graph_*.svg"):
-        old_path.unlink()
-    for old_path in output_dir.glob("gnn_graph_*.png"):
-        old_path.unlink()
-    for old_path in output_dir.glob("gnn_graph_*.pdf"):
-        old_path.unlink()
+    for old_path in output_dir.glob("gnn_graph_*"):
+        if old_path.is_dir():
+            shutil.rmtree(old_path)
+        else:
+            old_path.unlink()
 
     for kind, candidates in selected.items():
         for rank, candidate in enumerate(candidates, start=1):
+            file_stem = _candidate_file_stem(kind, rank, candidate)
+            candidate_dir = output_dir / file_stem
+            candidate_dir.mkdir(parents=True, exist_ok=True)
             for image_format in formats:
-                target = output_dir / f"gnn_graph_{kind}_{rank:02d}.{image_format}"
+                target = output_dir / f"{file_stem}.{image_format}"
+                collage_target = candidate_dir / f"kolaz.{image_format}"
                 if candidate.temporary_path is not None and image_format == "svg":
                     shutil.copy2(candidate.temporary_path, target)
+                    shutil.copy2(candidate.temporary_path, collage_target)
                 else:
                     _plot_candidate(candidate, target, image_format)
+                    _plot_candidate(candidate, collage_target, image_format)
                 saved.append(target)
+                saved.append(collage_target)
+                for panel, panel_stem in PANEL_FILE_STEMS.items():
+                    panel_target = candidate_dir / f"{panel_stem}.{image_format}"
+                    _plot_candidate_panel(candidate, panel, panel_target, image_format)
+                    saved.append(panel_target)
     return saved
 
 
@@ -661,7 +903,8 @@ def main() -> None:
             print(
                 f"Generated candidate {candidate_id:02d}/{args.num_candidates}: "
                 f"{kind}, score={candidate.score:.2f}, nodes={len(candidate.nodes)}, "
-                f"fixations={candidate.fixation_count}, edges={candidate.total_edges}"
+                f"fixations={candidate.fixation_count}, cluster={candidate.fixation_cluster_quality:.2f}, "
+                f"edges={candidate.total_edges}"
             )
 
         selected: dict[str, list[CandidateGraph]] = {}
@@ -683,7 +926,8 @@ def main() -> None:
                 print(
                     f"  {kind} #{rank}: candidate={candidate.candidate_id}, "
                     f"score={candidate.score:.2f}, nodes={len(candidate.nodes)}, "
-                    f"fixations={candidate.fixation_count}, edges={candidate.total_edges}, "
+                    f"fixations={candidate.fixation_count}, cluster={candidate.fixation_cluster_quality:.2f}, "
+                    f"edges={candidate.total_edges}, "
                     f"source={candidate.source_path}"
                 )
         print("\nSaved selected files:")
