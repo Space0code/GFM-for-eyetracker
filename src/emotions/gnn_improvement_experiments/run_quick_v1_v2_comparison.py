@@ -14,7 +14,7 @@ Example:
 
 Useful options:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
-      --models Random,Majority,GNN_v1,BasicGCN,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
+      --models Random,Majority,GNN_v1,BasicGCN_mean,BasicGCN_attention,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
       --num-epochs 20 \
       --dry-run
 """
@@ -72,14 +72,26 @@ EXPERIMENT_DISPLAY_NAMES = {
 }
 DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
-GNN_MODELS = {"GNN_v1", "BasicGCN", "GNN_v2"}
-PREFERRED_MODEL_ORDER = ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "GazeMAE_MLP", "MLP"]
+GNN_MODELS = {"GNN_v1", "BasicGCN", "BasicGCN_mean", "BasicGCN_attention", "GNN_v2"}
+PREFERRED_MODEL_ORDER = [
+    "Random",
+    "Majority",
+    "GNN_v1",
+    "BasicGCN",
+    "BasicGCN_mean",
+    "BasicGCN_attention",
+    "GNN_v2",
+    "GazeMAE_MLP",
+    "MLP",
+]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 MODEL_COLOR_PALETTE = {
     "Random": "#4C72B0",
     "Majority": "#DD8452",
     "GNN_v1": "#55A868",
     "BasicGCN": "#64B5CD",
+    "BasicGCN_mean": "#64B5CD",
+    "BasicGCN_attention": "#4C9BB0",
     "GNN_v2": "#C44E52",
     "GazeMAE_MLP": "#8172B3",
     "MLP": "#937860",
@@ -117,6 +129,14 @@ MODEL_ALIASES = {
     "basic_gcn": "BasicGCN",
     "basic-gcn": "BasicGCN",
     "gcn": "BasicGCN",
+    "basicgcn_mean": "BasicGCN_mean",
+    "basic_gcn_mean": "BasicGCN_mean",
+    "basic-gcn-mean": "BasicGCN_mean",
+    "gcn_mean": "BasicGCN_mean",
+    "basicgcn_attention": "BasicGCN_attention",
+    "basic_gcn_attention": "BasicGCN_attention",
+    "basic-gcn-attention": "BasicGCN_attention",
+    "gcn_attention": "BasicGCN_attention",
     "gnn2": "GNN_v2",
     "gnn_v2": "GNN_v2",
     "gnn-v2": "GNN_v2",
@@ -168,7 +188,8 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Comma-separated models: Random,Majority,GNN_v1,BasicGCN,GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
+            "Comma-separated models: Random,Majority,GNN_v1,BasicGCN,BasicGCN_mean,BasicGCN_attention,"
+            "GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
             "Common lowercase aliases like random, majority, gnn1, basicgcn, gnn2, and lgbm are accepted. "
             "By default, use quick_comparison.models from the YAML config."
         ),
@@ -490,12 +511,13 @@ def build_variant(model_name: str) -> QuickVariant:
                 }
             },
         )
-    if model_name == "BasicGCN":
+    if model_name in {"BasicGCN", "BasicGCN_mean", "BasicGCN_attention"}:
+        readout = "attention" if model_name == "BasicGCN_attention" else "mean"
         return QuickVariant(
             model_name=model_name,
             description=(
                 "Homogeneous GCN baseline over the v2 graph schema with collapsed, "
-                "deduplicated relations and no edge attributes."
+                f"deduplicated relations, no edge attributes, and {readout} readout."
             ),
             summary_model_name="GNN",
             overrides={
@@ -510,7 +532,7 @@ def build_variant(model_name: str) -> QuickVariant:
                         "model": {
                             "model_version": "BasicGCN",
                             "conv_type": "GCNConv",
-                            "readout": "attention",
+                            "readout": readout,
                         }
                     },
                 }
@@ -1073,7 +1095,15 @@ def _save_model_benchmark_outputs(
     benchmark_summary.to_csv(summary_path, index=False)
     saved_paths.append(summary_path)
 
-    main_models = ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"]
+    main_models = [
+        "LightGBM",
+        "SVM",
+        "MLP",
+        "GazeMAE_MLP",
+        "BasicGCN_mean",
+        "BasicGCN_attention",
+        "GNN_v2",
+    ]
     main_report = benchmark_summary[benchmark_summary["model"].isin(main_models)].copy()
     if not main_report.empty:
         if "encoder_head_inference_ms_per_window" in main_report.columns:

@@ -42,6 +42,8 @@ def _args() -> Namespace:
 def test_quick_variants_set_expected_gnn_versions() -> None:
     v1 = build_variant("GNN_v1")
     basic = build_variant("BasicGCN")
+    basic_mean = build_variant("BasicGCN_mean")
+    basic_attention = build_variant("BasicGCN_attention")
     v2 = build_variant("GNN_v2")
 
     assert v1.overrides["global_overrides"]["dataset"]["graph_version"] == "v1"
@@ -52,7 +54,11 @@ def test_quick_variants_set_expected_gnn_versions() -> None:
     assert basic.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
     assert basic.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
     assert basic.overrides["global_overrides"]["gnn"]["model"]["conv_type"] == "GCNConv"
-    assert basic.overrides["global_overrides"]["gnn"]["model"]["readout"] == "attention"
+    assert basic.overrides["global_overrides"]["gnn"]["model"]["readout"] == "mean"
+    assert basic_mean.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
+    assert basic_mean.overrides["global_overrides"]["gnn"]["model"]["readout"] == "mean"
+    assert basic_attention.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
+    assert basic_attention.overrides["global_overrides"]["gnn"]["model"]["readout"] == "attention"
 
     assert v2.overrides["global_overrides"]["dataset"]["graph_version"] == "v2"
     assert v2.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
@@ -106,21 +112,37 @@ def test_quick_variants_support_random_and_majority() -> None:
 
 
 def test_quick_model_parser_accepts_common_aliases() -> None:
-    parsed = _parse_models("random,majority,gnn1,basicgcn,gnn2,lgbm")
+    parsed = _parse_models("random,majority,gnn1,basicgcn,basic_gcn_attention,gnn2,lgbm")
 
-    assert parsed == ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "LightGBM"]
+    assert parsed == [
+        "Random",
+        "Majority",
+        "GNN_v1",
+        "BasicGCN",
+        "BasicGCN_attention",
+        "GNN_v2",
+        "LightGBM",
+    ]
 
 
 def test_quick_model_parser_accepts_yaml_list() -> None:
-    parsed = _parse_models(["lightgbm", "svm", "mlp", "gazemae_mlp", "basic_gcn", "gnn_v2"])
+    parsed = _parse_models(["lightgbm", "svm", "mlp", "gazemae_mlp", "basic_gcn_mean", "gnn_v2"])
 
-    assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"]
+    assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN_mean", "GNN_v2"]
 
 
 def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
     wrapper_cfg = {
         "quick_comparison": {
-            "models": ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"],
+            "models": [
+                "LightGBM",
+                "SVM",
+                "MLP",
+                "GazeMAE_MLP",
+                "BasicGCN_mean",
+                "BasicGCN_attention",
+                "GNN_v2",
+            ],
         }
     }
 
@@ -129,7 +151,8 @@ def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
         "SVM",
         "MLP",
         "GazeMAE_MLP",
-        "BasicGCN",
+        "BasicGCN_mean",
+        "BasicGCN_attention",
         "GNN_v2",
     ]
     assert _resolve_requested_models(wrapper_cfg, cli_models="random,lgbm") == ["Random", "LightGBM"]
@@ -142,15 +165,45 @@ def test_quick_cv_parser_accepts_multiple_strategies() -> None:
 
 
 def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
-    ordered = _ordered_models(["LightGBM", "GNN_v2", "Random", "MLP", "Majority", "SVM", "BasicGCN", "GNN_v1"])
+    ordered = _ordered_models(
+        [
+            "LightGBM",
+            "GNN_v2",
+            "Random",
+            "MLP",
+            "Majority",
+            "SVM",
+            "BasicGCN_attention",
+            "BasicGCN_mean",
+            "GNN_v1",
+        ]
+    )
 
-    assert ordered == ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "MLP", "LightGBM", "SVM"]
+    assert ordered == [
+        "Random",
+        "Majority",
+        "GNN_v1",
+        "BasicGCN_mean",
+        "BasicGCN_attention",
+        "GNN_v2",
+        "MLP",
+        "LightGBM",
+        "SVM",
+    ]
 
 
 def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
-    runs = build_quick_runs(["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "LightGBM"])
+    runs = build_quick_runs(
+        ["Random", "Majority", "GNN_v1", "BasicGCN_mean", "BasicGCN_attention", "GNN_v2", "LightGBM"]
+    )
 
-    assert [run.run_name for run in runs] == ["Baselines", "GNN_v1", "BasicGCN", "GNN_v2"]
+    assert [run.run_name for run in runs] == [
+        "Baselines",
+        "GNN_v1",
+        "BasicGCN_mean",
+        "BasicGCN_attention",
+        "GNN_v2",
+    ]
     assert runs[0].model_names == ["Random", "Majority", "LightGBM"]
     assert runs[0].overrides["global_overrides"]["baselines"]["models"] == [
         "Random",
