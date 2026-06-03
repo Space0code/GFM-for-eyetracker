@@ -49,8 +49,8 @@ dataset:
   window_length: 10
   window_overlap: 0
   min_samples_per_window: 60
-  kt: 2
-  ks: 2
+  kt: 1
+  ks: 1
   use_edge_weights: true
   graph_version: v2
   edge_weight_mode: learned_signed
@@ -146,7 +146,8 @@ gnn:
   model:
     model_version: v2
     in_channels: 4
-    hidden_channels: 128
+    hidden_channels: 64
+    num_layers: 2
     head_pooling: attention
     graph_pooling: attention
     relation_pooling: mlp

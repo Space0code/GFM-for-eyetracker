@@ -33,8 +33,8 @@ dataset:
   window_length: 10
   window_overlap: 0
   min_samples_per_window: 3  # Align baseline windows with GNN minimum (max(kt, ks) + 1)
-  kt: 2  # Temporal k-NN for GNN
-  ks: 2  # Spatial k-NN for GNN
+  kt: 1  # Temporal k-NN for GNN
+  ks: 1  # Spatial k-NN for GNN
   use_edge_weights: true  # Whether to use edge weights in GNN layers (requires conv_type that supports it)
   graph_version: v2
   edge_weight_mode: learned_signed
@@ -97,7 +97,8 @@ gnn:
   model:
     model_version: v2
     in_channels: 4  # 4 node features: (time dropped), x, y, pupil-left, pupil-right
-    hidden_channels: 128
+    hidden_channels: 64
+    num_layers: 2
     head_pooling: attention
     graph_pooling: attention
     relation_pooling: mlp

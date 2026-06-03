@@ -51,7 +51,8 @@ global_overrides:
       # V2 uses graph_pooling/head_pooling above, so this does not disable
       # attention graph pooling for GNN_v2.
       pooling: mean_max
-      num_layers: 3
+      num_layers: 2
+      hidden_channels: 64
     training:
       early_stopping_enabled: true
       early_stopping_patience: 20
@@ -64,8 +65,8 @@ global_overrides:
   dataset:
     use_cache: true
     label_mapping_spec_path: "specifications/hci_to_GFM_spec.yaml"
-    kt: 2
-    ks: 2
+    kt: 1
+    ks: 1
     use_edge_weights: true
     graph_version: v2
     edge_weight_mode: learned_signed
