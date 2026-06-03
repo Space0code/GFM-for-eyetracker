@@ -1,14 +1,13 @@
 """Run a quick Table-6 arousal/valence comparison for graph models and baselines.
 
 This script generates focused suite-wrapper configs and optionally runs them
-sequentially with the dataset, cross-validation, and training parameters from
-the selected YAML suite config. By default it compares frozen
-`Random`, `Majority`, frozen `GNN_v1`, `BasicGCN`, current `GNN_v2`, and `LightGBM` on the
-Table-6 three-class arousal and/or valence tasks with proper k-fold splitting.
-Select tasks in the wrapper config with `quick_comparison.table6_tasks`, for
-example `[arousal]`, `[valence]`, or `[arousal, valence]`. Requested baseline
-models are grouped into one suite invocation so they share the same loaded
-dataset and CV splits.
+sequentially with the dataset, cross-validation, models, and training parameters
+from the selected YAML suite config. Select tasks in the wrapper config with
+`quick_comparison.table6_tasks`, for example `[arousal]`, `[valence]`, or
+`[arousal, valence]`. Select models in the wrapper config with
+`quick_comparison.models`, or override them from the command line with
+`--models`. Requested baseline models are grouped into one suite invocation so
+they share the same loaded dataset and CV splits.
 
 Example:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
@@ -167,10 +166,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--models",
         type=str,
-        default=",".join(DEFAULT_MODELS),
+        default=None,
         help=(
             "Comma-separated models: Random,Majority,GNN_v1,BasicGCN,GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
-            "Common lowercase aliases like random, majority, gnn1, basicgcn, gnn2, and lgbm are accepted."
+            "Common lowercase aliases like random, majority, gnn1, basicgcn, gnn2, and lgbm are accepted. "
+            "By default, use quick_comparison.models from the YAML config."
         ),
     )
     parser.add_argument(
@@ -269,9 +269,17 @@ def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
         yaml.safe_dump(payload, handle, sort_keys=False)
 
 
-def _parse_models(raw_models: str) -> List[str]:
+def _parse_models(raw_models: str | Sequence[Any]) -> List[str]:
     """Parse and validate requested model names."""
-    raw_tokens = [token.strip() for token in raw_models.split(",") if token.strip()]
+    if isinstance(raw_models, str):
+        raw_tokens = [token.strip() for token in raw_models.split(",") if token.strip()]
+    elif isinstance(raw_models, Sequence):
+        raw_tokens = [str(token).strip() for token in raw_models if str(token).strip()]
+    else:
+        raise ValueError(
+            "Model specification must be a comma-separated string or a list, "
+            f"got {type(raw_models).__name__}."
+        )
     models = [MODEL_ALIASES.get(token.lower(), token) for token in raw_tokens]
     allowed = GNN_MODELS | BASELINE_MODELS
     unknown = sorted(set(models) - allowed)
@@ -280,6 +288,20 @@ def _parse_models(raw_models: str) -> List[str]:
     if not models:
         raise ValueError("At least one model must be requested.")
     return models
+
+
+def _resolve_requested_models(wrapper_cfg: Dict[str, Any], cli_models: str | None = None) -> List[str]:
+    """Resolve requested quick-comparison models from CLI or YAML config."""
+    if cli_models is not None:
+        return _parse_models(cli_models)
+
+    quick_cfg = wrapper_cfg.get("quick_comparison", {})
+    if quick_cfg is None:
+        quick_cfg = {}
+    if not isinstance(quick_cfg, dict):
+        raise ValueError("quick_comparison must be a dictionary when configured.")
+
+    return _parse_models(quick_cfg.get("models", DEFAULT_MODELS))
 
 
 def _parse_cv_strategies(raw_strategies: str) -> List[str]:
@@ -737,7 +759,7 @@ def _build_resolved_run_context(args: argparse.Namespace) -> Dict[str, str]:
             else "unknown/unknown"
         ),
         "experiments": ",".join(_get_enabled_experiment_ids(payload)),
-        "models": ",".join(args.models.split(",")),
+        "models": ",".join(_resolve_requested_models(base_cfg, args.models)),
         "GNN conv_type": str(gnn_model_cfg.get("conv_type", "not configured")),
         "relation_pooling": str(gnn_model_cfg.get("relation_pooling", "not configured")),
         "graph_pooling": str(gnn_model_cfg.get("graph_pooling", "not configured")),
@@ -2679,7 +2701,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
 
     base_cfg = _load_yaml(base_config_path)
     fixed_overrides = build_fixed_overrides(args, run_output_dir=output_dir)
-    model_names = _parse_models(args.models)
+    model_names = _resolve_requested_models(base_cfg, args.models)
     quick_runs = build_quick_runs(model_names)
 
     rows: List[Dict[str, Any]] = []

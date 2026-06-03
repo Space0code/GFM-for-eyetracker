@@ -16,6 +16,7 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     _ordered_models,
     _parse_cv_strategies,
     _parse_models,
+    _resolve_requested_models,
     _save_combined_confusion_matrices,
     _save_confusion_matrix_table,
     _save_fold_metric_outputs,
@@ -108,6 +109,30 @@ def test_quick_model_parser_accepts_common_aliases() -> None:
     parsed = _parse_models("random,majority,gnn1,basicgcn,gnn2,lgbm")
 
     assert parsed == ["Random", "Majority", "GNN_v1", "BasicGCN", "GNN_v2", "LightGBM"]
+
+
+def test_quick_model_parser_accepts_yaml_list() -> None:
+    parsed = _parse_models(["lightgbm", "svm", "mlp", "gazemae_mlp", "basic_gcn", "gnn_v2"])
+
+    assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"]
+
+
+def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
+    wrapper_cfg = {
+        "quick_comparison": {
+            "models": ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "GNN_v2"],
+        }
+    }
+
+    assert _resolve_requested_models(wrapper_cfg, cli_models=None) == [
+        "LightGBM",
+        "SVM",
+        "MLP",
+        "GazeMAE_MLP",
+        "BasicGCN",
+        "GNN_v2",
+    ]
+    assert _resolve_requested_models(wrapper_cfg, cli_models="random,lgbm") == ["Random", "LightGBM"]
 
 
 def test_quick_cv_parser_accepts_multiple_strategies() -> None:

@@ -132,6 +132,7 @@ recent work, plans, or decisions.
 - GazeMAE runtime is now self-contained in this repository: `src/emotions/gazemae_model.py` implements the minimal inference encoder, and `models/gazemae/*-encoder-state.pt` stores converted encoder+bottleneck state dicts. The quick configs no longer depend on a machine-specific external GazeMAE checkout at runtime.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
 - 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
+- 2026-06-03 quick comparison default model selection moved into the wrapper YAML via `quick_comparison.models`. The active 3-class Table-6 diploma config defaults to `LightGBM`, `SVM`, `MLP`, `GazeMAE_MLP`, `BasicGCN`, and `GNN_v2`; running `python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py` with no `--models` now uses that config-driven diploma list.
 
 ## Open Plans
 
