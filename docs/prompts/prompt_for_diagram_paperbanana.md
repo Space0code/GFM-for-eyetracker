@@ -1,12 +1,33 @@
 # Master prompt for Paper Banana: thesis diagrams
 
-You will create three diagrams for a bachelor's thesis about a graph neural
-network for emotion recognition from eye-tracking data.
+Use Paper Banana's scientific diagram / methodology diagram workflow to create
+publication-ready thesis figures. Create three diagram specifications for a
+bachelor's thesis about a graph neural network for emotion recognition from
+eye-tracking data. Diagram 2 has two requested variants, so the expected output
+is four separate standalone SVG files:
 
-The diagrams should be coherent with one another, but do not force them into a
-rigid template. Choose the composition, spacing, iconography, and level of
-visual abstraction that best communicates each diagram. The only strict visual
-constraint is the color palette below.
+1. `diagram1_cevovod_priprave_podatkov.svg`
+2. `diagram2_predlagani_gnn_arhitektura_inferenca.svg`
+3. `diagram2_predlagani_gnn_arhitektura_ucenje.svg`
+4. `diagram3_ena_heterogena_gnn_plast.svg`
+
+Do not combine these into one multi-panel figure. Each SVG must be usable as an
+independent figure in a LaTeX thesis.
+
+## Recommended Paper Banana settings
+
+These are generation settings, not figure labels:
+
+- use the Scientific Diagram Maker / Methodology Diagram workflow;
+- use 2K resolution for drafts and 4K for final camera-ready export if available;
+- use the default multi-iteration refinement unless the interface requires a
+  specific number; 3 iterations is a good default;
+- after generation, review the diagrams for scientific accuracy and label
+  readability before using them in the thesis.
+
+The diagrams should be coherent with one another, but each diagram should use
+the layout that best communicates its own content. Follow the specific
+composition and readability constraints given under each diagram.
 
 ## Global visual constraint: use only palette B
 
@@ -24,12 +45,49 @@ You may use transparency, lighter tints, or white space if needed, but avoid
 introducing unrelated saturated colors. If a darker variant is needed for
 contrast, prefer dark gray `#2F3437` rather than inventing a new hue.
 
-All visible text in the diagrams must be in Slovenian. Use correct Slovenian
-technical terminology. Keep text concise and readable.
+All visible explanatory text in the diagrams must be in Slovenian. Use correct
+Slovenian technical terminology. Keep text concise and readable. Code-like model
+and layer names may remain unchanged where they are standard labels in the
+thesis: `GNN`, `GCNConv`, `MLP`, `LayerNorm`, `Dropout`, `GazeMAE`, `SVM`,
+`LightGBM`, and `HeteroData`.
 
-If possible, generate the diagrams as editable vector graphics, preferably SVG.
-The diagrams should be suitable for inclusion in a LaTeX thesis and later manual
-editing in a vector editor.
+Generate editable vector graphics as SVG. Use real SVG text elements where
+possible so labels can be edited later in a vector editor. Do not rasterize text.
+The diagrams should be suitable for inclusion in a LaTeX thesis.
+
+Do not render Markdown syntax as visible text in the figures. Bullets, section
+headings, file names, and instructions from this prompt are for you, not labels
+to copy literally into the diagram.
+
+Use small panel labels or compact figure titles only if they help. Do not create
+large decorative titles or subtitles that consume vertical space; the thesis
+will provide captions outside the figure.
+
+## Global relation color mapping
+
+Use this mapping consistently when relation types are visually distinguished:
+
+- temporal forward / `časovne naprej`: pastel blue `#8ECAE6`
+- temporal backward / `časovne nazaj`: pastel teal `#A8DADC`
+- spatial / `prostorske`: pastel orange `#F4A261`
+- fixation / `fiksacijske`: pastel purple `#B8A1D9`
+- prediction/loss/output accents: pastel pink `#E9A6A6`
+
+If a diagram does not need separate relation colors, keep the palette subtle and
+use dark gray for arrows and outlines.
+
+## Global quality checklist
+
+Before final output, verify every SVG against these criteria:
+
+- the scientific content matches the requested architecture and data pipeline;
+- every visible label is in Slovenian;
+- no text is clipped or too close to a border;
+- no arrowhead overlaps a box label;
+- the figure remains readable when scaled to thesis text width;
+- the layout is visually simple enough to understand quickly;
+- no unnecessary decorative effects, 3D objects, gradients, or drop shadows;
+  keep the style flat, clean, and academic.
 
 ---
 
@@ -45,6 +103,50 @@ two non-graph model branches.
 
 This is a high-level diagram, not the full implementation-level pipeline. It
 should be clear, compact, and visually convincing.
+
+The generated diagrams must be readable at thesis text width. Diagram 1 contains
+more lists than the architecture diagrams, so the main risk is overcrowding.
+Use fewer, larger blocks rather than many small boxes with tiny text.
+
+## Canvas and readability constraints
+
+Use a fixed landscape SVG canvas with all content inside the viewBox:
+
+- recommended canvas: `1800 × 1000` or `1900 × 1050`;
+- no element may extend outside the canvas;
+- no browser scrollbars should appear when the SVG is opened;
+- leave at least 35 px of outer margin on every side;
+- minimum body text size: 20 px;
+- minimum small annotation text size: 18 px;
+- optional small panel title size: 24--28 px;
+- do not use text smaller than 18 px;
+- use compact arrowheads that do not overlap boxes;
+- leave visible whitespace between arrowheads and target boxes.
+
+Every text label must fit inside its box. If a label is long, split it into
+2--3 short lines. Do not allow text to touch box borders or overlap arrows.
+
+## Required composition
+
+Use a compact two-level composition:
+
+- upper/main band: the main graph-data path;
+- lower/secondary band: the two non-graph branches.
+
+The main graph-data path should be visually dominant and should occupy most of
+the diagram width:
+
+`MAHNOB-HCI meritve sledilnika pogleda` → `Čiščenje in filtriranje` →
+`10-sekundna okna` → `Grafovski učni vzorec`
+
+The two non-graph branches should start from `10-sekundna okna` and sit below
+the main flow. They must be smaller and visually secondary. Use short vertical
+or diagonal arrows from the window block to these branches. Do not route long
+curved arrows across the whole diagram.
+
+Do not make the diagram a single long horizontal strip of equally sized blocks.
+The graph sample block may be wider/taller than the earlier blocks because it
+contains the most important output representation.
 
 ## Main message
 
@@ -65,6 +167,9 @@ Show the following main flow from left to right:
 
 Do not add a separate fifth block called `vhod v GNN`. The graph sample is the
 processed data output for the GNN.
+
+Keep this as the dominant visual path. Use thick solid arrows for this path and
+thinner arrows for secondary branches.
 
 ## Block 1: MAHNOB-HCI measurements
 
@@ -88,6 +193,10 @@ into left-eye and right-eye distance in this diagram.
 It is fine to include small example traces or values for each signal, but they
 do not need to be numerically exact.
 
+Do not show all eight signals as eight separate large boxes. Prefer one
+structured table-like block with two columns or four compact rows. The block must
+remain readable and should not become taller than the whole diagram.
+
 ## Block 2: cleaning and filtering
 
 Show the key cleaning/filtering operations:
@@ -100,6 +209,10 @@ Show the key cleaning/filtering operations:
 
 Use concise labels. The details are explained in the thesis text, so this block
 only needs to communicate the major processing ideas.
+
+Keep this block compact. It is acceptable to show the operations as short
+checklist items inside one box. Do not draw a separate pipeline stage for every
+cleaning operation.
 
 ## Block 3: 10-second windows
 
@@ -114,6 +227,10 @@ Include these facts:
 
 The diagram should make it clear that each usable window becomes one training
 sample.
+
+Draw this block visually as segmented windows or a short timeline split into
+several 10-second chunks. Keep the four facts above as concise labels, not as a
+paragraph.
 
 ## Block 4: graph training sample
 
@@ -136,8 +253,8 @@ Include a concise node-feature list:
 
 Show three edge families and label them:
 
-- `časovne povezave naprej/nazaj, k_t = 2`
-- `prostorske povezave najbližjih sosedov, k_s = 2`
+- `časovne povezave naprej/nazaj, k_t = 1`
+- `prostorske povezave najbližjih sosedov, k_s = 1`
 - `razširjene povezave znotraj fiksacije, k_f = 3`
 
 At the bottom or in a clearly visible place in this block, state the output:
@@ -145,10 +262,24 @@ At the bottom or in a clearly visible place in this block, state the output:
 - `izhod: heterogeni graf / HeteroData`
 - `ciljna oznaka na ravni okna/grafa: valenca ali vzburjenost`
 
-If possible, draw the graph in a way that looks like a real eye-tracking graph
-rather than a generic network icon. The graph does not need to be mathematically
-exact, but it should visually suggest gaze positions connected by temporal,
-spatial, and fixation relations.
+Draw the graph in a way that looks like a real eye-tracking graph rather than a
+generic network icon. The graph does not need to be mathematically exact, but it
+should visually suggest gaze positions connected by temporal, spatial, and
+fixation relations.
+
+Make the graph sample block the most visually important output block. However,
+do not cram every node feature and every edge family into the graph drawing
+itself. Use one mini graph plus two compact side notes:
+
+- `značilke vozlišč`;
+- `tipi povezav`.
+
+Use relation colors consistently with the global palette and with Diagrams 2 and
+3. If the relation labels become too long, use shortened labels in the diagram:
+
+- `časovne naprej/nazaj`;
+- `prostorske`;
+- `fiksacijske`.
 
 ## Non-graph branches
 
@@ -164,12 +295,34 @@ flow:
 These branches should be visually secondary. They are important, but the main
 focus of this diagram is the transformation into the graph sample.
 
+Put these two branches side by side in the lower band. Use smaller boxes than
+the main graph path, but keep their text readable. Do not let these branches
+compete visually with `Grafovski učni vzorec`.
+
+## Final self-check before output
+
+Before finalizing the SVG, check:
+
+- no text is clipped or touches a box border;
+- no arrowhead overlaps text;
+- the main flow is understandable in less than five seconds;
+- the non-graph branches are clearly secondary;
+- the graph sample block is the most important output;
+- the figure remains readable when scaled to thesis text width;
+- all parameter values match the selected architecture: `k_t = 1`, `k_s = 1`,
+  `k_f = 3`.
+
 ## Avoid
 
 - Do not draw stacked neural network layers in this diagram.
 - Do not show GNN message passing, pooling, attention, or classifier heads here.
 - Do not split the tracker distance into left and right distance.
 - Do not make the non-graph branches visually dominate the graph path.
+- Do not create a very long one-row pipeline that requires horizontal scrolling.
+- Do not use tiny table text for the raw signals.
+- Do not route long sweeping arrows across the whole figure.
+- Do not make all four main blocks equal if the graph sample block needs more
+  room.
 - Do not use colors outside palette B unless absolutely necessary for contrast.
 
 ---
@@ -187,6 +340,11 @@ This is not a data-preparation diagram. Do not repeat the full raw-data cleaning
 pipeline from Diagram 1. Start from the heterogeneous graph sample and show how
 the proposed GNN maps it to a class prediction.
 
+The first generated attempt made the architecture too wide and hard to read.
+Avoid a single long chain of many small blocks. Use a compact two-band layout:
+the main node/graph representation path on the upper band and the edge-weight
+path below it. The two bands should meet at the GNN block.
+
 Create two variants of this diagram:
 
 1. `diagram2_predlagani_gnn_arhitektura_inferenca.svg`
@@ -199,6 +357,24 @@ Create two variants of this diagram:
 
 The two variants should be visually almost identical, except for the additional
 loss/training path in the second variant.
+
+## Canvas and readability constraints
+
+Use a fixed landscape SVG canvas with all content inside the viewBox:
+
+- recommended canvas: `1800 × 950` or `1900 × 1000`;
+- no element may extend outside the canvas;
+- no browser scrollbars should appear when the SVG is opened;
+- leave at least 35 px of outer margin on every side;
+- minimum body text size: 20 px;
+- minimum small annotation text size: 18 px;
+- optional small panel title size: 24--28 px;
+- do not use text smaller than 18 px;
+- use arrowheads that are small enough not to overlap boxes;
+- leave visible whitespace between arrowheads and target boxes.
+
+Every text label must fit inside its box. If a label is long, split it into
+2--3 short lines. Do not allow text to touch box borders or overlap arrows.
 
 ## Main message
 
@@ -223,9 +399,19 @@ Do not use generic placeholders such as `L ×` or `H` without also showing the
 fixed values above. The diagram should make clear that this is the selected
 architecture for the thesis figure.
 
+Show these fixed values as a compact row of small chips near the top of the
+figure, not as one long sentence. Use for example:
+
+- `L = 2`
+- `H = 64`
+- `k_t = 1`
+- `k_s = 1`
+- `k_f = 3`
+
 ## Required forward flow
 
-Show the following left-to-right flow:
+Show the following forward flow, but do not draw it as one long uninterrupted
+row. Use the required two-band structure described below.
 
 1. `heterogeni graf`
 2. `značilke vozlišč X`
@@ -239,6 +425,34 @@ Show the following left-to-right flow:
 10. `napoved razreda`
 
 Keep this main path visually dominant and easy to follow.
+
+## Required composition
+
+Use this composition:
+
+- left column: input graph and extracted feature blocks;
+- middle column: node preprocessing, edge-weight computation, and the GNN block;
+- right column: graph-level readout and prediction.
+
+Upper band:
+
+`heterogeni graf` → `značilke vozlišč X` → `vhodni MLP` → `h^(0), H = 64`
+→ `2 × heterogena GNN plast`
+
+Lower band:
+
+`značilke povezav R` → `MLP za uteži povezav` → `tanh` →
+`normalizacija po ciljnih vozliščih` → `w_ij^(r)` → feeds upward into the
+`2 × heterogena GNN plast` block.
+
+Right side after the GNN block:
+
+`predstavitve vozlišč h_i` → `pozornostno združevanje` →
+`predstavitev grafa h_G` → `napovedna glava MLP` → `napoved razreda`
+
+The lower edge-weight band should be directly below the node path, not far away
+at the bottom of the canvas. Use short orthogonal or gently curved arrows. Do
+not draw a long sweeping curve from the graph input to the GNN block.
 
 ## Heterogeneous graph input
 
@@ -256,6 +470,9 @@ Inside or next to this input block, show the relation types in this exact order:
 Also include a compact note:
 
 - `ciljna oznaka: valenca ali vzburjenost`
+
+Keep this block smaller than the GNN block. The mini graph is illustrative; the
+architecture flow should remain the main visual focus.
 
 ## Node-feature branch
 
@@ -299,6 +516,10 @@ For `značilke povezav R`, include a compact list:
 The diagram should communicate that learned signed scalar edge weights are used
 by the relation-specific GCN convolutions.
 
+Important layout requirement: the arrow from `predznačene uteži w_ij^(r)` to the
+GNN block should be short and should enter the bottom or lower-left side of the
+GNN block. Do not route it as a long curved arrow across the figure.
+
 ## Central GNN block
 
 The central block should be large enough to be legible and should be labeled:
@@ -315,6 +536,10 @@ Inside the central block or immediately below it, include:
 
 Do not draw the full internal structure of one layer here; that is Diagram 3.
 This block should summarize the repeated layer stack.
+
+The GNN block should be the visual anchor of the diagram. It should be bigger
+than the preprocessing and readout blocks, but not so large that the rest of the
+diagram is pushed to the margins.
 
 ## Graph-level readout and classifier
 
@@ -348,6 +573,16 @@ For `diagram2_predlagani_gnn_arhitektura_ucenje.svg`, add a subtle training path
 This training path must not dominate the diagram. It should be visually
 secondary and should not make the main forward path harder to read.
 
+The dashed training path must be local and tidy:
+
+- place `navzkrižna entropija` directly below `napoved razreda`;
+- use a short vertical dashed arrow from `napoved razreda` down to the loss;
+- use one short dashed return arrow from the loss to a small bracket labeled
+  `učljivi parametri`;
+- the bracket should point to the learnable blocks as a group, not draw a long
+  curve across the entire diagram;
+- do not route the dashed return arrow through the middle of the diagram.
+
 For `diagram2_predlagani_gnn_arhitektura_inferenca.svg`, omit this entire loss
 and training path.
 
@@ -355,7 +590,9 @@ and training path.
 
 This diagram must be especially readable:
 
-- Use a wide horizontal layout.
+- Use a wide but compact landscape layout.
+- Prefer 8--10 major boxes total in the main path. If needed, merge small
+  consecutive operations into a single box with a two-line label.
 - Keep line crossings to a minimum.
 - Use large text and generous spacing.
 - Avoid long paragraphs inside boxes.
@@ -363,6 +600,8 @@ This diagram must be especially readable:
 - Use small attached notes only where needed.
 - Make sure all labels remain readable when the SVG is scaled to thesis text
   width.
+- Before finalizing the SVG, check that no text is clipped, no arrowhead touches
+  text, and no box label is partly hidden behind an arrow.
 
 ## Avoid
 
@@ -372,6 +611,9 @@ This diagram must be especially readable:
 - Do not collapse the four relation types into a single undifferentiated edge
   type.
 - Do not use the old architecture with only temporal and spatial relations.
+- Do not create a very long one-row pipeline that requires horizontal scrolling.
+- Do not draw long sweeping arrows across the whole diagram.
+- Do not put the edge-weight branch far below the main path.
 - Do not use English labels.
 - Do not use colors outside palette B unless absolutely necessary for contrast.
 
@@ -387,6 +629,29 @@ plast` block from Diagram 2.
 
 The diagram should focus only on one GNN layer. Do not include graph-level
 attention pooling, the graph representation, the prediction head, or the loss.
+
+The first generated attempt was mostly correct but too wide, with a huge
+diagonal residual arrow and a squeezed output on the right. Avoid that. Use a
+compact grid layout and route the residual connection as a clean local top lane
+that enters the residual-sum block directly.
+
+## Canvas and readability constraints
+
+Use a fixed landscape SVG canvas with all content inside the viewBox:
+
+- recommended canvas: `1800 × 950` or `1900 × 1000`;
+- no element may extend outside the canvas;
+- no browser scrollbars should appear when the SVG is opened;
+- leave at least 35 px of outer margin on every side;
+- minimum body text size: 20 px;
+- minimum small annotation text size: 18 px;
+- optional small panel title size: 24--28 px;
+- do not use text smaller than 18 px;
+- use compact arrowheads that do not overlap boxes;
+- leave clear spacing between arrows and labels.
+
+Every text label must fit inside its box. If a label is long, split it into
+2--3 short lines. Do not allow text to touch box borders or overlap arrows.
 
 ## Main message
 
@@ -409,8 +674,16 @@ clear that this layer is repeated twice in the selected architecture.
 
 ## Required layout
 
-Use a left-to-right layout with four parallel relation-specific paths in the
-middle.
+Use a left-to-right grid layout with four parallel relation-specific paths in
+the middle. The diagram should have four visual zones:
+
+1. inputs;
+2. relation-specific message passing;
+3. relation fusion;
+4. residual update and stabilization.
+
+The relation paths should be vertically aligned and evenly spaced. The fusion
+and stabilization blocks should not be pushed all the way to the right edge.
 
 Inputs on the left:
 
@@ -420,6 +693,14 @@ Inputs on the left:
 The `h_i^(ℓ)` input should feed all four relation-specific paths. The
 `w_ij^(r)` input should also feed the relation-specific paths, but it can be
 drawn as a thinner secondary set of arrows.
+
+Use two separate input buses:
+
+- a solid bus for `h_i^(ℓ)`;
+- a dashed bus for `w_ij^(r)`.
+
+Keep the buses visually separated. Do not let the dashed edge-weight bus overlap
+the solid node-representation bus.
 
 ## Relation-specific message passing
 
@@ -454,6 +735,9 @@ Use the palette consistently and use subtle relation accents if useful:
 
 Do not invent a fourth saturated color.
 
+Put `GCNConv + GELU` on the first line of each relation block and the relation
+name on the second line. Keep each relation block the same size.
+
 ## Relation fusion
 
 After the four relation-specific outputs, show:
@@ -465,8 +749,10 @@ Include a compact formula near this fusion block:
 
 `[h_i^(t+) || h_i^(t-) || h_i^(s) || h_i^(f)] → h_i^fuz`
 
-If the formula would become too small, use the words only and omit the formula.
-Readability is more important than including every symbol.
+The formula is optional. If it would become smaller than 18 px or visually
+clutter the diagram, omit the formula and keep only the `konkatenacija` and
+`MLP fuzija relacij` blocks. Readability is more important than including every
+symbol.
 
 ## Residual and stabilization path
 
@@ -475,7 +761,7 @@ and fusion block into:
 
 - `rezidualni seštevek`
 
-Then show:
+Then show a compact stabilization sequence:
 
 1. `LayerNorm`
 2. `Dropout`
@@ -484,12 +770,22 @@ Finally output:
 
 - `predstavitve vozlišč h_i^(ℓ+1)`
 
-The residual arrow should be visually clear but should not cross through the
-middle of the diagram. Route it around the main blocks.
+The residual arrow must be visually clear but local and tidy:
+
+- route it as a top lane above the relation paths;
+- use horizontal and vertical segments rather than a large diagonal curve;
+- enter the `rezidualni seštevek` block directly;
+- do not point the residual arrow at a title or at the general stabilization
+  area;
+- do not let it cross through relation outputs or the fusion block.
 
 Show `GELU` inside the relation-specific/fusion part of the layer, not as a
 separate operation after the residual sum. The intended order is relation-specific
 convolution, GELU, relation fusion, residual sum, LayerNorm, and Dropout.
+
+To preserve space, it is acceptable to combine `LayerNorm` and `Dropout` into
+one block labeled `LayerNorm + Dropout`, as long as the residual sum remains a
+separate block.
 
 ## Edge weights
 
@@ -503,6 +799,9 @@ edge weights:
 Do not repeat the full edge-weight MLP pipeline in this diagram. That pipeline
 belongs to Diagram 2.
 
+The edge-weight arrows should be thin and dashed. They should enter the relation
+blocks from the left or lower-left. Do not draw them as large decorative curves.
+
 ## Readability requirements
 
 This diagram must be very legible:
@@ -515,6 +814,11 @@ This diagram must be very legible:
 - Do not use dense equations.
 - Do not put too much text inside the relation blocks.
 - Make sure the diagram remains readable at thesis text width.
+- Avoid a long chain that stretches to the edge of the canvas. If the right side
+  becomes cramped, combine `LayerNorm` and `Dropout` into one stabilization
+  block.
+- Before finalizing the SVG, check that no text is clipped, no arrowhead touches
+  text, and the output block is not squeezed against the right margin.
 
 ## Avoid
 
@@ -523,5 +827,9 @@ This diagram must be very legible:
 - Do not show only two relations; the current model has four relation types.
 - Do not merge temporal-forward and temporal-backward into one block.
 - Do not draw a generic neural-network stack.
+- Do not draw a huge diagonal residual arrow across the whole figure.
+- Do not let the residual arrow end anywhere except the `rezidualni seštevek`
+  block.
+- Do not use tiny formulas that become unreadable at thesis width.
 - Do not use English labels.
 - Do not use colors outside palette B unless absolutely necessary for contrast.
