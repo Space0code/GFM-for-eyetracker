@@ -7,7 +7,7 @@ Use Paper Banana Scientific Diagram Maker / Methodology Diagram workflow. Create
 3. `diagram2_predlagani_gnn_arhitektura_ucenje.svg`
 4. `diagram3_ena_heterogena_gnn_plast.svg`
 
-Recommended generation settings if available: Scientific Diagram Maker / Methodology Diagram workflow, 2K for drafts, 4K for final export, default multi-iteration refinement; 3 iterations is a good default. These are settings, not visible labels.
+Recommended generation settings if available: Scientific Diagram Maker / Methodology Diagram workflow, 1K, default multi-iteration refinement; 3 iterations is a good default. These are settings, not visible labels.
 
 These figures are for a LaTeX bachelor's thesis about a GNN for emotion recognition from eye-tracking data. Use flat, clean, academic vector style. Use real editable SVG text; do not rasterize text. Do not render Markdown syntax, filenames, bullets, or prompt instructions as visible figure text. Avoid decorative 3D, gradients, drop shadows, and large titles; thesis captions will be outside the figures. If a small figure title/panel label helps, keep it 24--28 px.
 
@@ -38,8 +38,6 @@ Before final output, check scientific faithfulness, simplicity, readability, Slo
 # Diagram 1: Visokonivojski cevovod priprave podatkov
 
 Goal: high-level data-processing diagram. It explains how MAHNOB-HCI eye-tracking data become graph samples for the GNN and also shows two secondary non-graph branches. It is not the GNN architecture.
-
-Canvas: landscape `1800 x 1000` or `1900 x 1050`.
 
 Composition: compact two-level layout. Upper/main band is dominant graph-data path:
 
