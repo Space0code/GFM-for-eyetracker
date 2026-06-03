@@ -88,6 +88,7 @@ NODE_FILL_COLORS = [
 FIGURE_TITLE = "Majhen primer konstrukcije grafa iz podatkov sledilnika pogleda"
 PANEL_FILE_STEMS = {
     "all": "vse_povezave",
+    "all_plain": "vse_povezave_brez_oznak",
     "temporal": "casovne",
     "spatial": "prostorske",
     "fixation": "fiksacijske",
@@ -643,7 +644,7 @@ def _style_axis(
     ax.set_xlabel("x-koordinata pogleda", fontsize=axis_label_fontsize, color=PALETTE["dark"])
     ax.set_ylabel("y-koordinata pogleda", fontsize=axis_label_fontsize, color=PALETTE["dark"])
     ax.tick_params(axis="both", labelsize=tick_fontsize, colors=PALETTE["dark"])
-    ax.grid(True, color="#DDE4E6", linewidth=0.7, alpha=0.9)
+    ax.grid(False)
     ax.set_facecolor(PALETTE["background"])
     for spine in ax.spines.values():
         spine.set_color("#CFD8DC")
@@ -653,6 +654,8 @@ def _style_axis(
 def _panel_title(candidate: CandidateGraph, panel: str) -> str:
     if panel == "all":
         return "vse povezave; barva vozlišča = fiksacija"
+    if panel == "all_plain":
+        return "vse povezave"
     if panel == "temporal":
         return f"časovne povezave, $k_t={candidate.kt}$"
     if panel == "spatial":
@@ -663,7 +666,7 @@ def _panel_title(candidate: CandidateGraph, panel: str) -> str:
 
 
 def _panel_relations(panel: str) -> list[str]:
-    if panel == "all":
+    if panel in {"all", "all_plain"}:
         return ["temporal_forward", "temporal_backward", "spatial", "fixation"]
     if panel == "temporal":
         return ["temporal_forward", "temporal_backward"]
@@ -715,7 +718,7 @@ def _draw_panel(
         )
 
     if single_panel:
-        padding_factor = 1.80 if panel == "all" else 0.43
+        padding_factor = 1.80 if panel == "all" else 0.50 if panel == "all_plain" else 0.43
         _style_axis(
             ax,
             nodes,
@@ -748,6 +751,7 @@ def _add_legend(fig: plt.Figure, relations: list[str], fontsize: float, y_anchor
 
 
 def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: str) -> None:
+    transparent = image_format == "svg"
     fig = plt.figure(figsize=(16.0, 12.4), facecolor=PALETTE["background"])
     grid = GridSpec(
         2,
@@ -784,7 +788,8 @@ def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: 
         output_path,
         format=image_format,
         dpi=260,
-        facecolor=PALETTE["background"],
+        facecolor="none" if transparent else PALETTE["background"],
+        transparent=transparent,
     )
     plt.close(fig)
 
@@ -795,7 +800,8 @@ def _plot_candidate_panel(
     output_path: Path,
     image_format: str,
 ) -> None:
-    figure_size = (18.5, 12.4) if panel == "all" else (10.8, 8.4)
+    transparent = image_format == "svg"
+    figure_size = (18.5, 12.4) if panel == "all" else (12.0, 9.0) if panel == "all_plain" else (10.8, 8.4)
     fig, ax = plt.subplots(figsize=figure_size, facecolor=PALETTE["background"])
     _draw_panel(ax, candidate, panel, single_panel=True)
     relations = _panel_relations(panel)
@@ -805,7 +811,8 @@ def _plot_candidate_panel(
         output_path,
         format=image_format,
         dpi=300,
-        facecolor=PALETTE["background"],
+        facecolor="none" if transparent else PALETTE["background"],
+        transparent=transparent,
     )
     plt.close(fig)
 
