@@ -1,15 +1,15 @@
 # Compact Paper Banana Prompt: Thesis Diagrams
 
-Use Paper Banana Scientific Diagram Maker / Methodology Diagram workflow. Create four separate standalone editable SVG files, not one multi-panel figure:
+Use Paper Banana Scientific Diagram Maker / Methodology Diagram workflow. Create four separate standalone editable PNG files, not one multi-panel figure:
 
-1. `diagram1_cevovod_priprave_podatkov.svg`
-2. `diagram2_predlagani_gnn_arhitektura_inferenca.svg`
-3. `diagram2_predlagani_gnn_arhitektura_ucenje.svg`
-4. `diagram3_ena_heterogena_gnn_plast.svg`
+1. `diagram1_cevovod_priprave_podatkov.png`
+2. `diagram2_predlagani_gnn_arhitektura_inferenca.png`
+3. `diagram2_predlagani_gnn_arhitektura_ucenje.png`
+4. `diagram3_ena_heterogena_gnn_plast.png`
 
 Recommended generation settings if available: Scientific Diagram Maker / Methodology Diagram workflow, 1K, default multi-iteration refinement; 3 iterations is a good default. These are settings, not visible labels.
 
-These figures are for a LaTeX bachelor's thesis about a GNN for emotion recognition from eye-tracking data. Use flat, clean, academic vector style. Use real editable SVG text; do not rasterize text. Do not render Markdown syntax, filenames, bullets, or prompt instructions as visible figure text. Avoid decorative 3D, gradients, drop shadows, and large titles; thesis captions will be outside the figures. If a small figure title/panel label helps, keep it 24--28 px.
+These figures are for a LaTeX bachelor's thesis about a GNN for emotion recognition from eye-tracking data. Use flat, clean, academic vector style. Use real editable text; do not rasterize text. Do not render Markdown syntax, filenames, bullets, or prompt instructions as visible figure text. Avoid decorative 3D, gradients, drop shadows, and large titles; thesis captions will be outside the figures. If a small figure title/panel label helps, keep it 24--28 px.
 
 Global readability: all content inside the SVG viewBox, no browser scrollbars, 35 px outer margin, body text >=20 px, small annotations >=18 px, compact arrowheads, whitespace between arrows and boxes. All visible explanatory text in Slovenian. Standard code/model names may remain as written: `GNN`, `GCNConv`, `MLP`, `LayerNorm`, `Dropout`, `GazeMAE`, `SVM`, `LightGBM`, `HeteroData`. Split long labels into 2--3 lines. No clipped text, no text touching borders, no arrowhead overlapping labels. Figure must remain readable at thesis text width.
 
@@ -101,8 +101,8 @@ Avoid: GNN message passing, pooling, attention, classifier heads, stacked neural
 # Diagram 2: Arhitektura predlaganega GNN
 
 Goal: model architecture after graph construction. Start from heterogeneous graph sample and show how the proposed GNN maps it to class prediction. Do not repeat raw-data cleaning. Create two variants:
-- inference SVG: no loss/training path.
-- training SVG: same layout plus subtle local loss/training path.
+- inference PNG: no loss/training path.
+- training PNG: same layout plus subtle local loss/training path.
 
 Canvas: landscape `1800 x 950` or `1900 x 1000`.
 
