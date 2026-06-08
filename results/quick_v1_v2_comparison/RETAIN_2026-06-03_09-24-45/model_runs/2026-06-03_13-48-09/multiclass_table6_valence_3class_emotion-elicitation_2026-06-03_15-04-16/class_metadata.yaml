@@ -1,0 +1,34 @@
+class_downsampling:
+  datasets: {}
+  enabled: false
+class_to_index:
+  0: 0
+  1: 1
+  2: 2
+drop_unmapped_labels: true
+index_to_name:
+  0: Unpleasant
+  1: Neutral valence
+  2: Pleasant
+index_to_raw_label:
+  0: 0
+  1: 1
+  2: 2
+mode: table6-3class
+raw_label_names:
+  0: Unpleasant
+  1: Neutral valence
+  2: Pleasant
+table6_class_mapping:
+  0: 1
+  1: 0
+  2: 0
+  3: 0
+  4: 2
+  5: 0
+  6: 1
+  11: 2
+  12: 0
+target_columns:
+- emotion-id
+task_name: table6-valence-3class

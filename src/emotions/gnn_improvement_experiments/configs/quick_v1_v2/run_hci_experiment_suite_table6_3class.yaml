@@ -16,7 +16,7 @@ suite:
 quick_comparison:
   # Diploma main comparison models. Keep old internal graph variants out of the
   # default thesis run; use --models only for ad hoc research comparisons.
-  models: [LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN_mean, BasicGCN_attention, GNN_v2]
+  models: [Random, Majority, LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN_mean, BasicGCN_attention, GNN_v2]
   # Select one or both Table-6 tasks for the v1/v2 quick runner:
   #   table6_tasks: [arousal]
   table6_tasks: [valence, arousal]

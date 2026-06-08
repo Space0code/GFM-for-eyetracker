@@ -1,0 +1,253 @@
+experiment_id,experiment_display_name,cv_strategy,source_model,split,fold,class_index,class_name,count,total,proportion
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P1,0,Calm,95,240,0.3958333333333333
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P1,1,Medium aroused,102,240,0.425
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P1,2,Excited/Activated,43,240,0.17916666666666667
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P10,0,Calm,114,229,0.4978165938864629
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P10,1,Medium aroused,80,229,0.34934497816593885
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P10,2,Excited/Activated,35,229,0.15283842794759825
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P13,0,Calm,119,236,0.5042372881355932
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P13,1,Medium aroused,85,236,0.3601694915254237
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P13,2,Excited/Activated,32,236,0.13559322033898305
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P14,0,Calm,105,217,0.4838709677419355
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P14,1,Medium aroused,83,217,0.3824884792626728
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P14,2,Excited/Activated,29,217,0.1336405529953917
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P16,0,Calm,122,193,0.6321243523316062
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P16,1,Medium aroused,50,193,0.25906735751295334
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P16,2,Excited/Activated,21,193,0.10880829015544041
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P17,0,Calm,100,239,0.41841004184100417
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P17,1,Medium aroused,85,239,0.35564853556485354
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P17,2,Excited/Activated,54,239,0.22594142259414227
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P18,0,Calm,112,228,0.49122807017543857
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P18,1,Medium aroused,79,228,0.34649122807017546
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P18,2,Excited/Activated,37,228,0.16228070175438597
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P19,0,Calm,97,229,0.42358078602620086
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P19,1,Medium aroused,73,229,0.31877729257641924
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P19,2,Excited/Activated,59,229,0.2576419213973799
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P2,0,Calm,116,241,0.48132780082987553
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P2,1,Medium aroused,63,241,0.26141078838174275
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P2,2,Excited/Activated,62,241,0.2572614107883817
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P20,0,Calm,94,226,0.415929203539823
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P20,1,Medium aroused,95,226,0.42035398230088494
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P20,2,Excited/Activated,37,226,0.16371681415929204
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P21,0,Calm,100,219,0.45662100456621
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P21,1,Medium aroused,82,219,0.3744292237442922
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P21,2,Excited/Activated,37,219,0.1689497716894977
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P22,0,Calm,94,214,0.4392523364485981
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P22,1,Medium aroused,81,214,0.37850467289719625
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P22,2,Excited/Activated,39,214,0.1822429906542056
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P23,0,Calm,111,240,0.4625
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P23,1,Medium aroused,96,240,0.4
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P23,2,Excited/Activated,33,240,0.1375
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P24,0,Calm,128,231,0.5541125541125541
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P24,1,Medium aroused,80,231,0.3463203463203463
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P24,2,Excited/Activated,23,231,0.09956709956709957
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P27,0,Calm,90,223,0.40358744394618834
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P27,1,Medium aroused,91,223,0.4080717488789238
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P27,2,Excited/Activated,42,223,0.18834080717488788
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P28,0,Calm,113,212,0.5330188679245284
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P28,1,Medium aroused,73,212,0.3443396226415094
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P28,2,Excited/Activated,26,212,0.12264150943396226
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P29,0,Calm,132,216,0.6111111111111112
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P29,1,Medium aroused,67,216,0.3101851851851852
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P29,2,Excited/Activated,17,216,0.0787037037037037
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P30,0,Calm,121,226,0.5353982300884956
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P30,1,Medium aroused,85,226,0.37610619469026546
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P30,2,Excited/Activated,20,226,0.08849557522123894
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P4,0,Calm,103,251,0.4103585657370518
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P4,1,Medium aroused,87,251,0.3466135458167331
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P4,2,Excited/Activated,61,251,0.24302788844621515
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P5,0,Calm,65,275,0.23636363636363636
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P5,1,Medium aroused,122,275,0.44363636363636366
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P5,2,Excited/Activated,88,275,0.32
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P7,0,Calm,121,230,0.5260869565217391
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P7,1,Medium aroused,33,230,0.14347826086956522
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P7,2,Excited/Activated,76,230,0.33043478260869563
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P8,0,Calm,98,219,0.4474885844748858
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P8,1,Medium aroused,66,219,0.3013698630136986
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,test,s_P8,2,Excited/Activated,55,219,0.2511415525114155
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_107.avi,0,Calm,14,158,0.08860759493670886
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_107.avi,1,Medium aroused,8,158,0.05063291139240506
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_107.avi,2,Excited/Activated,136,158,0.8607594936708861
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_111.avi,0,Calm,273,331,0.824773413897281
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_111.avi,1,Medium aroused,0,331,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_111.avi,2,Excited/Activated,58,331,0.17522658610271905
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_138.avi,0,Calm,331,348,0.9511494252873564
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_138.avi,1,Medium aroused,0,348,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_138.avi,2,Excited/Activated,17,348,0.04885057471264368
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_146.avi,0,Calm,258,269,0.9591078066914498
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_146.avi,1,Medium aroused,0,269,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_146.avi,2,Excited/Activated,11,269,0.040892193308550186
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_30.avi,0,Calm,48,205,0.23414634146341465
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_30.avi,1,Medium aroused,0,205,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_30.avi,2,Excited/Activated,157,205,0.7658536585365854
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_52.avi,0,Calm,77,295,0.26101694915254237
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_52.avi,1,Medium aroused,218,295,0.7389830508474576
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_52.avi,2,Excited/Activated,0,295,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_53.avi,0,Calm,81,304,0.26644736842105265
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_53.avi,1,Medium aroused,183,304,0.6019736842105263
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_53.avi,2,Excited/Activated,40,304,0.13157894736842105
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_55.avi,0,Calm,101,241,0.4190871369294606
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_55.avi,1,Medium aroused,0,241,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_55.avi,2,Excited/Activated,140,241,0.5809128630705395
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_58.avi,0,Calm,36,197,0.18274111675126903
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_58.avi,1,Medium aroused,161,197,0.817258883248731
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_58.avi,2,Excited/Activated,0,197,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_69.avi,0,Calm,178,214,0.8317757009345794
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_69.avi,1,Medium aroused,0,214,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_69.avi,2,Excited/Activated,36,214,0.16822429906542055
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_73.avi,0,Calm,32,244,0.13114754098360656
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_73.avi,1,Medium aroused,0,244,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_73.avi,2,Excited/Activated,212,244,0.8688524590163934
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_79.avi,0,Calm,33,163,0.20245398773006135
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_79.avi,1,Medium aroused,130,163,0.7975460122699386
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_79.avi,2,Excited/Activated,0,163,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_80.avi,0,Calm,12,279,0.043010752688172046
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_80.avi,1,Medium aroused,267,279,0.956989247311828
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_80.avi,2,Excited/Activated,0,279,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_90.avi,0,Calm,34,256,0.1328125
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_90.avi,1,Medium aroused,210,256,0.8203125
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_90.avi,2,Excited/Activated,12,256,0.046875
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_cats_f.avi,0,Calm,0,292,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_cats_f.avi,1,Medium aroused,292,292,1.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_cats_f.avi,2,Excited/Activated,0,292,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,0,Calm,237,264,0.8977272727272727
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,1,Medium aroused,0,264,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,2,Excited/Activated,27,264,0.10227272727272728
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,0,Calm,251,262,0.9580152671755725
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,1,Medium aroused,0,262,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,2,Excited/Activated,11,262,0.04198473282442748
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,0,Calm,117,192,0.609375
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,1,Medium aroused,75,192,0.390625
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,2,Excited/Activated,0,192,0.0
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_funny_f.avi,0,Calm,34,265,0.12830188679245283
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_funny_f.avi,1,Medium aroused,189,265,0.7132075471698113
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_funny_f.avi,2,Excited/Activated,42,265,0.15849056603773584
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,0,Calm,203,255,0.796078431372549
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,1,Medium aroused,25,255,0.09803921568627451
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,2,Excited/Activated,27,255,0.10588235294117647
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P1,0,Unpleasant,78,240,0.325
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P1,1,Neutral valence,60,240,0.25
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P1,2,Pleasant,102,240,0.425
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P10,0,Unpleasant,70,229,0.3056768558951965
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P10,1,Neutral valence,79,229,0.34497816593886466
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P10,2,Pleasant,80,229,0.34934497816593885
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P13,0,Unpleasant,79,236,0.3347457627118644
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P13,1,Neutral valence,72,236,0.3050847457627119
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P13,2,Pleasant,85,236,0.3601694915254237
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P14,0,Unpleasant,67,217,0.3087557603686636
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P14,1,Neutral valence,67,217,0.3087557603686636
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P14,2,Pleasant,83,217,0.3824884792626728
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P16,0,Unpleasant,82,193,0.42487046632124353
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P16,1,Neutral valence,61,193,0.3160621761658031
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P16,2,Pleasant,50,193,0.25906735751295334
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P17,0,Unpleasant,106,239,0.4435146443514644
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P17,1,Neutral valence,48,239,0.200836820083682
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P17,2,Pleasant,85,239,0.35564853556485354
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P18,0,Unpleasant,50,228,0.21929824561403508
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P18,1,Neutral valence,99,228,0.4342105263157895
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P18,2,Pleasant,79,228,0.34649122807017546
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P19,0,Unpleasant,75,229,0.32751091703056767
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P19,1,Neutral valence,81,229,0.3537117903930131
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P19,2,Pleasant,73,229,0.31877729257641924
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P2,0,Unpleasant,130,241,0.5394190871369294
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P2,1,Neutral valence,48,241,0.1991701244813278
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P2,2,Pleasant,63,241,0.26141078838174275
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P20,0,Unpleasant,71,226,0.3141592920353982
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P20,1,Neutral valence,60,226,0.26548672566371684
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P20,2,Pleasant,95,226,0.42035398230088494
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P21,0,Unpleasant,78,219,0.3561643835616438
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P21,1,Neutral valence,59,219,0.2694063926940639
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P21,2,Pleasant,82,219,0.3744292237442922
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P22,0,Unpleasant,74,214,0.34579439252336447
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P22,1,Neutral valence,59,214,0.2757009345794392
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P22,2,Pleasant,81,214,0.37850467289719625
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P23,0,Unpleasant,103,240,0.42916666666666664
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P23,1,Neutral valence,41,240,0.17083333333333334
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P23,2,Pleasant,96,240,0.4
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P24,0,Unpleasant,71,231,0.30735930735930733
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P24,1,Neutral valence,80,231,0.3463203463203463
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P24,2,Pleasant,80,231,0.3463203463203463
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P27,0,Unpleasant,95,223,0.4260089686098655
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P27,1,Neutral valence,37,223,0.16591928251121077
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P27,2,Pleasant,91,223,0.4080717488789238
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P28,0,Unpleasant,87,212,0.41037735849056606
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P28,1,Neutral valence,52,212,0.24528301886792453
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P28,2,Pleasant,73,212,0.3443396226415094
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P29,0,Unpleasant,103,216,0.47685185185185186
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P29,1,Neutral valence,46,216,0.21296296296296297
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P29,2,Pleasant,67,216,0.3101851851851852
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P30,0,Unpleasant,77,226,0.3407079646017699
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P30,1,Neutral valence,64,226,0.2831858407079646
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P30,2,Pleasant,85,226,0.37610619469026546
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P4,0,Unpleasant,78,251,0.3107569721115538
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P4,1,Neutral valence,86,251,0.3426294820717131
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P4,2,Pleasant,87,251,0.3466135458167331
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P5,0,Unpleasant,103,275,0.37454545454545457
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P5,1,Neutral valence,50,275,0.18181818181818182
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P5,2,Pleasant,122,275,0.44363636363636366
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P7,0,Unpleasant,148,230,0.6434782608695652
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P7,1,Neutral valence,49,230,0.21304347826086956
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P7,2,Pleasant,33,230,0.14347826086956522
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P8,0,Unpleasant,89,219,0.4063926940639269
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P8,1,Neutral valence,64,219,0.2922374429223744
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,test,s_P8,2,Pleasant,66,219,0.3013698630136986
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_107.avi,0,Unpleasant,109,158,0.689873417721519
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_107.avi,1,Neutral valence,41,158,0.25949367088607594
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_107.avi,2,Pleasant,8,158,0.05063291139240506
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_111.avi,0,Unpleasant,303,331,0.9154078549848943
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_111.avi,1,Neutral valence,28,331,0.08459214501510574
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_111.avi,2,Pleasant,0,331,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_138.avi,0,Unpleasant,283,348,0.8132183908045977
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_138.avi,1,Neutral valence,65,348,0.1867816091954023
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_138.avi,2,Pleasant,0,348,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_146.avi,0,Unpleasant,204,269,0.758364312267658
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_146.avi,1,Neutral valence,65,269,0.241635687732342
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_146.avi,2,Pleasant,0,269,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_30.avi,0,Unpleasant,151,205,0.7365853658536585
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_30.avi,1,Neutral valence,54,205,0.2634146341463415
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_30.avi,2,Pleasant,0,205,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_52.avi,0,Unpleasant,0,295,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_52.avi,1,Neutral valence,77,295,0.26101694915254237
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_52.avi,2,Pleasant,218,295,0.7389830508474576
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_53.avi,0,Unpleasant,77,304,0.2532894736842105
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_53.avi,1,Neutral valence,44,304,0.14473684210526316
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_53.avi,2,Pleasant,183,304,0.6019736842105263
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_55.avi,0,Unpleasant,217,241,0.9004149377593361
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_55.avi,1,Neutral valence,24,241,0.0995850622406639
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_55.avi,2,Pleasant,0,241,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_58.avi,0,Unpleasant,18,197,0.09137055837563451
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_58.avi,1,Neutral valence,18,197,0.09137055837563451
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_58.avi,2,Pleasant,161,197,0.817258883248731
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_69.avi,0,Unpleasant,214,214,1.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_69.avi,1,Neutral valence,0,214,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_69.avi,2,Pleasant,0,214,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_73.avi,0,Unpleasant,212,244,0.8688524590163934
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_73.avi,1,Neutral valence,32,244,0.13114754098360656
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_73.avi,2,Pleasant,0,244,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_79.avi,0,Unpleasant,0,163,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_79.avi,1,Neutral valence,33,163,0.20245398773006135
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_79.avi,2,Pleasant,130,163,0.7975460122699386
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_80.avi,0,Unpleasant,0,279,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_80.avi,1,Neutral valence,12,279,0.043010752688172046
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_80.avi,2,Pleasant,267,279,0.956989247311828
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_90.avi,0,Unpleasant,12,256,0.046875
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_90.avi,1,Neutral valence,34,256,0.1328125
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_90.avi,2,Pleasant,210,256,0.8203125
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_cats_f.avi,0,Unpleasant,0,292,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_cats_f.avi,1,Neutral valence,0,292,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_cats_f.avi,2,Pleasant,292,292,1.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,0,Unpleasant,0,264,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,1,Neutral valence,264,264,1.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_dallas_f.avi,2,Pleasant,0,264,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,0,Unpleasant,0,262,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,1,Neutral valence,262,262,1.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_detroit_f.avi,2,Pleasant,0,262,0.0
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,0,Unpleasant,89,192,0.4635416666666667
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,1,Neutral valence,28,192,0.14583333333333334
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_earworm_f.avi,2,Pleasant,75,192,0.390625
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_funny_f.avi,0,Unpleasant,12,265,0.045283018867924525
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_funny_f.avi,1,Neutral valence,64,265,0.24150943396226415
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_funny_f.avi,2,Pleasant,189,265,0.7132075471698113
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,0,Unpleasant,13,255,0.050980392156862744
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,1,Neutral valence,217,255,0.8509803921568627
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,test,r_newyork_f.avi,2,Pleasant,25,255,0.09803921568627451

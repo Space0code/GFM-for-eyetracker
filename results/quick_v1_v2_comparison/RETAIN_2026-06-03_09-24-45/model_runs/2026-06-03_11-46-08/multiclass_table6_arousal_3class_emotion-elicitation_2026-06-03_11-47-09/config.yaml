@@ -1,0 +1,198 @@
+run_experiments:
+  baselines: false
+  gnn: true
+benchmarking:
+  enabled: true
+  warmup_runs: 1
+  timed_runs: 3
+  synthetic_windows_per_run: 16
+multiclass_task:
+  task_name: table6-arousal-3class
+  target_column: emotion-id
+  use_table6_3class_targets: true
+  drop_unmapped_labels: true
+  class_name_mapping:
+    0: Calm
+    1: Medium aroused
+    2: Excited/Activated
+  table6_class_mapping:
+    0: 0
+    1: 2
+    2: 0
+    3: 2
+    4: 1
+    5: 0
+    6: 2
+    11: 1
+    12: 2
+dataset:
+  data_filepath: results/quick_v1_v2_comparison/2026-06-03_09-24-45/model_runs/2026-06-03_11-46-08/experiments/multiclass_table6_arousal_3class_emotion-elicitation/snapshot.csv
+  label_mapping_spec_path: specifications/hci_to_GFM_spec.yaml
+  exclude_subjects:
+  - P9
+  - P12
+  - P15
+  recursive: true
+  ignore_dirs: []
+  window_length: 10
+  window_overlap: 0
+  min_samples_per_window: 60
+  kt: 1
+  ks: 1
+  use_edge_weights: true
+  graph_version: v2
+  edge_weight_mode: learned_signed
+  use_relative_time: true
+  use_distance_avg: true
+  use_fixation_duration: true
+  use_delta_distance_edge_feature: true
+  use_fixation_edges: true
+  fixation_dilation_k: 3
+  tau: 0.05
+  cache_dir: data/cache
+  use_cache: true
+  dropping_emotion_threshold: -1
+  standardize_features: true
+  standardize_edge_features: true
+  target_aggregation: mean
+  feature_columns:
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  dropna_columns:
+  - time-rel-seconds
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  - emotion-id
+  - subject
+  - recording
+  experiment_type_column: experiment-type
+  allowed_experiment_types:
+  - emotion-elicitation
+  label_quality_column: emotion-derivation-status
+  allowed_label_quality_values:
+  - ok
+  signal_outlier_filter:
+    enabled: true
+    lower_quantile: 0.01
+    upper_quantile: 0.99
+    columns:
+    - x-avg
+    - y-avg
+    - pupil-size-left-avg
+    - pupil-size-right-avg
+  snapshot_manifest_path: results/quick_v1_v2_comparison/2026-06-03_09-24-45/model_runs/2026-06-03_11-46-08/experiments/multiclass_table6_arousal_3class_emotion-elicitation/snapshot_manifest.yaml
+  snapshot_hash: 6044cf9ffa92e0f853cb55b31689700dddad48945c7d9ae36b1aff98118e265f
+  snapshot_cache_key: db6af1e25fef62230ed3837e51bab0cb9628eedeabd5fb72d03527734b92f1ff
+  filter_subjects: null
+  filter_recordings: null
+cross_validation:
+  strategies:
+  - subject_loo
+  - recording_loo
+  n_splits: 5
+  val_size: 2
+  random_state: 42
+baselines:
+  models:
+  - Mean
+  - SVM
+  - LightGBM
+  - MLP
+  hyperparameters:
+    Mean: {}
+    SVM:
+      probability: true
+      random_state: 42
+    LightGBM:
+      n_estimators: 100
+      n_jobs: -1
+      verbose: -1
+      random_state: 42
+    MLP:
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+      early_stopping: true
+      early_stopping_patience: 15
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.1
+      batch_size: 128
+      device: auto
+    GazeMAE_MLP:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+gazemae:
+  model_pos: models/gazemae/pos-i3738-encoder-state.pt
+  model_vel: models/gazemae/vel-i8528-encoder-state.pt
+  screen_width: 1280
+  screen_height: 800
+  clip_to_screen: true
+  target_hz: 500
+  chunk_seconds: 2.0
+  chunk_pooling: mean_std
+  batch_size: 256
+  device: auto
+  cache_embeddings: true
+gnn:
+  model:
+    model_version: BasicGCN
+    in_channels: 7
+    hidden_channels: 64
+    num_layers: 2
+    head_pooling: attention
+    graph_pooling: attention
+    relation_pooling: mlp
+    use_preprocess_mlp: true
+    add_self_loops: true
+    dropout_mlp: 0.1
+    dropout_gnn: 0.1
+    dropout_head: 0.1
+    aggr: mean
+    conv_type: GCNConv
+    pooling: mean_max
+    readout: attention
+    spatial_edge_attr_dim: 7
+    temporal_edge_attr_dim: 8
+    fixation_edge_attr_dim: 7
+  training:
+    num_epochs: 500
+    batch_size: 256
+    learning_rate: 5.0e-05
+    grad_clip_max_norm: 1.0
+    device: auto
+    random_seed: 42
+    num_workers: 4
+    pin_memory: true
+    persistent_workers: true
+    use_torch_compile: false
+    early_stopping_enabled: true
+    early_stopping_patience: 20
+    early_stopping_min_delta: 0.0
+    early_stopping_restore_best: true
+metrics:
+- accuracy
+- balanced_accuracy
+- macro_precision
+- macro_recall
+- macro_f1
+- macro_auc_ovr
+- weighted_precision
+- weighted_recall
+- weighted_f1
+- weighted_auc_ovr
+logging:
+  results_dir: results/quick_v1_v2_comparison/2026-06-03_09-24-45/model_runs/2026-06-03_11-46-08
+  verbose: false
+  run_name_prefix: multiclass_table6_arousal_3class_emotion-elicitation

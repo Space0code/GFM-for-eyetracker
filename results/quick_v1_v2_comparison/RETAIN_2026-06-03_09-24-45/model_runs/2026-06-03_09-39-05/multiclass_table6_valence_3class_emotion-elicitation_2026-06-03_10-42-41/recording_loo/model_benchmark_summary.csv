@@ -1,0 +1,2 @@
+task_name,cv_strategy,model,model_display_name,n_folds,trainable_parameters,total_parameters,fit_seconds_total,train_windows_total,train_ms_per_window,train_ms_per_window_epoch,inference_ms_per_window,encoder_head_inference_ms_per_window,accuracy,macro_f1,inference_scope,parameter_scope
+table6-valence-3class,recording_loo,GNN,BasicGCN,20,22019,22019,1639.997825403465,85492,19.183056021656586,0.2479703562240211,0.16036841610382732,,0.41072217514828174,0.2451789002428005,materialized_graph_loader_forward_softmax,torch_model

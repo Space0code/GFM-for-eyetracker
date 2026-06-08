@@ -1,0 +1,253 @@
+experiment_id,experiment_display_name,cv_strategy,model,summary_model_name,true_class_index,true_class_name,pred_class_index,pred_class_name,count,row_normalized
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,0,Calm,0,Calm,1437,0.6114893617021276
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,0,Calm,1,Medium aroused,831,0.3536170212765957
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,0,Calm,2,Excited/Activated,82,0.03489361702127659
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,1,Medium aroused,0,Calm,1353,0.7696245733788396
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,1,Medium aroused,1,Medium aroused,393,0.2235494880546075
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,1,Medium aroused,2,Excited/Activated,12,0.006825938566552901
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,2,Excited/Activated,0,Calm,671,0.724622030237581
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,2,Excited/Activated,1,Medium aroused,230,0.24838012958963282
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_attention,GNN,2,Excited/Activated,2,Excited/Activated,25,0.026997840172786176
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,0,Calm,0,Calm,1374,0.5846808510638298
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,0,Calm,1,Medium aroused,886,0.3770212765957447
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,0,Calm,2,Excited/Activated,90,0.03829787234042553
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,1,Medium aroused,0,Calm,1293,0.735494880546075
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,1,Medium aroused,1,Medium aroused,380,0.2161547212741752
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,1,Medium aroused,2,Excited/Activated,85,0.04835039817974972
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,2,Excited/Activated,0,Calm,691,0.7462203023758099
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,2,Excited/Activated,1,Medium aroused,222,0.23974082073434125
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,BasicGCN_mean,GNN,2,Excited/Activated,2,Excited/Activated,13,0.014038876889848811
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,0,Calm,0,Calm,1667,0.7093617021276596
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,0,Calm,1,Medium aroused,636,0.27063829787234045
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,0,Calm,2,Excited/Activated,47,0.02
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,1,Medium aroused,0,Calm,1234,0.70193401592719
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,1,Medium aroused,1,Medium aroused,515,0.29294653014789535
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,1,Medium aroused,2,Excited/Activated,9,0.005119453924914676
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,2,Excited/Activated,0,Calm,660,0.712742980561555
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,2,Excited/Activated,1,Medium aroused,241,0.2602591792656587
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GNN_v2,GNN,2,Excited/Activated,2,Excited/Activated,25,0.026997840172786176
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,0,Calm,1521,0.6472340425531915
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,1,Medium aroused,794,0.33787234042553194
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,2,Excited/Activated,35,0.014893617021276596
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,0,Calm,853,0.4852104664391354
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,1,Medium aroused,868,0.4937428896473265
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,2,Excited/Activated,37,0.02104664391353811
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,0,Calm,535,0.5777537796976242
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,1,Medium aroused,379,0.40928725701943847
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,2,Excited/Activated,12,0.012958963282937365
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,0,Calm,0,Calm,1486,0.6323404255319149
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,0,Calm,1,Medium aroused,717,0.3051063829787234
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,0,Calm,2,Excited/Activated,147,0.0625531914893617
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,1,Medium aroused,0,Calm,854,0.4857792946530148
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,1,Medium aroused,1,Medium aroused,823,0.4681456200227531
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,1,Medium aroused,2,Excited/Activated,81,0.04607508532423208
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,2,Excited/Activated,0,Calm,588,0.6349892008639308
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,2,Excited/Activated,1,Medium aroused,269,0.29049676025917925
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,LightGBM,LightGBM,2,Excited/Activated,2,Excited/Activated,69,0.07451403887688984
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,0,Calm,0,Calm,1599,0.6804255319148936
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,0,Calm,1,Medium aroused,635,0.2702127659574468
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,0,Calm,2,Excited/Activated,116,0.04936170212765958
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,1,Medium aroused,0,Calm,1106,0.6291240045506257
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,1,Medium aroused,1,Medium aroused,608,0.34584755403868034
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,1,Medium aroused,2,Excited/Activated,44,0.02502844141069397
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,2,Excited/Activated,0,Calm,634,0.6846652267818575
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,2,Excited/Activated,1,Medium aroused,255,0.275377969762419
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,MLP,MLP,2,Excited/Activated,2,Excited/Activated,37,0.03995680345572354
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,0,Calm,0,Calm,1527,0.6497872340425532
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,0,Calm,1,Medium aroused,657,0.2795744680851064
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,0,Calm,2,Excited/Activated,166,0.07063829787234042
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,1,Medium aroused,0,Calm,830,0.472127417519909
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,1,Medium aroused,1,Medium aroused,843,0.47952218430034127
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,1,Medium aroused,2,Excited/Activated,85,0.04835039817974972
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,2,Excited/Activated,0,Calm,574,0.6198704103671706
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,2,Excited/Activated,1,Medium aroused,265,0.2861771058315335
+multiclass_table6_arousal_3class,Table-6 Arousal,recording_loo,SVM,SVM,2,Excited/Activated,2,Excited/Activated,87,0.0939524838012959
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,0,Calm,0,Calm,1748,0.7438297872340426
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,0,Calm,1,Medium aroused,565,0.2404255319148936
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,0,Calm,2,Excited/Activated,37,0.01574468085106383
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,1,Medium aroused,0,Calm,973,0.5534698521046644
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,1,Medium aroused,1,Medium aroused,769,0.43742889647326505
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,1,Medium aroused,2,Excited/Activated,16,0.009101251422070534
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,2,Excited/Activated,0,Calm,705,0.7613390928725702
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,2,Excited/Activated,1,Medium aroused,200,0.2159827213822894
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_attention,GNN,2,Excited/Activated,2,Excited/Activated,21,0.02267818574514039
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,0,Calm,0,Calm,1729,0.7357446808510638
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,0,Calm,1,Medium aroused,531,0.22595744680851063
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,0,Calm,2,Excited/Activated,90,0.03829787234042553
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,1,Medium aroused,0,Calm,960,0.5460750853242321
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,1,Medium aroused,1,Medium aroused,756,0.4300341296928328
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,1,Medium aroused,2,Excited/Activated,42,0.023890784982935155
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,2,Excited/Activated,0,Calm,704,0.7602591792656588
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,2,Excited/Activated,1,Medium aroused,192,0.20734341252699784
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,BasicGCN_mean,GNN,2,Excited/Activated,2,Excited/Activated,30,0.032397408207343416
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,0,Calm,0,Calm,1709,0.7272340425531915
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,0,Calm,1,Medium aroused,583,0.24808510638297873
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,0,Calm,2,Excited/Activated,58,0.02468085106382979
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,1,Medium aroused,0,Calm,907,0.5159271899886234
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,1,Medium aroused,1,Medium aroused,834,0.47440273037542663
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,1,Medium aroused,2,Excited/Activated,17,0.009670079635949944
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,2,Excited/Activated,0,Calm,690,0.7451403887688985
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,2,Excited/Activated,1,Medium aroused,221,0.2386609071274298
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GNN_v2,GNN,2,Excited/Activated,2,Excited/Activated,15,0.016198704103671708
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,0,Calm,1696,0.7217021276595744
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,1,Medium aroused,583,0.24808510638297873
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Calm,2,Excited/Activated,71,0.03021276595744681
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,0,Calm,732,0.41638225255972694
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,1,Medium aroused,992,0.5642775881683731
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Medium aroused,2,Excited/Activated,34,0.019340159271899887
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,0,Calm,528,0.5701943844492441
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,1,Medium aroused,317,0.34233261339092874
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Excited/Activated,2,Excited/Activated,81,0.08747300215982722
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,0,Calm,0,Calm,1664,0.7080851063829787
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,0,Calm,1,Medium aroused,505,0.2148936170212766
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,0,Calm,2,Excited/Activated,181,0.07702127659574468
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,1,Medium aroused,0,Calm,652,0.3708759954493743
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,1,Medium aroused,1,Medium aroused,1021,0.580773606370876
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,1,Medium aroused,2,Excited/Activated,85,0.04835039817974972
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,2,Excited/Activated,0,Calm,541,0.5842332613390929
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,2,Excited/Activated,1,Medium aroused,219,0.23650107991360692
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,LightGBM,LightGBM,2,Excited/Activated,2,Excited/Activated,166,0.17926565874730022
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,0,Calm,0,Calm,1810,0.7702127659574468
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,0,Calm,1,Medium aroused,460,0.19574468085106383
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,0,Calm,2,Excited/Activated,80,0.03404255319148936
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,1,Medium aroused,0,Calm,846,0.4812286689419795
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,1,Medium aroused,1,Medium aroused,870,0.4948805460750853
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,1,Medium aroused,2,Excited/Activated,42,0.023890784982935155
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,2,Excited/Activated,0,Calm,641,0.6922246220302376
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,2,Excited/Activated,1,Medium aroused,216,0.23326133909287258
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,MLP,MLP,2,Excited/Activated,2,Excited/Activated,69,0.07451403887688984
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,0,Calm,0,Calm,1700,0.723404255319149
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,0,Calm,1,Medium aroused,493,0.2097872340425532
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,0,Calm,2,Excited/Activated,157,0.06680851063829787
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,1,Medium aroused,0,Calm,709,0.4032992036405006
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,1,Medium aroused,1,Medium aroused,965,0.5489192263936291
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,1,Medium aroused,2,Excited/Activated,84,0.04778156996587031
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,2,Excited/Activated,0,Calm,550,0.593952483801296
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,2,Excited/Activated,1,Medium aroused,208,0.22462203023758098
+multiclass_table6_arousal_3class,Table-6 Arousal,subject_loo,SVM,SVM,2,Excited/Activated,2,Excited/Activated,168,0.18142548596112312
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,0,Unpleasant,0,Unpleasant,1107,0.5783699059561128
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,0,Unpleasant,1,Neutral valence,206,0.10762800417972831
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,0,Unpleasant,2,Pleasant,601,0.31400208986415884
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,1,Neutral valence,0,Unpleasant,537,0.394273127753304
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,1,Neutral valence,1,Neutral valence,289,0.21218795888399414
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,1,Neutral valence,2,Pleasant,536,0.3935389133627019
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,2,Pleasant,0,Unpleasant,769,0.43742889647326505
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,2,Pleasant,1,Neutral valence,277,0.15756541524459614
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_attention,GNN,2,Pleasant,2,Pleasant,712,0.4050056882821388
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,0,Unpleasant,0,Unpleasant,959,0.5010449320794148
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,0,Unpleasant,1,Neutral valence,362,0.1891327063740857
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,0,Unpleasant,2,Pleasant,593,0.3098223615464995
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,1,Neutral valence,0,Unpleasant,360,0.2643171806167401
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,1,Neutral valence,1,Neutral valence,307,0.22540381791483113
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,1,Neutral valence,2,Pleasant,695,0.5102790014684288
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,2,Pleasant,0,Unpleasant,713,0.4055745164960182
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,2,Pleasant,1,Neutral valence,281,0.15984072810011377
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,BasicGCN_mean,GNN,2,Pleasant,2,Pleasant,764,0.43458475540386804
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,0,Unpleasant,0,Unpleasant,1032,0.5391849529780565
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,0,Unpleasant,1,Neutral valence,278,0.1452455590386625
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,0,Unpleasant,2,Pleasant,604,0.3155694879832811
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,1,Neutral valence,0,Unpleasant,495,0.3634361233480176
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,1,Neutral valence,1,Neutral valence,309,0.22687224669603523
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,1,Neutral valence,2,Pleasant,558,0.40969162995594716
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,2,Pleasant,0,Unpleasant,846,0.4812286689419795
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,2,Pleasant,1,Neutral valence,388,0.22070534698521047
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GNN_v2,GNN,2,Pleasant,2,Pleasant,524,0.29806598407281
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,0,Unpleasant,950,0.49634273772204807
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,1,Neutral valence,252,0.13166144200626959
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,2,Pleasant,712,0.3719958202716823
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,0,Unpleasant,466,0.342143906020558
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,1,Neutral valence,529,0.38839941262848754
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,2,Pleasant,367,0.26945668135095446
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,0,Unpleasant,824,0.46871444823663255
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,1,Neutral valence,132,0.07508532423208192
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,2,Pleasant,802,0.45620022753128553
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,0,Unpleasant,0,Unpleasant,1071,0.5595611285266457
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,0,Unpleasant,1,Neutral valence,200,0.1044932079414838
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,0,Unpleasant,2,Pleasant,643,0.33594566353187044
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,1,Neutral valence,0,Unpleasant,389,0.2856093979441997
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,1,Neutral valence,1,Neutral valence,546,0.4008810572687225
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,1,Neutral valence,2,Pleasant,427,0.3135095447870778
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,2,Pleasant,0,Unpleasant,671,0.38168373151308305
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,2,Pleasant,1,Neutral valence,207,0.11774744027303755
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,LightGBM,LightGBM,2,Pleasant,2,Pleasant,880,0.5005688282138794
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,0,Unpleasant,0,Unpleasant,1042,0.5444096133751306
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,0,Unpleasant,1,Neutral valence,252,0.13166144200626959
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,0,Unpleasant,2,Pleasant,620,0.3239289446185998
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,1,Neutral valence,0,Unpleasant,452,0.33186490455212925
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,1,Neutral valence,1,Neutral valence,301,0.2209985315712188
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,1,Neutral valence,2,Pleasant,609,0.44713656387665196
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,2,Pleasant,0,Unpleasant,678,0.3856655290102389
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,2,Pleasant,1,Neutral valence,246,0.13993174061433447
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,MLP,MLP,2,Pleasant,2,Pleasant,834,0.47440273037542663
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,0,Unpleasant,0,Unpleasant,1084,0.5663531870428422
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,0,Unpleasant,1,Neutral valence,212,0.11076280041797283
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,0,Unpleasant,2,Pleasant,618,0.322884012539185
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,1,Neutral valence,0,Unpleasant,417,0.30616740088105726
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,1,Neutral valence,1,Neutral valence,570,0.4185022026431718
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,1,Neutral valence,2,Pleasant,375,0.2753303964757709
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,2,Pleasant,0,Unpleasant,644,0.366325369738339
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,2,Pleasant,1,Neutral valence,209,0.11888509670079636
+multiclass_table6_valence_3class,Table-6 Valence,recording_loo,SVM,SVM,2,Pleasant,2,Pleasant,905,0.5147895335608647
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,0,Unpleasant,0,Unpleasant,1158,0.6050156739811913
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,0,Unpleasant,1,Neutral valence,211,0.11024033437826541
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,0,Unpleasant,2,Pleasant,545,0.28474399164054337
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,1,Neutral valence,0,Unpleasant,492,0.36123348017621143
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,1,Neutral valence,1,Neutral valence,510,0.3744493392070485
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,1,Neutral valence,2,Pleasant,360,0.2643171806167401
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,2,Pleasant,0,Unpleasant,662,0.37656427758816835
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,2,Pleasant,1,Neutral valence,185,0.10523321956769056
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_attention,GNN,2,Pleasant,2,Pleasant,911,0.518202502844141
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,0,Unpleasant,0,Unpleasant,1077,0.5626959247648903
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,0,Unpleasant,1,Neutral valence,247,0.1290491118077325
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,0,Unpleasant,2,Pleasant,590,0.30825496342737724
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,1,Neutral valence,0,Unpleasant,421,0.3091042584434655
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,1,Neutral valence,1,Neutral valence,453,0.33259911894273125
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,1,Neutral valence,2,Pleasant,488,0.35829662261380324
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,2,Pleasant,0,Unpleasant,650,0.36973833902161546
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,2,Pleasant,1,Neutral valence,163,0.09271899886234357
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,BasicGCN_mean,GNN,2,Pleasant,2,Pleasant,945,0.537542662116041
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,0,Unpleasant,0,Unpleasant,1144,0.5977011494252874
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,0,Unpleasant,1,Neutral valence,247,0.1290491118077325
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,0,Unpleasant,2,Pleasant,523,0.27324973876698017
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,1,Neutral valence,0,Unpleasant,475,0.3487518355359765
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,1,Neutral valence,1,Neutral valence,561,0.4118942731277533
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,1,Neutral valence,2,Pleasant,326,0.2393538913362702
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,2,Pleasant,0,Unpleasant,690,0.3924914675767918
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,2,Pleasant,1,Neutral valence,240,0.13651877133105803
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GNN_v2,GNN,2,Pleasant,2,Pleasant,828,0.4709897610921502
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,0,Unpleasant,1212,0.6332288401253918
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,1,Neutral valence,167,0.08725182863113898
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,0,Unpleasant,2,Pleasant,535,0.27951933124346917
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,0,Unpleasant,524,0.38472834067547723
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,1,Neutral valence,514,0.37738619676945667
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,1,Neutral valence,2,Pleasant,324,0.23788546255506607
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,0,Unpleasant,650,0.36973833902161546
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,1,Neutral valence,123,0.06996587030716724
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,GazeMAE_MLP,GazeMAE_MLP,2,Pleasant,2,Pleasant,985,0.5602957906712173
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,0,Unpleasant,0,Unpleasant,1211,0.6327063740856844
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,0,Unpleasant,1,Neutral valence,243,0.12695924764890282
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,0,Unpleasant,2,Pleasant,460,0.24033437826541273
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,1,Neutral valence,0,Unpleasant,470,0.34508076358296624
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,1,Neutral valence,1,Neutral valence,579,0.4251101321585903
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,1,Neutral valence,2,Pleasant,313,0.22980910425844348
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,2,Pleasant,0,Unpleasant,531,0.30204778156996587
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,2,Pleasant,1,Neutral valence,215,0.1222980659840728
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,LightGBM,LightGBM,2,Pleasant,2,Pleasant,1012,0.5756541524459613
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,0,Unpleasant,0,Unpleasant,1220,0.6374085684430512
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,0,Unpleasant,1,Neutral valence,208,0.10867293625914315
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,0,Unpleasant,2,Pleasant,486,0.25391849529780564
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,1,Neutral valence,0,Unpleasant,465,0.34140969162995594
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,1,Neutral valence,1,Neutral valence,561,0.4118942731277533
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,1,Neutral valence,2,Pleasant,336,0.24669603524229075
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,2,Pleasant,0,Unpleasant,577,0.3282138794084187
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,2,Pleasant,1,Neutral valence,191,0.10864618885096701
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,MLP,MLP,2,Pleasant,2,Pleasant,990,0.5631399317406144
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,0,Unpleasant,0,Unpleasant,1233,0.6442006269592476
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,0,Unpleasant,1,Neutral valence,247,0.1290491118077325
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,0,Unpleasant,2,Pleasant,434,0.22675026123301986
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,1,Neutral valence,0,Unpleasant,471,0.3458149779735683
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,1,Neutral valence,1,Neutral valence,604,0.4434654919236417
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,1,Neutral valence,2,Pleasant,287,0.21071953010279001
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,2,Pleasant,0,Unpleasant,568,0.323094425483504
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,2,Pleasant,1,Neutral valence,196,0.11149032992036405
+multiclass_table6_valence_3class,Table-6 Valence,subject_loo,SVM,SVM,2,Pleasant,2,Pleasant,994,0.565415244596132

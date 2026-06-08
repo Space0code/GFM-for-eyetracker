@@ -1,0 +1,128 @@
+suite:
+  results_dir: results/quick_v1_v2_comparison/2026-06-03_09-24-45/model_runs
+  seed: 42
+  source_data_root: data/processed/hci-tagging
+  snapshot_cache_dir: results/_snapshot_cache
+  base_configs:
+    binary: src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_binary_hci_tagging.yaml
+    multiclass: src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_multiclass_hci_tagging.yaml
+global_overrides:
+  benchmarking:
+    enabled: true
+    warmup_runs: 1
+    timed_runs: 3
+    synthetic_windows_per_run: 16
+  cross_validation:
+    strategies:
+    - subject_loo
+    - recording_loo
+    n_splits: 5
+    val_size: 2
+    random_state: 42
+  gnn:
+    model:
+      conv_type: GCNConv
+      model_version: BasicGCN
+      head_pooling: attention
+      graph_pooling: attention
+      relation_pooling: mlp
+      pooling: mean_max
+      num_layers: 2
+      hidden_channels: 64
+      readout: mean
+    training:
+      early_stopping_enabled: true
+      early_stopping_patience: 20
+      early_stopping_min_delta: 0.0
+      early_stopping_restore_best: true
+      learning_rate: 5.0e-05
+      num_epochs: 500
+      batch_size: 256
+      num_workers: 4
+      use_torch_compile: false
+  dataset:
+    use_cache: true
+    label_mapping_spec_path: specifications/hci_to_GFM_spec.yaml
+    kt: 1
+    ks: 1
+    use_edge_weights: true
+    graph_version: v2
+    edge_weight_mode: learned_signed
+    use_relative_time: true
+    use_distance_avg: true
+    use_fixation_duration: true
+    use_delta_distance_edge_feature: true
+    use_fixation_edges: true
+    fixation_dilation_k: 3
+    standardize_edge_features: true
+    filter_subjects: null
+    exclude_subjects:
+    - P9
+    - P12
+    - P15
+    filter_recordings: null
+    min_samples_per_window: 60
+    target_aggregation: mean
+    signal_outlier_filter:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+      columns:
+      - x-avg
+      - y-avg
+      - pupil-size-left-avg
+      - pupil-size-right-avg
+  run_experiments:
+    baselines: false
+    gnn: true
+experiments:
+- id: multiclass_table6_arousal_3class
+  enabled: true
+  task_type: multiclass
+  experiment_group: multiclass
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  task_name: table6-arousal-3class
+  use_table6_3class_targets: true
+  target_column: emotion-id
+  drop_unmapped_labels: true
+  class_name_mapping:
+    0: Calm
+    1: Medium aroused
+    2: Excited/Activated
+  table6_class_mapping:
+    0: 0
+    1: 2
+    2: 0
+    3: 2
+    4: 1
+    5: 0
+    6: 2
+    11: 1
+    12: 2
+- id: multiclass_table6_valence_3class
+  enabled: true
+  task_type: multiclass
+  experiment_group: multiclass
+  scopes:
+  - emotion-elicitation
+  overrides: {}
+  task_name: table6-valence-3class
+  use_table6_3class_targets: true
+  target_column: emotion-id
+  drop_unmapped_labels: true
+  class_name_mapping:
+    0: Unpleasant
+    1: Neutral valence
+    2: Pleasant
+  table6_class_mapping:
+    0: 1
+    1: 0
+    2: 0
+    3: 0
+    4: 2
+    5: 0
+    6: 1
+    11: 2
+    12: 0
