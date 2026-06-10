@@ -84,6 +84,15 @@ from emotions.gazemae_baseline import (
     build_gazemae_tabular_samples,
     resolve_gazemae_config,
 )
+from emotions.moment_baseline import (
+    MOMENT_FEATURE_COLUMNS,
+    MOMENT_FUSION_MODEL_NAMES,
+    MOMENT_MODEL_NAMES,
+    MOMENT_MODEL_TO_SIGNAL_SUBSET,
+    build_moment_gazemae_fusion_samples,
+    build_moment_tabular_samples,
+    moment_frozen_parameter_count,
+)
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 from emotions.multiclass.model_multiclass import (
@@ -120,6 +129,8 @@ BaselineSplit = Tuple[
     List[Tuple[str, str]],
     StandardScaler | None,
 ]
+
+EmbeddingSampleMap = Dict[str, List[Any]]
 
 
 def parse_args() -> argparse.Namespace:
@@ -1107,6 +1118,7 @@ def _train_baselines_fold(
     baseline_cfg: Dict[str, Any],
     benchmark_cfg: Dict[str, Any],
     gazemae_cfg: Dict[str, Any],
+    moment_cfg: Dict[str, Any],
     window_seconds: float,
     train_idx: np.ndarray,
     val_idx: np.ndarray,
@@ -1120,6 +1132,7 @@ def _train_baselines_fold(
     standardize_features: bool,
     feature_columns: List[str],
     gazemae_samples: List[Any] | None = None,
+    embedding_samples: EmbeddingSampleMap | None = None,
     verbose: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
     baselines_dir = os.path.join(fold_dir, "baselines")
@@ -1183,6 +1196,19 @@ def _train_baselines_fold(
                 split_samples=gazemae_samples,
                 split_feature_columns=GAZEMAE_FEATURE_COLUMNS,
             )
+        elif model_name in MOMENT_MODEL_NAMES:
+            if embedding_samples is None or model_name not in embedding_samples:
+                raise ValueError(f"{model_name} requested but its frozen embedding samples were not built.")
+            model_feature_columns = (
+                [*MOMENT_FEATURE_COLUMNS, *GAZEMAE_FEATURE_COLUMNS]
+                if model_name in MOMENT_FUSION_MODEL_NAMES
+                else MOMENT_FEATURE_COLUMNS
+            )
+            X_train, y_train, X_val, y_val, X_test, y_test, test_meta, scaler = prepare_kind(
+                kind=model_name,
+                split_samples=embedding_samples[model_name],
+                split_feature_columns=model_feature_columns,
+            )
         else:
             X_train, y_train, X_val, y_val, X_test, y_test, test_meta, scaler = prepare_kind(
                 kind="tabular",
@@ -1207,7 +1233,7 @@ def _train_baselines_fold(
             else:
                 model.fit(X_train, y_train)
         fit_seconds = time.perf_counter() - fit_started
-        if model_name in {"MLP", GAZEMAE_MODEL_NAME}:
+        if model_name in {"MLP", GAZEMAE_MODEL_NAME, *MOMENT_MODEL_NAMES}:
             _save_mlp_training_history(
                 model=model,
                 output_path=os.path.join(model_dir, "mlp_training_history.csv"),
@@ -1237,6 +1263,7 @@ def _train_baselines_fold(
                 parameter_scope = "not_applicable_for_classical_model"
 
             resolved_gazemae = None
+            is_moment_model = model_name in MOMENT_MODEL_NAMES
             if model_name == GAZEMAE_MODEL_NAME:
                 resolved_gazemae = resolve_gazemae_config(gazemae_cfg, dataset_cfg={})
                 frozen_encoder_parameters = count_gazemae_encoder_parameters(
@@ -1251,6 +1278,24 @@ def _train_baselines_fold(
                     "head_total_parameters": int(head_total),
                 }
                 parameter_scope = "frozen_gazemae_encoders_plus_trainable_mlp_head"
+            elif is_moment_model:
+                frozen_encoder_parameters = moment_frozen_parameter_count(moment_cfg)
+                if model_name in MOMENT_FUSION_MODEL_NAMES:
+                    resolved_gazemae = resolve_gazemae_config(gazemae_cfg, dataset_cfg={})
+                    frozen_encoder_parameters += count_gazemae_encoder_parameters(
+                        [resolved_gazemae.model_pos, resolved_gazemae.model_vel]
+                    )
+                    parameter_scope = "frozen_moment_gazemae_encoders_plus_trainable_mlp_head"
+                else:
+                    parameter_scope = "frozen_moment_encoder_plus_trainable_mlp_head"
+                head_trainable = parameter_counts["trainable_parameters"] or 0
+                head_total = parameter_counts["total_parameters"] or 0
+                parameter_counts = {
+                    "trainable_parameters": int(head_trainable),
+                    "total_parameters": int(head_total + frozen_encoder_parameters),
+                    "frozen_parameters": int(frozen_encoder_parameters),
+                    "head_total_parameters": int(head_total),
+                }
 
             training_history = getattr(model, "training_history_", None) or []
             epochs_completed = len(training_history) if training_history else None
@@ -1298,6 +1343,8 @@ def _train_baselines_fold(
                         inference_scope=(
                             "cached_gazemae_embedding_mlp_head_predict_proba"
                             if model_name == GAZEMAE_MODEL_NAME
+                            else "cached_frozen_embedding_mlp_head_predict_proba"
+                            if is_moment_model
                             else "tabular_predict_proba"
                         ),
                     )
@@ -1442,8 +1489,13 @@ def run_training_from_config(config_path: str) -> str:
 
         base_tabular_samples = None
         base_gazemae_samples = None
+        base_embedding_samples: EmbeddingSampleMap = {}
         baseline_model_names = list(config.get("baselines", {}).get("models", []))
-        needs_gazemae = run_experiments["baselines"] and GAZEMAE_MODEL_NAME in baseline_model_names
+        requested_moment_models = [name for name in baseline_model_names if name in MOMENT_MODEL_NAMES]
+        needs_gazemae = run_experiments["baselines"] and (
+            GAZEMAE_MODEL_NAME in baseline_model_names
+            or any(name in MOMENT_FUSION_MODEL_NAMES for name in requested_moment_models)
+        )
         if run_experiments["baselines"]:
             print("Loading tabular samples for baselines...")
             base_tabular_samples = build_tabular_samples(
@@ -1472,6 +1524,41 @@ def run_training_from_config(config_path: str) -> str:
                         f"{len(base_gazemae_samples)} vs {len(base_tabular_samples)}."
                     )
                 print(f"Loaded {len(base_gazemae_samples)} GazeMAE embedding samples")
+            if requested_moment_models:
+                unique_subsets = list(
+                    dict.fromkeys(MOMENT_MODEL_TO_SIGNAL_SUBSET[name] for name in requested_moment_models)
+                )
+                moment_samples_by_subset: Dict[str, List[Any]] = {}
+                for subset in unique_subsets:
+                    print(f"Loading frozen MOMENT embeddings for subset '{subset}'...")
+                    subset_samples = build_moment_tabular_samples(
+                        dataset_cfg=dataset_cfg,
+                        target_columns=target_columns,
+                        feature_columns=feature_columns,
+                        dropna_columns=dropna_columns,
+                        min_samples_per_window=min_samples_per_window,
+                        moment_cfg=config.get("moment", {}),
+                        signal_subset=subset,
+                    )
+                    if len(subset_samples) != len(base_tabular_samples):
+                        raise ValueError(
+                            f"MOMENT sample count for subset '{subset}' does not match tabular baseline count: "
+                            f"{len(subset_samples)} vs {len(base_tabular_samples)}."
+                        )
+                    print(f"Loaded {len(subset_samples)} MOMENT '{subset}' embedding samples")
+                    moment_samples_by_subset[subset] = subset_samples
+
+                for model_name in requested_moment_models:
+                    subset = MOMENT_MODEL_TO_SIGNAL_SUBSET[model_name]
+                    if model_name in MOMENT_FUSION_MODEL_NAMES:
+                        if base_gazemae_samples is None:
+                            raise ValueError(f"{model_name} requested but GazeMAE samples were not built.")
+                        base_embedding_samples[model_name] = build_moment_gazemae_fusion_samples(
+                            moment_samples=moment_samples_by_subset[subset],
+                            gazemae_samples=base_gazemae_samples,
+                        )
+                    else:
+                        base_embedding_samples[model_name] = moment_samples_by_subset[subset]
 
         downsampling_cfg = _resolve_class_downsampling_cfg(multiclass_task_cfg)
         downsampling_metadata: Dict[str, Any] = {
@@ -1510,6 +1597,11 @@ def run_training_from_config(config_path: str) -> str:
                 base_tabular_samples = [base_tabular_samples[int(idx)] for idx in baseline_keep_idx]
                 if base_gazemae_samples is not None:
                     base_gazemae_samples = [base_gazemae_samples[int(idx)] for idx in baseline_keep_idx]
+                if base_embedding_samples:
+                    base_embedding_samples = {
+                        model_name: [samples[int(idx)] for idx in baseline_keep_idx]
+                        for model_name, samples in base_embedding_samples.items()
+                    }
                 downsampling_metadata["datasets"]["baselines"] = baseline_sampling_info
                 print(
                     "  Baseline class counts before/after: "
@@ -1744,6 +1836,7 @@ def run_training_from_config(config_path: str) -> str:
                         baseline_cfg=config["baselines"],
                         benchmark_cfg=resolve_benchmark_config(config),
                         gazemae_cfg=config.get("gazemae", {}),
+                        moment_cfg=config.get("moment", {}),
                         window_seconds=float(dataset_cfg.get("window_length", 10)),
                         train_idx=baseline_train_idx,
                         val_idx=baseline_val_idx,
@@ -1757,6 +1850,7 @@ def run_training_from_config(config_path: str) -> str:
                         standardize_features=standardize_features,
                         feature_columns=feature_columns,
                         gazemae_samples=base_gazemae_samples,
+                        embedding_samples=base_embedding_samples,
                         verbose=verbose,
                     )
                     for model_name, metrics in baseline_results.items():

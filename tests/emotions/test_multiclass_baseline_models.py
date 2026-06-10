@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
+from emotions.moment_baseline import MOMENT_MODEL_NAMES
 from emotions.utils import validate_config
 
 
@@ -49,3 +50,10 @@ def test_validate_config_accepts_multiclass_random_and_majority_baselines() -> N
     }
 
     validate_config(config)
+
+
+def test_multiclass_factory_accepts_moment_embedding_baselines() -> None:
+    for model_name in sorted(MOMENT_MODEL_NAMES):
+        model = get_multiclass_baseline_by_name(model_name)
+
+        assert model.name == model_name

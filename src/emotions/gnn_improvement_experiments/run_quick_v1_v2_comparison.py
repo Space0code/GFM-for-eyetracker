@@ -47,6 +47,7 @@ if __package__ in {None, ""}:
         sys.path.insert(0, str(src_dir))
 
 from emotions.common.model_benchmarking import load_benchmark_records, summarize_benchmark_records
+from emotions.moment_baseline import MOMENT_MODEL_NAMES
 from emotions.suite.config_merge import merge_many
 from emotions.suite.run_hci_experiment_suite import run_suite
 from emotions.utils import TimestampedLineWriter
@@ -71,7 +72,7 @@ EXPERIMENT_DISPLAY_NAMES = {
     VALENCE_EXPERIMENT_ID: "Table-6 Valence",
 }
 DEFAULT_MODELS = ["Random", "Majority", "BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights", "LightGBM"]
-BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
+BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"} | MOMENT_MODEL_NAMES
 GNN_MODELS = {"BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights"}
 PREFERRED_MODEL_ORDER = [
     "Random",
@@ -81,6 +82,12 @@ PREFERRED_MODEL_ORDER = [
     "HeteroGCNMLP",
     "HeteroGCNMLPWeights",
     "GazeMAE_MLP",
+    "MOMENT_gaze",
+    "MOMENT_pupil",
+    "MOMENT_gaze_pupil",
+    "MOMENT_all_signals",
+    "MOMENT_GazeMAE_gaze_pupil",
+    "MOMENT_GazeMAE_all_signals",
     "MLP",
     "LightGBM",
     "SVM",
@@ -94,6 +101,12 @@ MODEL_COLOR_PALETTE = {
     "HeteroGCNMLP": "#4C9BB0",
     "HeteroGCNMLPWeights": "#C44E52",
     "GazeMAE_MLP": "#8172B3",
+    "MOMENT_gaze": "#44AA99",
+    "MOMENT_pupil": "#88CCEE",
+    "MOMENT_gaze_pupil": "#117733",
+    "MOMENT_all_signals": "#999933",
+    "MOMENT_GazeMAE_gaze_pupil": "#AA4499",
+    "MOMENT_GazeMAE_all_signals": "#CC6677",
     "MLP": "#937860",
     "LightGBM": "#DA8BC3",
     "SVM": "#8C8C8C",
@@ -121,6 +134,23 @@ MODEL_ALIASES = {
     "gazemae-mlp": "GazeMAE_MLP",
     "gaze_mae": "GazeMAE_MLP",
     "gaze_mae_mlp": "GazeMAE_MLP",
+    "moment": "MOMENT_all_signals",
+    "moment_mlp": "MOMENT_all_signals",
+    "moment_gaze": "MOMENT_gaze",
+    "moment-gaze": "MOMENT_gaze",
+    "moment_pupil": "MOMENT_pupil",
+    "moment-pupil": "MOMENT_pupil",
+    "moment_gaze_pupil": "MOMENT_gaze_pupil",
+    "moment-gaze-pupil": "MOMENT_gaze_pupil",
+    "moment_gaze+pupil": "MOMENT_gaze_pupil",
+    "moment_all": "MOMENT_all_signals",
+    "moment_all_signals": "MOMENT_all_signals",
+    "moment-all-signals": "MOMENT_all_signals",
+    "moment_gazemae_gaze_pupil": "MOMENT_GazeMAE_gaze_pupil",
+    "moment-gazemae-gaze-pupil": "MOMENT_GazeMAE_gaze_pupil",
+    "moment_gazemae_all": "MOMENT_GazeMAE_all_signals",
+    "moment_gazemae_all_signals": "MOMENT_GazeMAE_all_signals",
+    "moment-gazemae-all-signals": "MOMENT_GazeMAE_all_signals",
     "basicgcn": "BasicGCN",
     "basic_gcn": "BasicGCN",
     "basic-gcn": "BasicGCN",
@@ -186,7 +216,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Comma-separated models: Random,Majority,BasicGCN,HeteroGCNMean,HeteroGCNMLP,"
-            "HeteroGCNMLPWeights,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
+            "HeteroGCNMLPWeights,Mean,SVM,LightGBM,MLP,GazeMAE_MLP,"
+            "MOMENT_gaze,MOMENT_pupil,MOMENT_gaze_pupil,MOMENT_all_signals,"
+            "MOMENT_GazeMAE_gaze_pupil,MOMENT_GazeMAE_all_signals. "
             "Common lowercase aliases like random, majority, basicgcn, heterogcnmlp, and lgbm are accepted. "
             "By default, use quick_comparison.models from the YAML config."
         ),
@@ -1058,6 +1090,12 @@ def _save_model_benchmark_outputs(
         "SVM",
         "MLP",
         "GazeMAE_MLP",
+        "MOMENT_gaze",
+        "MOMENT_pupil",
+        "MOMENT_gaze_pupil",
+        "MOMENT_all_signals",
+        "MOMENT_GazeMAE_gaze_pupil",
+        "MOMENT_GazeMAE_all_signals",
         "BasicGCN",
         "HeteroGCNMean",
         "HeteroGCNMLP",
@@ -1599,7 +1637,7 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
     for row in successful_rows:
         model_name = str(row.get("model", ""))
         summary_model_name = str(row.get("summary_model_name", ""))
-        if summary_model_name != "GNN" and model_name not in {"MLP", "GazeMAE_MLP"}:
+        if summary_model_name != "GNN" and model_name not in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
             continue
 
         experiment_id = str(row.get("experiment_id", ""))
@@ -1623,7 +1661,7 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
             if summary_model_name == "GNN":
                 history_path = fold_dir / "gnn_training_history.csv"
                 history_kind = "gnn"
-            elif model_name in {"MLP", "GazeMAE_MLP"}:
+            elif model_name in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
                 history_path = fold_dir / "baselines" / model_name / "mlp_training_history.csv"
                 history_kind = str(model_name).lower()
             else:
@@ -1715,7 +1753,10 @@ def _compute_saved_prediction_log_loss(prediction_path: Path, target_path: Path)
         return None
 
     labels = np.arange(y_pred.shape[1], dtype=int)
-    return float(log_loss(y_true, y_pred, labels=labels))
+    try:
+        return float(log_loss(y_true, y_pred, labels=labels))
+    except ValueError:
+        return None
 
 
 def _load_fold_test_losses(
@@ -1747,7 +1788,7 @@ def _load_fold_test_losses(
         if summary_model_name == "GNN":
             prediction_path = fold_dir / "test_predictions.npy"
             target_path = fold_dir / "test_targets.npy"
-        elif model_name in {"MLP", "GazeMAE_MLP"}:
+        elif model_name in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
             prediction_path = fold_dir / "baselines" / model_name / "test_predictions.npy"
             target_path = fold_dir / "baselines" / model_name / "test_targets.npy"
         else:

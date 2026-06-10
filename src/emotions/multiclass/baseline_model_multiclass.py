@@ -13,6 +13,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 from emotions.gazemae_baseline import GAZEMAE_MODEL_NAME
+from emotions.moment_baseline import MOMENT_MODEL_NAMES
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 
 
@@ -625,6 +626,14 @@ class GazeMAEMLPMulticlassBaseline(MulticlassBaselineModel):
         self.device = torch.device("cpu")
 
 
+class FrozenEmbeddingMLPMulticlassBaseline(GazeMAEMLPMulticlassBaseline):
+    """PyTorch MLP head trained on generic frozen window embeddings."""
+
+    def __init__(self, model_name: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.name = str(model_name)
+
+
 def get_multiclass_baseline_by_name(model_name: str, **hyperparams: Any) -> MulticlassBaselineModel:
     """Factory for multiclass baseline estimators."""
     models = {
@@ -636,8 +645,11 @@ def get_multiclass_baseline_by_name(model_name: str, **hyperparams: Any) -> Mult
         "MLP": MLPMulticlassBaseline,
         GAZEMAE_MODEL_NAME: GazeMAEMLPMulticlassBaseline,
     }
+    if model_name in MOMENT_MODEL_NAMES:
+        return FrozenEmbeddingMLPMulticlassBaseline(model_name=model_name, **hyperparams)
     if model_name not in models:
         raise ValueError(
-            f"Unknown multiclass baseline '{model_name}'. Supported: {sorted(models.keys())}"
+            f"Unknown multiclass baseline '{model_name}'. "
+            f"Supported: {sorted(set(models.keys()) | set(MOMENT_MODEL_NAMES))}"
         )
     return models[model_name](**hyperparams)

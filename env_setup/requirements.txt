@@ -63,6 +63,7 @@ MarkupSafe
 matplotlib
 matplotlib-inline
 mistune
+momentfm
 mkl_fft
 mkl_random
 mkl-service

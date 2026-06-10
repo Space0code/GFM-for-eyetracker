@@ -121,6 +121,22 @@ def test_quick_model_parser_accepts_yaml_list() -> None:
     assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "HeteroGCNMLPWeights"]
 
 
+def test_quick_model_parser_accepts_moment_embedding_aliases() -> None:
+    parsed = _parse_models(
+        "moment_gaze,moment_pupil,moment_gaze_pupil,moment_all_signals,"
+        "moment_gazemae_gaze_pupil,moment_gazemae_all_signals"
+    )
+
+    assert parsed == [
+        "MOMENT_gaze",
+        "MOMENT_pupil",
+        "MOMENT_gaze_pupil",
+        "MOMENT_all_signals",
+        "MOMENT_GazeMAE_gaze_pupil",
+        "MOMENT_GazeMAE_all_signals",
+    ]
+
+
 def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
     wrapper_cfg = {
         "quick_comparison": {

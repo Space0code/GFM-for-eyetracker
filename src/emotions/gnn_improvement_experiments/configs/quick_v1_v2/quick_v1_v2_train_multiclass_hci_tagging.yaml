@@ -128,6 +128,66 @@ baselines:
       batch_size: 128
       random_state: 42
       device: auto
+    MOMENT_gaze:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_gaze_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_all_signals:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_GazeMAE_gaze_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_GazeMAE_all_signals:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
 
 gazemae:
   model_pos: "models/gazemae/pos-i3738-encoder-state.pt"
@@ -141,6 +201,15 @@ gazemae:
   batch_size: 256
   device: auto
   cache_embeddings: true
+
+moment:
+  model_name: "AutonLab/MOMENT-1-base"
+  sequence_length: 512
+  batch_size: 64
+  device: auto
+  cache_embeddings: true
+  cache_dir: "data/cache/moment_embeddings"
+  local_files_only: false
 
 gnn:
   model:
