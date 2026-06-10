@@ -36,6 +36,7 @@ recent work, plans, or decisions.
 ## Locked Decisions
 
 - Use the `gfm` conda environment for Python work.
+- When giving user-facing Python commands, assume Tomi has already activated the `gfm` conda environment; write commands as plain `python ...` rather than `conda run -n gfm python ...`, and only mention that the `gfm` environment should be active.
 - When an extra Python visualization/analysis package would materially help, ask before installing it; if approved, install it into the `gfm` conda environment with `pip`. On 2026-05-14, Plotly was approved and installed for interactive graph-window visualization.
 - Ignore files under `archive/`.
 - Treat `diploma_knowledge_base.md` as the live thesis/project knowledge base as of 2026-05-02.

@@ -36,6 +36,7 @@ thesis synthesis in `diploma_knowledge_base.md`, and detailed run history in
 - When writing code for creating heatmaps, use color scheme "Blues".
 - Ask questions regularly, except requested to implement something right away.
 - The cli command that runs a script should be simple. User should be able to simply run python <script_name>.py For every argument, there should be a sensible default (unless stated otherwise or unless I removed it). Log the final arguments at the beginning of the script run for transparency.
+- When giving Tomi commands to run, assume the `gfm` conda environment is already active and write commands as plain `python ...`, not `conda run -n gfm python ...`. Briefly mention that the command should be run with the `gfm` environment active when useful.
 - For presenting comparisons in your answer prefer tables.
 - You are always allowed to run terminal commands that remove files you created from /tmp. E.g., you are allowed to run rm -rf /tmp/matplotlib-* and similar. Don’t ask me about this. 
 - In this repo, we ran multiple experiments already and tried many different things. When I ask you about some experiment/training/model/data information, check the latest git commit(s) and assume I am talking about the experiments we modified most recently. When you do such an assumption, make it explicit and clear. If you are unsure which experiment/data/model I had in mind, ask me before proceeding. 
@@ -45,6 +46,7 @@ thesis synthesis in `diploma_knowledge_base.md`, and detailed run history in
 ## Conda environment
 - We always use conda environments.
 - When using python, first activate conda environment named `gfm`.
+- For user-facing command examples, do not prefix Python commands with `conda run -n gfm`; use plain `python ...` and mention the expected active environment instead.
 
 ## Hardware
 - OS: Ubuntu
