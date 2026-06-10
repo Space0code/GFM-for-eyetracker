@@ -25,7 +25,7 @@ global_overrides:
     random_state: 42
   gnn:
     model:
-      model_version: v2
+      model_version: HeteroGCNMLPWeights
       head_pooling: attention
       graph_pooling: attention
       relation_pooling: mlp

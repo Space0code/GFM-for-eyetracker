@@ -14,7 +14,7 @@ Example:
 
 Useful options:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
-      --models Random,Majority,GNN_v1,BasicGCN_mean,BasicGCN_attention,GNN_v2,GazeMAE_MLP,MLP,LightGBM,SVM \
+      --models Random,Majority,BasicGCN,HeteroGCNMean,HeteroGCNMLP,HeteroGCNMLPWeights,GazeMAE_MLP,MLP,LightGBM,SVM \
       --num-epochs 20 \
       --dry-run
 """
@@ -70,29 +70,29 @@ EXPERIMENT_DISPLAY_NAMES = {
     AROUSAL_EXPERIMENT_ID: "Table-6 Arousal",
     VALENCE_EXPERIMENT_ID: "Table-6 Valence",
 }
-DEFAULT_MODELS = ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
+DEFAULT_MODELS = ["Random", "Majority", "BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights", "LightGBM"]
 BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "GazeMAE_MLP"}
-GNN_MODELS = {"GNN_v1", "BasicGCN", "BasicGCN_mean", "BasicGCN_attention", "GNN_v2"}
+GNN_MODELS = {"BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights"}
 PREFERRED_MODEL_ORDER = [
     "Random",
     "Majority",
-    "GNN_v1",
     "BasicGCN",
-    "BasicGCN_mean",
-    "BasicGCN_attention",
-    "GNN_v2",
+    "HeteroGCNMean",
+    "HeteroGCNMLP",
+    "HeteroGCNMLPWeights",
     "GazeMAE_MLP",
     "MLP",
+    "LightGBM",
+    "SVM",
 ]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 MODEL_COLOR_PALETTE = {
     "Random": "#4C72B0",
     "Majority": "#DD8452",
-    "GNN_v1": "#55A868",
     "BasicGCN": "#64B5CD",
-    "BasicGCN_mean": "#64B5CD",
-    "BasicGCN_attention": "#4C9BB0",
-    "GNN_v2": "#C44E52",
+    "HeteroGCNMean": "#55A868",
+    "HeteroGCNMLP": "#4C9BB0",
+    "HeteroGCNMLPWeights": "#C44E52",
     "GazeMAE_MLP": "#8172B3",
     "MLP": "#937860",
     "LightGBM": "#DA8BC3",
@@ -121,26 +121,23 @@ MODEL_ALIASES = {
     "gazemae-mlp": "GazeMAE_MLP",
     "gaze_mae": "GazeMAE_MLP",
     "gaze_mae_mlp": "GazeMAE_MLP",
-    "gnn1": "GNN_v1",
-    "gnn_v1": "GNN_v1",
-    "gnn-v1": "GNN_v1",
-    "v1": "GNN_v1",
     "basicgcn": "BasicGCN",
     "basic_gcn": "BasicGCN",
     "basic-gcn": "BasicGCN",
     "gcn": "BasicGCN",
-    "basicgcn_mean": "BasicGCN_mean",
-    "basic_gcn_mean": "BasicGCN_mean",
-    "basic-gcn-mean": "BasicGCN_mean",
-    "gcn_mean": "BasicGCN_mean",
-    "basicgcn_attention": "BasicGCN_attention",
-    "basic_gcn_attention": "BasicGCN_attention",
-    "basic-gcn-attention": "BasicGCN_attention",
-    "gcn_attention": "BasicGCN_attention",
-    "gnn2": "GNN_v2",
-    "gnn_v2": "GNN_v2",
-    "gnn-v2": "GNN_v2",
-    "v2": "GNN_v2",
+    "heterogcnmean": "HeteroGCNMean",
+    "hetero_gcn_mean": "HeteroGCNMean",
+    "hetero-gcn-mean": "HeteroGCNMean",
+    "heterogcn_mean": "HeteroGCNMean",
+    "heterogcnmlp": "HeteroGCNMLP",
+    "hetero_gcn_mlp": "HeteroGCNMLP",
+    "hetero-gcn-mlp": "HeteroGCNMLP",
+    "heterogcn_mlp": "HeteroGCNMLP",
+    "heterogcnmlpweights": "HeteroGCNMLPWeights",
+    "hetero_gcn_mlp_weights": "HeteroGCNMLPWeights",
+    "hetero-gcn-mlp-weights": "HeteroGCNMLPWeights",
+    "heterogcn_mlp_weights": "HeteroGCNMLPWeights",
+    "weighted_heterogcn": "HeteroGCNMLPWeights",
 }
 
 
@@ -167,7 +164,7 @@ class QuickRun:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Run quick GNN v1/v2 comparison")
+    parser = argparse.ArgumentParser(description="Run quick GNN architecture comparison")
     parser.add_argument(
         "--base-config",
         type=str,
@@ -188,9 +185,9 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Comma-separated models: Random,Majority,GNN_v1,BasicGCN,BasicGCN_mean,BasicGCN_attention,"
-            "GNN_v2,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
-            "Common lowercase aliases like random, majority, gnn1, basicgcn, gnn2, and lgbm are accepted. "
+            "Comma-separated models: Random,Majority,BasicGCN,HeteroGCNMean,HeteroGCNMLP,"
+            "HeteroGCNMLPWeights,Mean,SVM,LightGBM,MLP,GazeMAE_MLP. "
+            "Common lowercase aliases like random, majority, basicgcn, heterogcnmlp, and lgbm are accepted. "
             "By default, use quick_comparison.models from the YAML config."
         ),
     )
@@ -460,65 +457,28 @@ def build_fixed_overrides(args: argparse.Namespace, run_output_dir: Path | None 
 
 def build_variant(model_name: str) -> QuickVariant:
     """Build one variant override block."""
-    if model_name == "GNN_v1":
-        return QuickVariant(
-            model_name=model_name,
-            description="Frozen v1 GNN with old graph schema and handcrafted edge attributes.",
-            summary_model_name="GNN",
-            overrides={
-                "global_overrides": {
-                    "run_experiments": {"baselines": False, "gnn": True},
-                    # Keep the variant override limited to what makes v1 v1.
-                    # Architecture knobs such as conv_type, pooling, depth, and
-                    # hidden size belong in YAML so v1/v2 comparisons share them.
-                    "dataset": {
-                        "graph_version": "v1",
-                        "edge_weight_mode": "handcrafted",
-                        "use_edge_weights": True,
-                    },
-                    "gnn": {
-                        "model": {
-                            "model_version": "v1",
-                        }
-                    },
-                }
-            },
-        )
-    if model_name == "GNN_v2":
-        return QuickVariant(
-            model_name=model_name,
-            description=(
-                "Current v2 GNN with split temporal edges and learned signed edge attributes."
-            ),
-            summary_model_name="GNN",
-            overrides={
-                "global_overrides": {
-                    "run_experiments": {"baselines": False, "gnn": True},
-                    # Keep the variant override limited to what makes v2 v2.
-                    # Shared architecture choices are configured in the wrapper
-                    # YAML, which keeps GNN_v1/GNN_v2 comparisons fair by default.
-                    "dataset": {
-                        "graph_version": "v2",
-                        "edge_weight_mode": "learned_signed",
-                        "use_edge_weights": True,
-                    },
-                    "gnn": {
-                        "model": {
-                            "model_version": "v2",
-                            "edge_weight_mode": "learned_signed",
-                        }
-                    },
-                }
-            },
-        )
-    if model_name in {"BasicGCN", "BasicGCN_mean", "BasicGCN_attention"}:
-        readout = "attention" if model_name == "BasicGCN_attention" else "mean"
-        return QuickVariant(
-            model_name=model_name,
-            description=(
+    if model_name in GNN_MODELS:
+        descriptions = {
+            "BasicGCN": (
                 "Homogeneous GCN baseline over the v2 graph schema with collapsed, "
-                f"deduplicated relations, no edge attributes, and {readout} readout."
+                "deduplicated relations, no edge attributes, and attention readout."
             ),
+            "HeteroGCNMean": (
+                "Heterogeneous GCN with separate temporal, spatial, and fixation relation paths, "
+                "mean relation fusion, no edge weights, and attention readout."
+            ),
+            "HeteroGCNMLP": (
+                "Heterogeneous GCN with separate relation paths, MLP relation fusion, "
+                "no edge weights, and attention readout."
+            ),
+            "HeteroGCNMLPWeights": (
+                "Heterogeneous GCN with MLP relation fusion, learned signed edge weights, "
+                "and attention readout."
+            ),
+        }
+        return QuickVariant(
+            model_name=model_name,
+            description=descriptions[model_name],
             summary_model_name="GNN",
             overrides={
                 "global_overrides": {
@@ -530,9 +490,7 @@ def build_variant(model_name: str) -> QuickVariant:
                     },
                     "gnn": {
                         "model": {
-                            "model_version": "BasicGCN",
-                            "conv_type": "GCNConv",
-                            "readout": readout,
+                            "model_version": model_name,
                         }
                     },
                 }
@@ -1100,9 +1058,10 @@ def _save_model_benchmark_outputs(
         "SVM",
         "MLP",
         "GazeMAE_MLP",
-        "BasicGCN_mean",
-        "BasicGCN_attention",
-        "GNN_v2",
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
     ]
     main_report = benchmark_summary[benchmark_summary["model"].isin(main_models)].copy()
     if not main_report.empty:

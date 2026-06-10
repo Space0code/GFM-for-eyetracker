@@ -1,171 +1,25 @@
-"""Spatio-temporal GNN building blocks for emotion tasks."""
+"""Spatio-temporal GCN building blocks for emotion tasks."""
+
+from __future__ import annotations
+
+from typing import Literal
 
 import torch
 import torch.nn as nn
-from torch_geometric.nn import GATConv, GCNConv, HeteroConv, global_add_pool, global_max_pool, global_mean_pool
+from torch_geometric.nn import GCNConv, global_add_pool
 from torch_geometric.utils import softmax
 
-class SpatioTemporalHeteroGNNV1(nn.Module):
-    """Frozen v1 spatio-temporal heterogeneous GNN architecture.
 
-    This class preserves the pre-v2 architecture: one temporal relation, one
-    spatial relation, PyG HeteroConv relation aggregation, and mean/mean_max
-    graph pooling.
-    """
-
-    def __init__(
-            self, in_channels: int, hidden_channels: int, out_channels: int, 
-            output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
-            dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
-            aggr: str = "mean", conv_type: str = "GCNConv",
-            num_layers: int = 2, pooling: str = "mean_max",
-            ):
-        super().__init__()
-        if num_layers < 1:
-            raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
-        if pooling not in {"mean", "mean_max"}:
-            raise ValueError(
-                f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'."
-            )
-
-        # Preprocessing MLP 
-        self.use_preprocess_mlp = use_preprocess_mlp
-        if self.use_preprocess_mlp:
-            # print("Using preprocessing MLP for input features.")
-            self.preprocess_mlp = nn.Sequential(
-                nn.Linear(in_channels, hidden_channels),
-                nn.GELU(),
-                nn.LayerNorm(hidden_channels),
-                nn.Dropout(p=dropout_mlp),
-                nn.Linear(hidden_channels, hidden_channels),
-                nn.LayerNorm(hidden_channels),
-            )
-
-            conv1_in_channels = hidden_channels
-        else:
-            # print("Not using preprocessing MLP for input features.")
-            conv1_in_channels = in_channels
-
-        # Select convolutional layer type
-        if conv_type == "GCNConv":
-            ConvLayer = GCNConv
-            conv_kwargs = {"add_self_loops": add_self_loops}
-            self.supports_scalar_edge_weights = True
-        elif conv_type == "GATConv":
-            ConvLayer = GATConv
-            conv_kwargs = {"add_self_loops": add_self_loops}
-            # GATConv computes attention coefficients internally and does not
-            # consume the scalar edge weights used by the GCN configuration.
-            self.supports_scalar_edge_weights = False
-        else:
-            raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
-
-        self.num_layers = num_layers
-        self.pooling = pooling
-
-        # Per-layer hetero conv blocks with residual + layer norm.
-        self.convs = nn.ModuleList()
-        self.layer_norms = nn.ModuleList()
-        for layer_idx in range(num_layers):
-            layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
-            conv = HeteroConv(
-                {
-                    ("node", "temporal", "node"): ConvLayer(
-                        layer_in_channels, hidden_channels, **conv_kwargs
-                    ),
-                    ("node", "spatial", "node"): ConvLayer(
-                        layer_in_channels, hidden_channels, **conv_kwargs
-                    ),
-                },
-                aggr=aggr,
-            )
-            self.convs.append(conv)
-            self.layer_norms.append(nn.LayerNorm(hidden_channels))
-
-        # Projection for first residual connection from layer-0 input.
-        self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
-        
-        # Activation and dropout for GNN layers
-        self.gnn_activation = nn.GELU()
-        self.gnn_dropout = nn.Dropout(p=dropout_gnn)
-
-        if pooling == "mean":
-            head_in_channels = hidden_channels
-        elif pooling == "mean_max":
-            head_in_channels = 2 * hidden_channels
-        else:
-            raise ValueError(f"Unsupported pooling: {pooling}. Choose 'mean' or 'mean_max'.")
-
-        # Final MLP for graph-level output
-        # Output is bounded to [0, 10] for emotion scores
-        self.head = nn.Sequential(
-            nn.Linear(head_in_channels, hidden_channels),
-            nn.GELU(),
-            nn.Dropout(p=dropout_head),
-            nn.Linear(hidden_channels, out_channels),
-            # nn.Sigmoid()  # Output in [0, 1], will scale to [0, output_scale]
-        )
-        self.output_scale = output_scale
-        self.use_edge_weights = use_edge_weights
-
-    def forward(self, data, return_graph_embedding: bool = False):
-        
-        # data is a HeteroData from your SpacioTemporalDataset
-        x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
-        edge_weight_dict = None
-        if self.use_edge_weights and self.supports_scalar_edge_weights:
-            edge_weight_dict = {k: data[k].edge_attr for k in edge_index_dict.keys() if hasattr(data[k], 'edge_attr')}
-        
-        # Preprocess raw input with MLP
-        if self.use_preprocess_mlp:
-            x_dict["node"] = self.preprocess_mlp(x_dict["node"])
-
-        x0_node = x_dict["node"]
-
-        for layer_idx, conv in enumerate(self.convs):
-            if self.use_edge_weights and edge_weight_dict:
-                layer_out = conv(x_dict, edge_index_dict, edge_weight_dict=edge_weight_dict)
-            else:
-                layer_out = conv(x_dict, edge_index_dict)
-
-            layer_out = {k: self.gnn_activation(v) for k, v in layer_out.items()}
-
-            if layer_idx == 0:
-                residual = self.input_residual_proj(x0_node)
-            else:
-                residual = x_dict["node"]
-
-            layer_out["node"] = self.layer_norms[layer_idx](layer_out["node"] + residual)
-            layer_out = {k: self.gnn_dropout(v) for k, v in layer_out.items()}
-            x_dict = layer_out
-        
-        # we have only one node type "node"
-        x_node = x_dict["node"]              # [num_nodes, hidden]
-        batch = data["node"].batch           # [num_nodes] (set by PyG DataLoader)
-
-        if self.pooling == "mean":
-            graph_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
-        elif self.pooling == "mean_max":
-            mean_emb = global_mean_pool(x_node, batch)  # [num_graphs, hidden]
-            max_emb = global_max_pool(x_node, batch)    # [num_graphs, hidden]
-            graph_emb = torch.cat([mean_emb, max_emb], dim=1)  # [num_graphs, 2*hidden]
-        else:
-            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean' or 'mean_max'.")
-
-        out = self.head(graph_emb)                    # [num_graphs, out_channels]
-        out = out * self.output_scale                 # Scale to [0, 10], for binary, output scale is 1.0 so no scaling
-
-        if return_graph_embedding:
-            return out, graph_emb
-        return out
+RelationFusion = Literal["mean", "mlp"]
 
 
-class BasicGCN(nn.Module):
-    """Homogeneous GCN baseline over the v2 spatio-temporal graph schema.
+class ConfigurableSpatioTemporalGCN(nn.Module):
+    """Configurable GCN core used by the thesis graph-model variants.
 
-    BasicGCN uses the same v2 graph construction as the proposed model, but
-    collapses all node-node relations into one deduplicated edge index and
-    ignores edge attributes and learned scalar edge weights.
+    The class intentionally supports only the architectural degrees of freedom
+    needed for the thesis comparison: homogeneous vs. heterogeneous message
+    passing, mean vs. MLP relation fusion, and disabled vs. learned signed edge
+    weights. All variants use attention graph readout.
     """
 
     RELATIONS = ("temporal_forward", "temporal_backward", "spatial", "fixation")
@@ -176,49 +30,72 @@ class BasicGCN(nn.Module):
         hidden_channels: int,
         out_channels: int,
         output_scale: float,
+        *,
+        homogeneous: bool,
+        relation_fusion: RelationFusion = "mean",
+        use_learned_edge_weights: bool = False,
         use_preprocess_mlp: bool = True,
-        use_edge_weights: bool = False,
         add_self_loops: bool = False,
         dropout_mlp: float = 0.1,
         dropout_gnn: float = 0.1,
         dropout_head: float = 0.1,
         conv_type: str = "GCNConv",
         num_layers: int = 2,
-        readout: str = "attention",
-        pooling: str | None = None,
-        graph_pooling: str | None = None,
-        head_pooling: str | None = None,
+        use_fixation_edges: bool = True,
+        use_delta_distance_edge_feature: bool = True,
+        spatial_edge_attr_dim: int | None = None,
+        temporal_edge_attr_dim: int | None = None,
+        fixation_edge_attr_dim: int | None = None,
         **_: object,
     ) -> None:
         super().__init__()
         if num_layers < 1:
             raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
         if conv_type != "GCNConv":
-            raise ValueError("BasicGCN supports only conv_type='GCNConv'.")
+            raise ValueError("Thesis GCN variants support only conv_type='GCNConv'.")
+        if relation_fusion not in {"mean", "mlp"}:
+            raise ValueError(f"Unsupported relation_fusion='{relation_fusion}'. Choose 'mean' or 'mlp'.")
+        if homogeneous and relation_fusion != "mean":
+            raise ValueError("Homogeneous BasicGCN must use relation_fusion='mean'.")
+        if homogeneous and use_learned_edge_weights:
+            raise ValueError("Homogeneous BasicGCN does not use learned edge weights.")
+        if use_learned_edge_weights and relation_fusion != "mlp":
+            raise ValueError("Learned edge weights are only used by the MLP-fusion hetero variant.")
 
-        resolved_readout = (
-            readout
-            if readout is not None
-            else graph_pooling
-            if graph_pooling is not None
-            else head_pooling
-            if head_pooling is not None
-            else pooling
-            if pooling is not None
-            else "attention"
+        self.homogeneous = bool(homogeneous)
+        self.relation_fusion = relation_fusion
+        self.relation_pooling = relation_fusion
+        self.use_learned_edge_weights = bool(use_learned_edge_weights)
+        self.use_edge_weights = self.use_learned_edge_weights
+        self.supports_scalar_edge_weights = self.use_learned_edge_weights
+        self.edge_weight_mode = "learned_signed" if self.use_learned_edge_weights else "none"
+        self.use_preprocess_mlp = bool(use_preprocess_mlp)
+        self.num_layers = int(num_layers)
+        self.pooling = "attention"
+        self.readout = "attention"
+        self.output_scale = output_scale
+        self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
+
+        relations = ("temporal_forward", "temporal_backward", "spatial")
+        if use_fixation_edges:
+            relations = (*relations, "fixation")
+        self.relations = relations
+
+        self.spatial_edge_attr_dim = (
+            int(spatial_edge_attr_dim)
+            if spatial_edge_attr_dim is not None
+            else 7 if self.use_delta_distance_edge_feature else 6
         )
-        if resolved_readout not in {"attention", "mean"}:
-            raise ValueError(
-                f"Unsupported BasicGCN readout: {resolved_readout}. Choose 'attention' or 'mean'."
-            )
-
-        self.use_edge_weights = False
-        self.readout = resolved_readout
-        self.use_preprocess_mlp = use_preprocess_mlp
-        if use_edge_weights:
-            # Kept as an attribute for config compatibility; intentionally not
-            # consumed by forward because BasicGCN is an unweighted baseline.
-            self.use_edge_weights = False
+        self.temporal_edge_attr_dim = (
+            int(temporal_edge_attr_dim)
+            if temporal_edge_attr_dim is not None
+            else 8 if self.use_delta_distance_edge_feature else 7
+        )
+        self.fixation_edge_attr_dim = (
+            int(fixation_edge_attr_dim)
+            if fixation_edge_attr_dim is not None
+            else self.spatial_edge_attr_dim
+        )
 
         if self.use_preprocess_mlp:
             self.preprocess_mlp = nn.Sequential(
@@ -233,38 +110,62 @@ class BasicGCN(nn.Module):
         else:
             conv1_in_channels = in_channels
 
-        self.convs = nn.ModuleList()
+        conv_kwargs = {"add_self_loops": add_self_loops}
+        if self.use_learned_edge_weights:
+            conv_kwargs = {"add_self_loops": False, "normalize": False}
+
         self.layer_norms = nn.ModuleList()
-        for layer_idx in range(num_layers):
-            layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
-            self.convs.append(
-                GCNConv(
-                    layer_in_channels,
-                    hidden_channels,
-                    add_self_loops=add_self_loops,
+        if self.homogeneous:
+            self.convs = nn.ModuleList()
+            for layer_idx in range(num_layers):
+                layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
+                self.convs.append(GCNConv(layer_in_channels, hidden_channels, add_self_loops=add_self_loops))
+                self.layer_norms.append(nn.LayerNorm(hidden_channels))
+        else:
+            self.relation_convs = nn.ModuleList()
+            self.relation_fusion_mlps = nn.ModuleList()
+            for layer_idx in range(num_layers):
+                layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
+                self.relation_convs.append(
+                    nn.ModuleDict(
+                        {
+                            relation: GCNConv(layer_in_channels, hidden_channels, **conv_kwargs)
+                            for relation in self.relations
+                        }
+                    )
                 )
-            )
-            self.layer_norms.append(nn.LayerNorm(hidden_channels))
+                if self.relation_fusion == "mlp":
+                    self.relation_fusion_mlps.append(
+                        nn.Sequential(
+                            nn.Linear(len(self.relations) * hidden_channels, hidden_channels),
+                            nn.GELU(),
+                            nn.Dropout(p=dropout_gnn),
+                            nn.Linear(hidden_channels, hidden_channels),
+                        )
+                    )
+                self.layer_norms.append(nn.LayerNorm(hidden_channels))
 
         self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
         self.gnn_activation = nn.GELU()
         self.gnn_dropout = nn.Dropout(p=dropout_gnn)
 
-        if self.readout == "attention":
-            self.attention_pool = nn.Sequential(
-                nn.Linear(hidden_channels, hidden_channels),
-                nn.GELU(),
-                nn.Dropout(p=dropout_head),
-                nn.Linear(hidden_channels, 1),
-            )
+        if self.use_learned_edge_weights:
+            self.spatial_edge_weight_mlp = self._build_edge_weight_mlp(self.spatial_edge_attr_dim)
+            self.temporal_edge_weight_mlp = self._build_edge_weight_mlp(self.temporal_edge_attr_dim)
+            self.fixation_edge_weight_mlp = self._build_edge_weight_mlp(self.fixation_edge_attr_dim)
 
+        self.attention_pool = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels),
+            nn.GELU(),
+            nn.Dropout(p=dropout_head),
+            nn.Linear(hidden_channels, 1),
+        )
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels),
             nn.GELU(),
             nn.Dropout(p=dropout_head),
             nn.Linear(hidden_channels, out_channels),
         )
-        self.output_scale = output_scale
 
     @staticmethod
     def _edge_type(relation: str) -> tuple[str, str, str]:
@@ -288,206 +189,6 @@ class BasicGCN(nn.Module):
         edge_index = torch.cat(edge_indices, dim=1)
         return torch.unique(edge_index, dim=1)
 
-    def forward(self, data, return_graph_embedding: bool = False):
-        x_node = data["node"].x
-        if self.use_preprocess_mlp:
-            x_node = self.preprocess_mlp(x_node)
-
-        x0_node = x_node
-        edge_index = self.collapse_edge_index(data)
-
-        for layer_idx, conv in enumerate(self.convs):
-            layer_out = self.gnn_activation(conv(x_node, edge_index))
-            residual = self.input_residual_proj(x0_node) if layer_idx == 0 else x_node
-            x_node = self.layer_norms[layer_idx](layer_out + residual)
-            x_node = self.gnn_dropout(x_node)
-
-        batch = data["node"].batch
-        if self.readout == "mean":
-            graph_emb = global_mean_pool(x_node, batch)
-        elif self.readout == "attention":
-            scores = self.attention_pool(x_node)
-            alpha = softmax(scores, batch)
-            graph_emb = global_add_pool(alpha * x_node, batch)
-        else:
-            raise ValueError(f"Unsupported BasicGCN readout: {self.readout}.")
-
-        out = self.head(graph_emb)
-        out = out * self.output_scale
-        if return_graph_embedding:
-            return out, graph_emb
-        return out
-
-
-class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
-    """V2 spatio-temporal heterogeneous GNN architecture.
-
-    Stage 1 keeps the v1 message-passing mechanics but consumes the v2 graph
-    schema with separate temporal-forward and temporal-backward relations.
-    Later stages add relation-fusion MLPs, attention pooling, and learned
-    signed edge weights.
-    """
-
-    def __init__(
-            self, in_channels: int, hidden_channels: int, out_channels: int,
-            output_scale: float, use_preprocess_mlp: bool = True, use_edge_weights: bool = True, add_self_loops: bool = False,
-            dropout_mlp: float = 0.1, dropout_gnn: float = 0.1, dropout_head: float = 0.1,
-            aggr: str = "mean", conv_type: str = "GCNConv",
-            num_layers: int = 2, pooling: str = "attention", graph_pooling: str | None = None,
-            head_pooling: str | None = None, relation_pooling: str = "mlp",
-            edge_weight_mode: str = "learned_signed",
-            use_delta_distance_edge_feature: bool = True,
-            use_fixation_edges: bool = True,
-            spatial_edge_attr_dim: int | None = None,
-            temporal_edge_attr_dim: int | None = None,
-            fixation_edge_attr_dim: int | None = None,
-            ):
-        nn.Module.__init__(self)
-        if num_layers < 1:
-            raise ValueError(f"num_layers must be >= 1, got {num_layers}.")
-        resolved_graph_pooling = (
-            graph_pooling if graph_pooling is not None
-            else head_pooling if head_pooling is not None
-            else pooling
-        )
-        if resolved_graph_pooling not in {"mean", "mean_max", "attention"}:
-            raise ValueError(
-                "Unsupported graph pooling: "
-                f"{resolved_graph_pooling}. Choose 'mean', 'mean_max', or 'attention'."
-            )
-        if relation_pooling not in {"mlp", "attention"}:
-            raise ValueError(
-                f"Unsupported relation_pooling: {relation_pooling}. Choose 'mlp' or 'attention'."
-            )
-        if edge_weight_mode not in {"handcrafted", "learned_signed"}:
-            raise ValueError(
-                f"Unsupported edge_weight_mode='{edge_weight_mode}'. "
-                "Choose 'handcrafted' or 'learned_signed'."
-            )
-        self.edge_weight_mode = edge_weight_mode
-        self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
-        self.spatial_edge_attr_dim = (
-            int(spatial_edge_attr_dim)
-            if spatial_edge_attr_dim is not None
-            else 7 if self.use_delta_distance_edge_feature else 6
-        )
-        self.temporal_edge_attr_dim = (
-            int(temporal_edge_attr_dim)
-            if temporal_edge_attr_dim is not None
-            else 8 if self.use_delta_distance_edge_feature else 7
-        )
-        self.fixation_edge_attr_dim = (
-            int(fixation_edge_attr_dim)
-            if fixation_edge_attr_dim is not None
-            else self.spatial_edge_attr_dim
-        )
-
-        self.use_preprocess_mlp = use_preprocess_mlp
-        if self.use_preprocess_mlp:
-            self.preprocess_mlp = nn.Sequential(
-                nn.Linear(in_channels, hidden_channels),
-                nn.GELU(),
-                nn.LayerNorm(hidden_channels),
-                nn.Dropout(p=dropout_mlp),
-                nn.Linear(hidden_channels, hidden_channels),
-                nn.LayerNorm(hidden_channels),
-            )
-            conv1_in_channels = hidden_channels
-        else:
-            conv1_in_channels = in_channels
-
-        if conv_type == "GCNConv":
-            ConvLayer = GCNConv
-            conv_kwargs = {"add_self_loops": add_self_loops}
-            self.supports_scalar_edge_weights = True
-            if edge_weight_mode == "learned_signed":
-                conv_kwargs = {"add_self_loops": False, "normalize": False}
-        elif conv_type == "GATConv":
-            ConvLayer = GATConv
-            conv_kwargs = {"add_self_loops": add_self_loops}
-            # GATConv ignores the learned scalar edge-weight branch. Keeping
-            # dataset.use_edge_weights enabled still allows the same graph/cache
-            # construction as GCNConv comparison runs.
-            self.supports_scalar_edge_weights = False
-        else:
-            raise ValueError(f"Unsupported conv_type: {conv_type}. Choose 'GCNConv' or 'GATConv'.")
-
-        self.relations = ("spatial", "temporal_forward", "temporal_backward")
-        if use_fixation_edges:
-            self.relations = (*self.relations, "fixation")
-        self.num_layers = num_layers
-        self.pooling = resolved_graph_pooling
-        self.relation_pooling = relation_pooling
-
-        self.relation_convs = nn.ModuleList()
-        self.relation_fusion_mlps = nn.ModuleList()
-        self.relation_attention_mlps = nn.ModuleList()
-        self.layer_norms = nn.ModuleList()
-        for layer_idx in range(num_layers):
-            layer_in_channels = conv1_in_channels if layer_idx == 0 else hidden_channels
-            relation_convs = nn.ModuleDict(
-                {
-                    relation: ConvLayer(layer_in_channels, hidden_channels, **conv_kwargs)
-                    for relation in self.relations
-                }
-            )
-            self.relation_convs.append(relation_convs)
-            self.relation_fusion_mlps.append(
-                nn.Sequential(
-                    nn.Linear(len(self.relations) * hidden_channels, hidden_channels),
-                    nn.GELU(),
-                    nn.Dropout(p=dropout_gnn),
-                    nn.Linear(hidden_channels, hidden_channels),
-                )
-            )
-            self.relation_attention_mlps.append(
-                nn.Sequential(
-                    nn.Linear(hidden_channels, hidden_channels),
-                    nn.GELU(),
-                    nn.Dropout(p=dropout_gnn),
-                    nn.Linear(hidden_channels, 1),
-                )
-            )
-            self.layer_norms.append(nn.LayerNorm(hidden_channels))
-
-        self.input_residual_proj = nn.Linear(conv1_in_channels, hidden_channels)
-        self.gnn_activation = nn.GELU()
-        self.gnn_dropout = nn.Dropout(p=dropout_gnn)
-        self.spatial_edge_weight_mlp = self._build_edge_weight_mlp(self.spatial_edge_attr_dim)
-        self.temporal_edge_weight_mlp = self._build_edge_weight_mlp(self.temporal_edge_attr_dim)
-        self.fixation_edge_weight_mlp = self._build_edge_weight_mlp(self.fixation_edge_attr_dim)
-
-        if self.pooling == "mean":
-            head_in_channels = hidden_channels
-        elif self.pooling == "mean_max":
-            head_in_channels = 2 * hidden_channels
-        elif self.pooling == "attention":
-            head_in_channels = hidden_channels
-            self.attention_pool = nn.Sequential(
-                nn.Linear(hidden_channels, hidden_channels),
-                nn.GELU(),
-                nn.Dropout(p=dropout_head),
-                nn.Linear(hidden_channels, 1),
-            )
-        else:
-            raise ValueError(
-                f"Unsupported pooling: {self.pooling}. Choose 'mean', 'mean_max', or 'attention'."
-            )
-
-        self.head = nn.Sequential(
-            nn.Linear(head_in_channels, hidden_channels),
-            nn.GELU(),
-            nn.Dropout(p=dropout_head),
-            nn.Linear(hidden_channels, out_channels),
-        )
-        self.output_scale = output_scale
-        self.use_edge_weights = use_edge_weights
-
-    @staticmethod
-    def _edge_type(relation: str) -> tuple[str, str, str]:
-        """Return the heterograph edge type tuple for one node-node relation."""
-        return ("node", relation, "node")
-
     @staticmethod
     def _build_edge_weight_mlp(input_dim: int) -> nn.Sequential:
         """Build the small edge-weight MLP used for learned signed weights."""
@@ -500,18 +201,6 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             nn.GELU(),
             nn.Linear(2, 1),
         )
-
-    @staticmethod
-    def _apply_relation_conv(
-        conv: nn.Module,
-        x: torch.Tensor,
-        edge_index: torch.Tensor,
-        edge_weight: torch.Tensor | None,
-    ) -> torch.Tensor:
-        """Apply a relation convolution, passing edge weights when supported."""
-        if isinstance(conv, GCNConv) and edge_weight is not None:
-            return conv(x, edge_index, edge_weight=edge_weight.view(-1))
-        return conv(x, edge_index)
 
     @staticmethod
     def normalize_signed_edge_scores(
@@ -533,26 +222,24 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
         edge_index: torch.Tensor,
         num_nodes: int,
     ) -> torch.Tensor | None:
-        """Resolve scalar edge weights from stored edge attributes."""
-        if edge_attr is None:
+        """Return learned scalar edge weights, or None for unweighted variants."""
+        if not self.use_learned_edge_weights or edge_attr is None:
             return None
-        if self.edge_weight_mode == "handcrafted" or edge_attr.dim() == 1 or edge_attr.shape[-1] == 1:
-            return edge_attr.view(-1)
 
-        if relation == "spatial":
-            if edge_attr.shape[-1] != self.spatial_edge_attr_dim:
-                raise ValueError(
-                    "Spatial learned edge attributes must have "
-                    f"{self.spatial_edge_attr_dim} features, got {edge_attr.shape[-1]}."
-                )
-            raw_scores = self.spatial_edge_weight_mlp(edge_attr)
-        elif relation in {"temporal_forward", "temporal_backward"}:
+        if relation in {"temporal_forward", "temporal_backward"}:
             if edge_attr.shape[-1] != self.temporal_edge_attr_dim:
                 raise ValueError(
                     "Temporal learned edge attributes must have "
                     f"{self.temporal_edge_attr_dim} features, got {edge_attr.shape[-1]}."
                 )
             raw_scores = self.temporal_edge_weight_mlp(edge_attr)
+        elif relation == "spatial":
+            if edge_attr.shape[-1] != self.spatial_edge_attr_dim:
+                raise ValueError(
+                    "Spatial learned edge attributes must have "
+                    f"{self.spatial_edge_attr_dim} features, got {edge_attr.shape[-1]}."
+                )
+            raw_scores = self.spatial_edge_weight_mlp(edge_attr)
         elif relation == "fixation":
             if edge_attr.shape[-1] != self.fixation_edge_attr_dim:
                 raise ValueError(
@@ -569,31 +256,45 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
             num_nodes=num_nodes,
         )
 
-    def forward(self, data, return_graph_embedding: bool = False):
-        x_dict, edge_index_dict = data.x_dict, data.edge_index_dict
-        edge_weight_dict = None
-        if self.use_edge_weights and self.supports_scalar_edge_weights:
-            edge_weight_dict = {
-                k: data[k].edge_attr
-                for k in edge_index_dict.keys()
-                if hasattr(data[k], "edge_attr")
-            }
+    def _apply_relation_conv(
+        self,
+        conv: GCNConv,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_weight: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Apply GCNConv with optional scalar edge weights."""
+        if edge_weight is None:
+            return conv(x, edge_index)
+        return conv(x, edge_index, edge_weight=edge_weight.view(-1))
 
-        if self.use_preprocess_mlp:
-            x_dict["node"] = self.preprocess_mlp(x_dict["node"])
+    def _forward_homogeneous(self, x_node: torch.Tensor, data) -> torch.Tensor:
+        """Run the homogeneous collapsed-edge GCN stack."""
+        x0_node = x_node
+        edge_index = self.collapse_edge_index(data)
+        for layer_idx, conv in enumerate(self.convs):
+            layer_out = self.gnn_activation(conv(x_node, edge_index))
+            residual = self.input_residual_proj(x0_node) if layer_idx == 0 else x_node
+            x_node = self.layer_norms[layer_idx](layer_out + residual)
+            x_node = self.gnn_dropout(x_node)
+        return x_node
 
-        x0_node = x_dict["node"]
-        x_node = x0_node
+    def _forward_heterogeneous(self, x_node: torch.Tensor, data) -> torch.Tensor:
+        """Run the heterogeneous relation-specific GCN stack."""
+        x0_node = x_node
+        edge_index_dict = data.edge_index_dict
 
         for layer_idx, relation_convs in enumerate(self.relation_convs):
             relation_outputs = []
             for relation in self.relations:
                 edge_type = self._edge_type(relation)
-                if edge_type not in edge_index_dict or edge_index_dict[edge_type].numel() == 0:
+                edge_index = edge_index_dict.get(edge_type)
+                if edge_index is None or edge_index.numel() == 0:
+                    hidden_dim = self.layer_norms[layer_idx].normalized_shape[0]
                     relation_outputs.append(
                         torch.zeros(
                             x_node.shape[0],
-                            self.layer_norms[layer_idx].normalized_shape[0],
+                            hidden_dim,
                             dtype=x_node.dtype,
                             device=x_node.device,
                         )
@@ -601,62 +302,136 @@ class SpatioTemporalHeteroGNN(SpatioTemporalHeteroGNNV1):
                     continue
 
                 edge_weight = None
-                if edge_weight_dict is not None:
+                if self.use_learned_edge_weights and hasattr(data[edge_type], "edge_attr"):
                     edge_weight = self._edge_weight_from_attr(
                         relation=relation,
-                        edge_attr=edge_weight_dict.get(edge_type),
-                        edge_index=edge_index_dict[edge_type],
+                        edge_attr=data[edge_type].edge_attr,
+                        edge_index=edge_index,
                         num_nodes=x_node.shape[0],
                     )
 
                 relation_out = self._apply_relation_conv(
                     conv=relation_convs[relation],
                     x=x_node,
-                    edge_index=edge_index_dict[edge_type],
+                    edge_index=edge_index,
                     edge_weight=edge_weight,
                 )
                 relation_outputs.append(self.gnn_activation(relation_out))
 
-            if self.relation_pooling == "mlp":
+            if self.relation_fusion == "mean":
+                fused = torch.stack(relation_outputs, dim=0).mean(dim=0)
+            elif self.relation_fusion == "mlp":
                 fused = self.relation_fusion_mlps[layer_idx](torch.cat(relation_outputs, dim=1))
-            elif self.relation_pooling == "attention":
-                stacked_rel = torch.stack(relation_outputs, dim=1)  # [num_nodes, num_relations, hidden]
-                rel_scores = self.relation_attention_mlps[layer_idx](
-                    stacked_rel.reshape(-1, stacked_rel.shape[-1])
-                ).reshape(stacked_rel.shape[0], stacked_rel.shape[1], 1)
-                rel_alpha = torch.softmax(rel_scores, dim=1)
-                fused = (rel_alpha * stacked_rel).sum(dim=1)
             else:
-                raise ValueError(
-                    f"Unsupported relation_pooling: {self.relation_pooling}. Choose 'mlp' or 'attention'."
-                )
+                raise ValueError(f"Unsupported relation_fusion='{self.relation_fusion}'.")
 
-            if layer_idx == 0:
-                residual = self.input_residual_proj(x0_node)
-            else:
-                residual = x_node
-
+            residual = self.input_residual_proj(x0_node) if layer_idx == 0 else x_node
             x_node = self.layer_norms[layer_idx](fused + residual)
             x_node = self.gnn_dropout(x_node)
 
-        batch = data["node"].batch
+        return x_node
 
-        if self.pooling == "mean":
-            graph_emb = global_mean_pool(x_node, batch)
-        elif self.pooling == "mean_max":
-            mean_emb = global_mean_pool(x_node, batch)
-            max_emb = global_max_pool(x_node, batch)
-            graph_emb = torch.cat([mean_emb, max_emb], dim=1)
-        elif self.pooling == "attention":
-            scores = self.attention_pool(x_node)
-            alpha = softmax(scores, batch)
-            graph_emb = global_add_pool(alpha * x_node, batch)
+    def forward(self, data, return_graph_embedding: bool = False):
+        x_node = data["node"].x
+        if self.use_preprocess_mlp:
+            x_node = self.preprocess_mlp(x_node)
+
+        if self.homogeneous:
+            x_node = self._forward_homogeneous(x_node=x_node, data=data)
         else:
-            raise ValueError(f"Unsupported pooling: {self.pooling}. Choose 'mean', 'mean_max', or 'attention'.")
+            x_node = self._forward_heterogeneous(x_node=x_node, data=data)
 
-        out = self.head(graph_emb)
-        out = out * self.output_scale
+        batch = data["node"].batch
+        scores = self.attention_pool(x_node)
+        alpha = softmax(scores, batch)
+        graph_emb = global_add_pool(alpha * x_node, batch)
 
+        out = self.head(graph_emb) * self.output_scale
         if return_graph_embedding:
             return out, graph_emb
         return out
+
+
+class BasicGCN(ConfigurableSpatioTemporalGCN):
+    """Homogeneous GCN with collapsed v2 relations and attention readout."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.pop("use_edge_weights", None)
+        kwargs.pop("edge_weight_mode", None)
+        kwargs.pop("relation_fusion", None)
+        kwargs.pop("use_learned_edge_weights", None)
+        kwargs.pop("homogeneous", None)
+        kwargs.pop("readout", None)
+        kwargs.pop("pooling", None)
+        kwargs.pop("graph_pooling", None)
+        kwargs.pop("head_pooling", None)
+        super().__init__(
+            *args,
+            homogeneous=True,
+            relation_fusion="mean",
+            use_learned_edge_weights=False,
+            **kwargs,
+        )
+
+
+class HeteroGCNMean(ConfigurableSpatioTemporalGCN):
+    """Heterogeneous GCN with non-learned mean relation fusion."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.pop("use_edge_weights", None)
+        kwargs.pop("edge_weight_mode", None)
+        kwargs.pop("relation_fusion", None)
+        kwargs.pop("use_learned_edge_weights", None)
+        kwargs.pop("homogeneous", None)
+        kwargs.pop("pooling", None)
+        kwargs.pop("graph_pooling", None)
+        kwargs.pop("head_pooling", None)
+        super().__init__(
+            *args,
+            homogeneous=False,
+            relation_fusion="mean",
+            use_learned_edge_weights=False,
+            **kwargs,
+        )
+
+
+class HeteroGCNMLP(ConfigurableSpatioTemporalGCN):
+    """Heterogeneous GCN with learned MLP relation fusion and no edge weights."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.pop("use_edge_weights", None)
+        kwargs.pop("edge_weight_mode", None)
+        kwargs.pop("relation_fusion", None)
+        kwargs.pop("use_learned_edge_weights", None)
+        kwargs.pop("homogeneous", None)
+        kwargs.pop("pooling", None)
+        kwargs.pop("graph_pooling", None)
+        kwargs.pop("head_pooling", None)
+        super().__init__(
+            *args,
+            homogeneous=False,
+            relation_fusion="mlp",
+            use_learned_edge_weights=False,
+            **kwargs,
+        )
+
+
+class HeteroGCNMLPWeights(ConfigurableSpatioTemporalGCN):
+    """Heterogeneous GCN with MLP relation fusion and learned signed edge weights."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.pop("use_edge_weights", None)
+        kwargs.pop("edge_weight_mode", None)
+        kwargs.pop("relation_fusion", None)
+        kwargs.pop("use_learned_edge_weights", None)
+        kwargs.pop("homogeneous", None)
+        kwargs.pop("pooling", None)
+        kwargs.pop("graph_pooling", None)
+        kwargs.pop("head_pooling", None)
+        super().__init__(
+            *args,
+            homogeneous=False,
+            relation_fusion="mlp",
+            use_learned_edge_weights=True,
+            **kwargs,
+        )

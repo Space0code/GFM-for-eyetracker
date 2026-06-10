@@ -9,7 +9,7 @@ from torch_geometric.loader import DataLoader
 from data.data import SpacioTemporalDataset, _fixation_dilation_offsets
 from data.data_preprocess import preprocess_file
 from data.hci_signals import TIME_WINDOW_NORMALIZED_COLUMN
-from emotions.model import SpatioTemporalHeteroGNN
+from emotions.model import HeteroGCNMLPWeights
 
 
 def _raw_hci_frame() -> pd.DataFrame:
@@ -426,13 +426,12 @@ def test_gnn_v2_forward_supports_fixation_relation_and_extended_edge_attrs(tmp_p
     )
     batch = next(iter(DataLoader([dataset[0]], batch_size=1)))
 
-    model = SpatioTemporalHeteroGNN(
+    model = HeteroGCNMLPWeights(
         in_channels=6,
         hidden_channels=8,
         out_channels=1,
         output_scale=1.0,
         use_preprocess_mlp=False,
-        use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=2,
         use_delta_distance_edge_feature=True,
@@ -444,7 +443,7 @@ def test_gnn_v2_forward_supports_fixation_relation_and_extended_edge_attrs(tmp_p
     assert tuple(out.shape) == (1, 1)
 
 
-def test_gnn_v2_forward_handles_empty_fixation_relation(tmp_path: Path) -> None:
+def test_weighted_hetero_gcn_forward_handles_empty_fixation_relation(tmp_path: Path) -> None:
     frame = _raw_hci_frame()
     frame["fixation-index"] = [10, 11, 12, 13, pd.NA]
     frame["fixation-duration"] = [100.0, 200.0, 300.0, 400.0, pd.NA]
@@ -483,13 +482,12 @@ def test_gnn_v2_forward_handles_empty_fixation_relation(tmp_path: Path) -> None:
     assert graph["node", "fixation", "node"].edge_attr.shape == (0, 7)
 
     batch = next(iter(DataLoader([graph], batch_size=1)))
-    model = SpatioTemporalHeteroGNN(
+    model = HeteroGCNMLPWeights(
         in_channels=6,
         hidden_channels=8,
         out_channels=1,
         output_scale=1.0,
         use_preprocess_mlp=False,
-        use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=2,
         use_delta_distance_edge_feature=True,

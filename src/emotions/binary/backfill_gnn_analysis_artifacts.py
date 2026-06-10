@@ -42,7 +42,7 @@ if __package__ in {None, ""}:
         sys.path.insert(0, str(src_dir))
 
 from data.data import SpacioTemporalDataset
-from emotions.binary.model_binary import BinarySpatioTemporalGNN
+from emotions.binary.model_binary import BinaryHeteroGCNMLPWeights
 from emotions.binary.results_plotting import generate_and_save_binary_results_plots
 from emotions.binary.train_binary import (
     build_binary_graph_subset,
@@ -360,7 +360,9 @@ def backfill_run(run_dir: Path, device: torch.device, skip_existing: bool) -> No
             )
             test_loader = DataLoader(test_graphs, **loader_kwargs)
 
-            model = BinarySpatioTemporalGNN(**config["gnn"]["model"]).to(device)
+            model_cfg = dict(config["gnn"]["model"])
+            model_cfg.pop("model_version", None)
+            model = BinaryHeteroGCNMLPWeights(**model_cfg).to(device)
             _load_checkpoint_state_dict(model=model, checkpoint_path=checkpoint_path, device=device)
 
             _, _, y_pred, y_true, artifacts = evaluate_gnn(

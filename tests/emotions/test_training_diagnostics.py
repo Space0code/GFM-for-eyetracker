@@ -13,7 +13,7 @@ from emotions.common.training_diagnostics import (
     collect_gnn_loader_diagnostics,
     save_gnn_fold_diagnostics,
 )
-from emotions.model import SpatioTemporalHeteroGNN
+from emotions.model import HeteroGCNMLPWeights
 
 
 def _build_v2_graph(label: float) -> HeteroData:
@@ -38,18 +38,15 @@ def _build_v2_graph(label: float) -> HeteroData:
     return graph
 
 
-def _build_model() -> SpatioTemporalHeteroGNN:
-    model = SpatioTemporalHeteroGNN(
+def _build_model() -> HeteroGCNMLPWeights:
+    model = HeteroGCNMLPWeights(
         in_channels=4,
         hidden_channels=8,
         out_channels=1,
         output_scale=1.0,
         use_preprocess_mlp=False,
-        use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=2,
-        pooling="attention",
-        edge_weight_mode="learned_signed",
         use_delta_distance_edge_feature=False,
         use_fixation_edges=True,
     )

@@ -51,7 +51,7 @@ from emotions.common.dataset_config import (
 )
 from emotions.multiclass.baseline_model_multiclass import get_multiclass_baseline_by_name
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
-from emotions.multiclass.model_multiclass import MulticlassSpatioTemporalGNN
+from emotions.multiclass.model_multiclass import MulticlassHeteroGCNMLPWeights
 from emotions.multiclass.results_plotting_multiclass import (
     generate_and_save_multiclass_results_plots,
 )
@@ -518,7 +518,7 @@ def _train_gnn_fold(
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
-    model = MulticlassSpatioTemporalGNN(
+    model = MulticlassHeteroGCNMLPWeights(
         in_channels=model_cfg["in_channels"],
         hidden_channels=model_cfg["hidden_channels"],
         num_classes=len(class_labels),

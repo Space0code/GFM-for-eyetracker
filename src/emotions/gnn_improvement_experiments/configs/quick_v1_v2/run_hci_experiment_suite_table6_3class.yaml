@@ -16,7 +16,7 @@ suite:
 quick_comparison:
   # Diploma main comparison models. Keep old internal graph variants out of the
   # default thesis run; use --models only for ad hoc research comparisons.
-  models: [Random, Majority, LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN_mean, BasicGCN_attention, GNN_v2]
+  models: [Random, Majority, LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN, HeteroGCNMean, HeteroGCNMLP, HeteroGCNMLPWeights]
   # Select one or both Table-6 tasks for the v1/v2 quick runner:
   #   table6_tasks: [arousal]
   table6_tasks: [valence, arousal]
@@ -39,21 +39,10 @@ global_overrides:
     random_state: 42
   gnn:
     model:
-      # Shared convolution for fair GNN_v1/GNN_v2 comparisons.
-      # Change only conv_type to compare both variants with GCN vs GAT:
-      #   conv_type: GCNConv
-      #   conv_type: GATConv
-      # GATConv ignores scalar edge weights in the model code, while GCNConv
-      # consumes them when dataset.use_edge_weights is true.
       conv_type: GCNConv
-      model_version: v2
+      model_version: HeteroGCNMLPWeights
       head_pooling: attention
       graph_pooling: attention
-      relation_pooling: mlp
-      # Backward-compatible v1 pooling key. V1 supports mean/mean_max only.
-      # V2 uses graph_pooling/head_pooling above, so this does not disable
-      # attention graph pooling for GNN_v2.
-      pooling: mean_max
       num_layers: 2
       hidden_channels: 64
     training:

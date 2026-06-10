@@ -6,7 +6,13 @@ import torch
 from torch_geometric.data import HeteroData
 from torch_geometric.loader import DataLoader
 
-from emotions.model import BasicGCN, SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
+from emotions.model import (
+    BasicGCN,
+    ConfigurableSpatioTemporalGCN,
+    HeteroGCNMean,
+    HeteroGCNMLP,
+    HeteroGCNMLPWeights,
+)
 from emotions.utils import create_splitter
 
 
@@ -131,70 +137,51 @@ def test_subject_kfold_has_no_subject_leakage() -> None:
         assert val_subjects.isdisjoint(test_subjects)
 
 
-def test_gnn_depth_pooling_output_shape_stays_consistent() -> None:
+def test_hetero_gcn_mean_depth_output_shape_stays_consistent() -> None:
     loader = DataLoader(
-        [_build_graph("P1", "r1"), _build_graph("P2", "r2")],
+        [_build_v2_graph("P1", "r1"), _build_v2_graph("P2", "r2")],
         batch_size=2,
         shuffle=False,
     )
     batch = next(iter(loader))
 
     for num_layers in [1, 2, 3, 5, 10, 50]:
-        for pooling in ["mean", "mean_max", "attention"]:
-            model = SpatioTemporalHeteroGNN(
-                in_channels=4,
-                hidden_channels=8,
-                out_channels=1,
-                output_scale=1.0,
-                use_preprocess_mlp=False,
-                use_edge_weights=False,
-                conv_type="GCNConv",
-                num_layers=num_layers,
-                pooling=pooling,
-            )
-            model.eval()
-            with torch.no_grad():
-                out = model(batch)
-            assert tuple(out.shape) == (2, 1)
+        model = HeteroGCNMean(
+            in_channels=4,
+            hidden_channels=8,
+            out_channels=1,
+            output_scale=1.0,
+            use_preprocess_mlp=False,
+            conv_type="GCNConv",
+            num_layers=num_layers,
+            use_delta_distance_edge_feature=False,
+            use_fixation_edges=False,
+        )
+        model.eval()
+        with torch.no_grad():
+            out = model(batch)
+        assert tuple(out.shape) == (2, 1)
 
 
-def test_gnn_v1_forward_pass_accepts_legacy_edges() -> None:
-    loader = DataLoader([_build_graph("P1", "r1"), _build_graph("P2", "r2")], batch_size=2)
-    batch = next(iter(loader))
-    model = SpatioTemporalHeteroGNNV1(
-        in_channels=4,
-        hidden_channels=8,
-        out_channels=1,
-        output_scale=1.0,
-        use_preprocess_mlp=False,
-        use_edge_weights=False,
-        conv_type="GCNConv",
-    )
-    model.eval()
-    with torch.no_grad():
-        out = model(batch)
-    assert tuple(out.shape) == (2, 1)
-
-
-def test_gnn_v2_forward_pass_accepts_split_temporal_edges() -> None:
+def test_new_gnn_wrappers_forward_pass_accept_split_temporal_edges() -> None:
     loader = DataLoader([_build_v2_graph("P1", "r1"), _build_v2_graph("P2", "r2")], batch_size=2)
     batch = next(iter(loader))
-    model = SpatioTemporalHeteroGNN(
-        in_channels=4,
-        hidden_channels=8,
-        out_channels=1,
-        output_scale=1.0,
-        use_preprocess_mlp=False,
-        use_edge_weights=True,
-        conv_type="GCNConv",
-        num_layers=3,
-        use_delta_distance_edge_feature=False,
-        use_fixation_edges=False,
-    )
-    model.eval()
-    with torch.no_grad():
-        out = model(batch)
-    assert tuple(out.shape) == (2, 1)
+    for model_cls in [HeteroGCNMean, HeteroGCNMLP, HeteroGCNMLPWeights]:
+        model = model_cls(
+            in_channels=4,
+            hidden_channels=8,
+            out_channels=1,
+            output_scale=1.0,
+            use_preprocess_mlp=False,
+            conv_type="GCNConv",
+            num_layers=3,
+            use_delta_distance_edge_feature=False,
+            use_fixation_edges=False,
+        )
+        model.eval()
+        with torch.no_grad():
+            out = model(batch)
+        assert tuple(out.shape) == (2, 1)
 
 
 def test_basic_gcn_collapses_v2_relations_and_removes_duplicate_edges() -> None:
@@ -229,10 +216,8 @@ def test_basic_gcn_forward_uses_v2_graph_and_ignores_edge_attributes() -> None:
         out_channels=3,
         output_scale=1.0,
         use_preprocess_mlp=False,
-        use_edge_weights=True,
         conv_type="GCNConv",
         num_layers=2,
-        readout="mean",
     )
     model.eval()
 
@@ -242,12 +227,37 @@ def test_basic_gcn_forward_uses_v2_graph_and_ignores_edge_attributes() -> None:
     assert tuple(out.shape) == (2, 3)
     assert tuple(graph_emb.shape) == (2, 8)
     assert model.use_edge_weights is False
+    assert model.readout == "attention"
+
+
+def test_unweighted_hetero_variants_do_not_use_scalar_edge_weights() -> None:
+    for model_cls in [HeteroGCNMean, HeteroGCNMLP]:
+        model = model_cls(
+            in_channels=4,
+            hidden_channels=8,
+            out_channels=3,
+            output_scale=1.0,
+        )
+        assert model.use_edge_weights is False
+        assert model.edge_weight_mode == "none"
+
+
+def test_weighted_hetero_variant_uses_learned_signed_edge_weights() -> None:
+    model = HeteroGCNMLPWeights(
+        in_channels=4,
+        hidden_channels=8,
+        out_channels=3,
+        output_scale=1.0,
+    )
+    assert model.use_edge_weights is True
+    assert model.edge_weight_mode == "learned_signed"
+    assert hasattr(model, "temporal_edge_weight_mlp")
 
 
 def test_signed_edge_weight_normalization_is_per_target_node() -> None:
     raw_scores = torch.tensor([0.5, -1.0, 2.0, 0.25], dtype=torch.float32)
     dst_index = torch.tensor([0, 0, 1, 1], dtype=torch.long)
-    weights = SpatioTemporalHeteroGNN.normalize_signed_edge_scores(
+    weights = ConfigurableSpatioTemporalGCN.normalize_signed_edge_scores(
         raw_scores=raw_scores,
         dst_index=dst_index,
         num_nodes=2,

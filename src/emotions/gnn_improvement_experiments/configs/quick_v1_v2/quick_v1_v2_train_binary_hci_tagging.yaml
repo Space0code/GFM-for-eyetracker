@@ -95,13 +95,12 @@ baselines:
 # GNN model configuration
 gnn:
   model:
-    model_version: v2
+    model_version: HeteroGCNMLPWeights
     in_channels: 4  # 4 node features: (time dropped), x, y, pupil-left, pupil-right
     hidden_channels: 64
     num_layers: 2
     head_pooling: attention
     graph_pooling: attention
-    relation_pooling: mlp
     use_preprocess_mlp: true
     add_self_loops: true
     dropout_mlp: 0.1

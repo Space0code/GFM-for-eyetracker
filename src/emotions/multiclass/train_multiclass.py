@@ -88,8 +88,9 @@ from emotions.multiclass.baseline_model_multiclass import get_multiclass_baselin
 from emotions.multiclass.metrics_multiclass import evaluate_multiclass_classification
 from emotions.multiclass.model_multiclass import (
     MulticlassBasicGCN,
-    MulticlassSpatioTemporalGNN,
-    MulticlassSpatioTemporalGNNV1,
+    MulticlassHeteroGCNMean,
+    MulticlassHeteroGCNMLP,
+    MulticlassHeteroGCNMLPWeights,
 )
 from emotions.multiclass.results_plotting_multiclass import (
     generate_and_save_multiclass_results_plots,
@@ -749,31 +750,41 @@ def _train_gnn_fold(
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
-    model_version = str(model_cfg.get("model_version", "v2")).lower()
-    if model_version == "v1":
-        model_cls = MulticlassSpatioTemporalGNNV1
-    elif model_version == "v2":
-        model_cls = MulticlassSpatioTemporalGNN
-    elif model_version in {"basicgcn", "basic_gcn", "basic-gcn"}:
-        model_cls = MulticlassBasicGCN
-    else:
+    model_version = str(model_cfg.get("model_version", "HeteroGCNMLPWeights"))
+    model_key = model_version.lower().replace("-", "_")
+    model_classes = {
+        "basicgcn": MulticlassBasicGCN,
+        "basic_gcn": MulticlassBasicGCN,
+        "heterogcnmean": MulticlassHeteroGCNMean,
+        "hetero_gcn_mean": MulticlassHeteroGCNMean,
+        "heterogcnmlp": MulticlassHeteroGCNMLP,
+        "hetero_gcn_mlp": MulticlassHeteroGCNMLP,
+        "heterogcnmlpweights": MulticlassHeteroGCNMLPWeights,
+        "hetero_gcn_mlp_weights": MulticlassHeteroGCNMLPWeights,
+    }
+    model_display_names = {
+        "basicgcn": "BasicGCN",
+        "basic_gcn": "BasicGCN",
+        "heterogcnmean": "HeteroGCNMean",
+        "hetero_gcn_mean": "HeteroGCNMean",
+        "heterogcnmlp": "HeteroGCNMLP",
+        "hetero_gcn_mlp": "HeteroGCNMLP",
+        "heterogcnmlpweights": "HeteroGCNMLPWeights",
+        "hetero_gcn_mlp_weights": "HeteroGCNMLPWeights",
+    }
+    if model_key not in model_classes:
         raise ValueError(
             f"Unsupported gnn.model.model_version='{model_version}'. "
-            "Choose 'v1', 'v2', or 'BasicGCN'."
+            "Choose BasicGCN, HeteroGCNMean, HeteroGCNMLP, or HeteroGCNMLPWeights."
         )
-    if model_version == "v1":
-        benchmark_model_name = "GNN_v1"
-    elif model_version == "v2":
-        benchmark_model_name = "GNN_v2"
-    else:
-        benchmark_model_name = "BasicGCN"
+    model_cls = model_classes[model_key]
+    benchmark_model_name = model_display_names[model_key]
 
     model_kwargs = {
         "in_channels": model_cfg["in_channels"],
         "hidden_channels": model_cfg["hidden_channels"],
         "num_classes": len(class_labels),
         "use_preprocess_mlp": model_cfg.get("use_preprocess_mlp", True),
-        "use_edge_weights": config["dataset"].get("use_edge_weights", True),
         "add_self_loops": model_cfg.get("add_self_loops", False),
         "dropout_mlp": model_cfg.get("dropout_mlp", 0.1),
         "dropout_gnn": model_cfg.get("dropout_gnn", 0.1),
@@ -781,36 +792,18 @@ def _train_gnn_fold(
         "aggr": model_cfg.get("aggr", "mean"),
         "conv_type": model_cfg.get("conv_type", "GCNConv"),
         "num_layers": model_cfg.get("num_layers", 2),
-        "pooling": model_cfg.get("pooling", "attention" if model_version != "v1" else "mean_max"),
-    }
-    if model_version == "v2":
-        model_kwargs["head_pooling"] = model_cfg.get("head_pooling")
-        model_kwargs["graph_pooling"] = model_cfg.get(
-            "graph_pooling",
-            model_cfg.get("head_pooling", model_cfg.get("pooling", "attention")),
-        )
-        model_kwargs["relation_pooling"] = model_cfg.get("relation_pooling", "mlp")
-        model_kwargs["edge_weight_mode"] = model_cfg.get(
-            "edge_weight_mode",
-            config["dataset"].get("edge_weight_mode", "learned_signed"),
-        )
-        model_kwargs["use_delta_distance_edge_feature"] = model_cfg.get(
+        "use_delta_distance_edge_feature": model_cfg.get(
             "use_delta_distance_edge_feature",
             bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
-        )
-        model_kwargs["use_fixation_edges"] = model_cfg.get(
+        ),
+        "use_fixation_edges": model_cfg.get(
             "use_fixation_edges",
             bool(config["dataset"].get("use_fixation_edges", True)),
-        )
-        model_kwargs["spatial_edge_attr_dim"] = model_cfg.get("spatial_edge_attr_dim")
-        model_kwargs["temporal_edge_attr_dim"] = model_cfg.get("temporal_edge_attr_dim")
-        model_kwargs["fixation_edge_attr_dim"] = model_cfg.get("fixation_edge_attr_dim")
-    elif model_version in {"basicgcn", "basic_gcn", "basic-gcn"}:
-        model_kwargs["use_edge_weights"] = False
-        model_kwargs["conv_type"] = "GCNConv"
-        model_kwargs["readout"] = model_cfg.get("readout", "attention")
-        model_kwargs["head_pooling"] = model_cfg.get("head_pooling")
-        model_kwargs["graph_pooling"] = model_cfg.get("graph_pooling")
+        ),
+        "spatial_edge_attr_dim": model_cfg.get("spatial_edge_attr_dim"),
+        "temporal_edge_attr_dim": model_cfg.get("temporal_edge_attr_dim"),
+        "fixation_edge_attr_dim": model_cfg.get("fixation_edge_attr_dim"),
+    }
 
     model = model_cls(**model_kwargs).to(device)
     parameter_counts = count_torch_parameters(model)

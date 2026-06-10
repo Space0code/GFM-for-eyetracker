@@ -66,7 +66,12 @@ from emotions.utils import (
     save_comparison_csv,
     print_comparison_table
 )
-from emotions.binary.model_binary import BinaryBasicGCN, BinarySpatioTemporalGNN, BinarySpatioTemporalGNNV1
+from emotions.binary.model_binary import (
+    BinaryBasicGCN,
+    BinaryHeteroGCNMean,
+    BinaryHeteroGCNMLP,
+    BinaryHeteroGCNMLPWeights,
+)
 from emotions.binary.baseline_model_binary import get_binary_baseline_by_name
 from emotions.binary.metrics_binary import evaluate_binary_classification
 from emotions.binary.results_plotting import generate_and_save_binary_results_plots
@@ -571,53 +576,32 @@ def train_gnn_fold(
         """Run one full fold training/evaluation attempt."""
         # Create model per attempt so retries start from a clean state.
         model_kwargs = dict(model_cfg)
-        model_version = str(model_kwargs.pop("model_version", "v2")).lower()
-        model_kwargs["use_edge_weights"] = bool(config["dataset"].get("use_edge_weights", True))
-        if model_version == "v1":
-            model_cls = BinarySpatioTemporalGNNV1
-            model_kwargs.pop("edge_weight_mode", None)
-            model_kwargs.pop("graph_pooling", None)
-            model_kwargs.pop("relation_pooling", None)
-            model_kwargs.pop("use_delta_distance_edge_feature", None)
-            model_kwargs.pop("use_fixation_edges", None)
-            model_kwargs.pop("spatial_edge_attr_dim", None)
-            model_kwargs.pop("temporal_edge_attr_dim", None)
-            model_kwargs.pop("fixation_edge_attr_dim", None)
-        elif model_version == "v2":
-            model_cls = BinarySpatioTemporalGNN
-            model_kwargs.setdefault(
-                "edge_weight_mode",
-                config["dataset"].get("edge_weight_mode", "learned_signed"),
-            )
-            model_kwargs.setdefault(
-                "use_delta_distance_edge_feature",
-                bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
-            )
-            model_kwargs.setdefault(
-                "use_fixation_edges",
-                bool(config["dataset"].get("use_fixation_edges", True)),
-            )
-            model_kwargs.setdefault("head_pooling", model_kwargs.get("head_pooling"))
-            model_kwargs.setdefault(
-                "graph_pooling",
-                model_kwargs.get("head_pooling", model_kwargs.get("pooling", "attention")),
-            )
-            model_kwargs.setdefault("relation_pooling", "mlp")
-        elif model_version in {"basicgcn", "basic_gcn", "basic-gcn"}:
-            model_cls = BinaryBasicGCN
-            model_kwargs["use_edge_weights"] = False
-            model_kwargs["conv_type"] = "GCNConv"
-            model_kwargs.setdefault("readout", "attention")
-            model_kwargs.pop("aggr", None)
-            model_kwargs.pop("edge_weight_mode", None)
-            model_kwargs.pop("relation_pooling", None)
-            model_kwargs.pop("use_delta_distance_edge_feature", None)
-            model_kwargs.pop("use_fixation_edges", None)
-        else:
+        model_version = str(model_kwargs.pop("model_version", "HeteroGCNMLPWeights"))
+        model_key = model_version.lower().replace("-", "_")
+        model_classes = {
+            "basicgcn": BinaryBasicGCN,
+            "basic_gcn": BinaryBasicGCN,
+            "heterogcnmean": BinaryHeteroGCNMean,
+            "hetero_gcn_mean": BinaryHeteroGCNMean,
+            "heterogcnmlp": BinaryHeteroGCNMLP,
+            "hetero_gcn_mlp": BinaryHeteroGCNMLP,
+            "heterogcnmlpweights": BinaryHeteroGCNMLPWeights,
+            "hetero_gcn_mlp_weights": BinaryHeteroGCNMLPWeights,
+        }
+        if model_key not in model_classes:
             raise ValueError(
                 f"Unsupported gnn.model.model_version='{model_version}'. "
-                "Choose 'v1', 'v2', or 'BasicGCN'."
+                "Choose BasicGCN, HeteroGCNMean, HeteroGCNMLP, or HeteroGCNMLPWeights."
             )
+        model_cls = model_classes[model_key]
+        model_kwargs.setdefault(
+            "use_delta_distance_edge_feature",
+            bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
+        )
+        model_kwargs.setdefault(
+            "use_fixation_edges",
+            bool(config["dataset"].get("use_fixation_edges", True)),
+        )
         model = model_cls(**model_kwargs).to(device)
         if use_compile and hasattr(torch, "compile"):
             model = torch.compile(model, mode="default")

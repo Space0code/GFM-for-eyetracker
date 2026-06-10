@@ -40,29 +40,18 @@ def _args() -> Namespace:
 
 
 def test_quick_variants_set_expected_gnn_versions() -> None:
-    v1 = build_variant("GNN_v1")
     basic = build_variant("BasicGCN")
-    basic_mean = build_variant("BasicGCN_mean")
-    basic_attention = build_variant("BasicGCN_attention")
-    v2 = build_variant("GNN_v2")
-
-    assert v1.overrides["global_overrides"]["dataset"]["graph_version"] == "v1"
-    assert v1.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "handcrafted"
-    assert v1.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "v1"
+    hetero_mean = build_variant("HeteroGCNMean")
+    hetero_mlp = build_variant("HeteroGCNMLP")
+    hetero_weighted = build_variant("HeteroGCNMLPWeights")
 
     assert basic.overrides["global_overrides"]["dataset"]["graph_version"] == "v2"
     assert basic.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
+    assert basic.overrides["global_overrides"]["dataset"]["use_edge_weights"] is True
     assert basic.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
-    assert basic.overrides["global_overrides"]["gnn"]["model"]["conv_type"] == "GCNConv"
-    assert basic.overrides["global_overrides"]["gnn"]["model"]["readout"] == "mean"
-    assert basic_mean.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
-    assert basic_mean.overrides["global_overrides"]["gnn"]["model"]["readout"] == "mean"
-    assert basic_attention.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
-    assert basic_attention.overrides["global_overrides"]["gnn"]["model"]["readout"] == "attention"
-
-    assert v2.overrides["global_overrides"]["dataset"]["graph_version"] == "v2"
-    assert v2.overrides["global_overrides"]["dataset"]["edge_weight_mode"] == "learned_signed"
-    assert v2.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "v2"
+    assert hetero_mean.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "HeteroGCNMean"
+    assert hetero_mlp.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "HeteroGCNMLP"
+    assert hetero_weighted.overrides["global_overrides"]["gnn"]["model"]["model_version"] == "HeteroGCNMLPWeights"
 
 
 def test_quick_gnn_variants_do_not_override_shared_architecture_knobs() -> None:
@@ -76,7 +65,7 @@ def test_quick_gnn_variants_do_not_override_shared_architecture_knobs() -> None:
         "relation_pooling",
     }
 
-    for model_name in ["GNN_v1", "GNN_v2"]:
+    for model_name in ["BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights"]:
         model_cfg = build_variant(model_name).overrides["global_overrides"]["gnn"]["model"]
 
         assert not (shared_knobs & set(model_cfg))
@@ -112,23 +101,23 @@ def test_quick_variants_support_random_and_majority() -> None:
 
 
 def test_quick_model_parser_accepts_common_aliases() -> None:
-    parsed = _parse_models("random,majority,gnn1,basicgcn,basic_gcn_attention,gnn2,lgbm")
+    parsed = _parse_models("random,majority,basicgcn,hetero_gcn_mean,hetero-gcn-mlp,heterogcn_mlp_weights,lgbm")
 
     assert parsed == [
         "Random",
         "Majority",
-        "GNN_v1",
         "BasicGCN",
-        "BasicGCN_attention",
-        "GNN_v2",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
         "LightGBM",
     ]
 
 
 def test_quick_model_parser_accepts_yaml_list() -> None:
-    parsed = _parse_models(["lightgbm", "svm", "mlp", "gazemae_mlp", "basic_gcn_mean", "gnn_v2"])
+    parsed = _parse_models(["lightgbm", "svm", "mlp", "gazemae_mlp", "basicgcn", "heterogcnmlpweights"])
 
-    assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN_mean", "GNN_v2"]
+    assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "HeteroGCNMLPWeights"]
 
 
 def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
@@ -139,9 +128,10 @@ def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
                 "SVM",
                 "MLP",
                 "GazeMAE_MLP",
-                "BasicGCN_mean",
-                "BasicGCN_attention",
-                "GNN_v2",
+                "BasicGCN",
+                "HeteroGCNMean",
+                "HeteroGCNMLP",
+                "HeteroGCNMLPWeights",
             ],
         }
     }
@@ -151,9 +141,10 @@ def test_quick_models_default_to_yaml_and_allow_cli_override() -> None:
         "SVM",
         "MLP",
         "GazeMAE_MLP",
-        "BasicGCN_mean",
-        "BasicGCN_attention",
-        "GNN_v2",
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
     ]
     assert _resolve_requested_models(wrapper_cfg, cli_models="random,lgbm") == ["Random", "LightGBM"]
 
@@ -168,24 +159,24 @@ def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
     ordered = _ordered_models(
         [
             "LightGBM",
-            "GNN_v2",
+            "HeteroGCNMLPWeights",
             "Random",
             "MLP",
             "Majority",
             "SVM",
-            "BasicGCN_attention",
-            "BasicGCN_mean",
-            "GNN_v1",
+            "HeteroGCNMLP",
+            "BasicGCN",
+            "HeteroGCNMean",
         ]
     )
 
     assert ordered == [
         "Random",
         "Majority",
-        "GNN_v1",
-        "BasicGCN_mean",
-        "BasicGCN_attention",
-        "GNN_v2",
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
         "MLP",
         "LightGBM",
         "SVM",
@@ -194,15 +185,15 @@ def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
 
 def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
     runs = build_quick_runs(
-        ["Random", "Majority", "GNN_v1", "BasicGCN_mean", "BasicGCN_attention", "GNN_v2", "LightGBM"]
+        ["Random", "Majority", "BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights", "LightGBM"]
     )
 
     assert [run.run_name for run in runs] == [
         "Baselines",
-        "GNN_v1",
-        "BasicGCN_mean",
-        "BasicGCN_attention",
-        "GNN_v2",
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
     ]
     assert runs[0].model_names == ["Random", "Majority", "LightGBM"]
     assert runs[0].overrides["global_overrides"]["baselines"]["models"] == [
@@ -265,7 +256,7 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> Non
     summary = pd.DataFrame(
         [
             {
-                "model": "GNN_v2",
+                "model": "HeteroGCNMLPWeights",
                 "status": "success",
                 "accuracy": 0.39,
                 "balanced_accuracy": 0.41,
@@ -292,7 +283,7 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> Non
                 "auc": 0.50,
             },
             {
-                "model": "GNN_v1",
+                "model": "HeteroGCNMean",
                 "status": "success",
                 "accuracy": 0.34,
                 "balanced_accuracy": 0.35,
@@ -330,12 +321,12 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> Non
     assert barplot_calls[0]["y"] == "value"
     assert barplot_calls[0]["hue"] == "model"
     assert barplot_calls[0]["order"] == ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
-    assert barplot_calls[0]["hue_order"] == ["Random", "Majority", "GNN_v1", "GNN_v2", "LightGBM"]
+    assert barplot_calls[0]["hue_order"] == ["Random", "Majority", "HeteroGCNMean", "HeteroGCNMLPWeights", "LightGBM"]
     assert barplot_calls[0]["palette"] == {
         "Random": quick_comparison.MODEL_COLOR_PALETTE["Random"],
         "Majority": quick_comparison.MODEL_COLOR_PALETTE["Majority"],
-        "GNN_v1": quick_comparison.MODEL_COLOR_PALETTE["GNN_v1"],
-        "GNN_v2": quick_comparison.MODEL_COLOR_PALETTE["GNN_v2"],
+        "HeteroGCNMean": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMean"],
+        "HeteroGCNMLPWeights": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMLPWeights"],
         "LightGBM": quick_comparison.MODEL_COLOR_PALETTE["LightGBM"],
     }
 
@@ -391,7 +382,7 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
     paths = _save_training_history_outputs(
         rows=[
             {
-                "model": "GNN_v2",
+                "model": "HeteroGCNMLPWeights",
                 "experiment_id": AROUSAL_EXPERIMENT_ID,
                 "experiment_display_name": "Table-6 arousal 3-class",
                 "cv_strategy": "subject_kfold",
@@ -420,7 +411,7 @@ def test_test_loss_summary_plot_is_written(tmp_path: Path) -> None:
     summary = pd.DataFrame(
         [
             {
-                "model": "GNN_v2",
+                "model": "HeteroGCNMLPWeights",
                 "status": "success",
                 "loss": 0.83,
                 "experiment_id": AROUSAL_EXPERIMENT_ID,
@@ -483,7 +474,7 @@ def test_fold_metric_outputs_include_top_level_metrics_and_std(tmp_path: Path) -
     paths = _save_fold_metric_outputs(
         rows=[
             {
-                "model": "GNN_v2",
+                "model": "HeteroGCNMLPWeights",
                 "experiment_id": AROUSAL_EXPERIMENT_ID,
                 "cv_strategy": "subject_loo",
                 "status": "success",
@@ -500,13 +491,13 @@ def test_fold_metric_outputs_include_top_level_metrics_and_std(tmp_path: Path) -
     }.issubset(set(paths))
 
     fold_metrics = pd.read_csv(tmp_path / "tables" / "fold_metrics.csv")
-    assert fold_metrics["model"].tolist() == ["GNN_v2", "GNN_v2"]
+    assert fold_metrics["model"].tolist() == ["HeteroGCNMLPWeights", "HeteroGCNMLPWeights"]
     assert fold_metrics["metric_source_model"].tolist() == ["GNN", "GNN"]
     assert fold_metrics["fold_id"].tolist() == ["s_P1", "s_P2"]
 
     metric_summary = pd.read_csv(tmp_path / "tables" / "metric_summary_with_std.csv")
     accuracy_row = metric_summary[
-        (metric_summary["model"] == "GNN_v2")
+        (metric_summary["model"] == "HeteroGCNMLPWeights")
         & (metric_summary["metric_type"] == "aggregated")
         & (metric_summary["metric"] == "accuracy")
     ].iloc[0]

@@ -61,7 +61,7 @@ from emotions.common.edge_scaling import (
     fit_edge_feature_scalers,
 )
 from emotions.baseline_model import get_baseline_by_name
-from emotions.model import SpatioTemporalHeteroGNN, SpatioTemporalHeteroGNNV1
+from emotions.model import HeteroGCNMLPWeights
 from emotions.metrics import compute_metrics
 from emotions.train_baseline import build_tabular_samples, samples_to_xy
 from emotions.utils import (
@@ -255,21 +255,12 @@ def _train_gnn_fold(
     model_cfg = config["gnn"]["model"]
     training_cfg = config["gnn"]["training"]
 
-    model_version = str(model_cfg.get("model_version", "v2")).lower()
-    if model_version == "v1":
-        model_cls = SpatioTemporalHeteroGNNV1
-    elif model_version == "v2":
-        model_cls = SpatioTemporalHeteroGNN
-    else:
-        raise ValueError(f"Unsupported gnn.model.model_version='{model_version}'. Choose 'v1' or 'v2'.")
-
     model_kwargs = {
         "in_channels": model_cfg["in_channels"],
         "hidden_channels": model_cfg["hidden_channels"],
         "out_channels": 1,
         "output_scale": float(model_cfg.get("output_scale", 1.0)),
         "use_preprocess_mlp": model_cfg.get("use_preprocess_mlp", True),
-        "use_edge_weights": config["dataset"].get("use_edge_weights", True),
         "add_self_loops": model_cfg.get("add_self_loops", False),
         "dropout_mlp": model_cfg.get("dropout_mlp", 0.1),
         "dropout_gnn": model_cfg.get("dropout_gnn", 0.1),
@@ -277,32 +268,20 @@ def _train_gnn_fold(
         "aggr": model_cfg.get("aggr", "mean"),
         "conv_type": model_cfg.get("conv_type", "GCNConv"),
         "num_layers": model_cfg.get("num_layers", 2),
-        "pooling": model_cfg.get("pooling", "attention" if model_version == "v2" else "mean_max"),
-    }
-    if model_version == "v2":
-        model_kwargs["head_pooling"] = model_cfg.get("head_pooling")
-        model_kwargs["graph_pooling"] = model_cfg.get(
-            "graph_pooling",
-            model_cfg.get("head_pooling", model_cfg.get("pooling", "attention")),
-        )
-        model_kwargs["relation_pooling"] = model_cfg.get("relation_pooling", "mlp")
-        model_kwargs["edge_weight_mode"] = model_cfg.get(
-            "edge_weight_mode",
-            config["dataset"].get("edge_weight_mode", "learned_signed"),
-        )
-        model_kwargs["use_delta_distance_edge_feature"] = model_cfg.get(
+        "use_delta_distance_edge_feature": model_cfg.get(
             "use_delta_distance_edge_feature",
             bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
-        )
-        model_kwargs["use_fixation_edges"] = model_cfg.get(
+        ),
+        "use_fixation_edges": model_cfg.get(
             "use_fixation_edges",
             bool(config["dataset"].get("use_fixation_edges", True)),
-        )
-        model_kwargs["spatial_edge_attr_dim"] = model_cfg.get("spatial_edge_attr_dim")
-        model_kwargs["temporal_edge_attr_dim"] = model_cfg.get("temporal_edge_attr_dim")
-        model_kwargs["fixation_edge_attr_dim"] = model_cfg.get("fixation_edge_attr_dim")
+        ),
+        "spatial_edge_attr_dim": model_cfg.get("spatial_edge_attr_dim"),
+        "temporal_edge_attr_dim": model_cfg.get("temporal_edge_attr_dim"),
+        "fixation_edge_attr_dim": model_cfg.get("fixation_edge_attr_dim"),
+    }
 
-    model = model_cls(**model_kwargs).to(device)
+    model = HeteroGCNMLPWeights(**model_kwargs).to(device)
 
     use_compile = training_cfg.get("use_torch_compile", True)
     if use_compile and hasattr(torch, "compile"):
