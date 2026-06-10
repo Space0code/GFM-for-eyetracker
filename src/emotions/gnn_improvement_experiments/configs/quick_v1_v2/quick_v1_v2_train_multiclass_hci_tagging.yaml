@@ -2,9 +2,9 @@
 #
 # "hci_tagging" in this filename refers to the source dataset name, not to
 # implicit/image/video tagging tasks. The quick Table-6 wrapper uses this base
-# with scope: emotion-elicitation and overrides the concrete task to arousal or
-# valence as selected by quick_comparison.table6_tasks in the wrapper YAML. The
-# arousal task below is only the standalone fallback for this trainer config.
+# with scope: emotion-elicitation and overrides the concrete task to valence as
+# selected by quick_comparison.table6_tasks in the wrapper YAML. The valence task
+# below is the standalone fallback for this trainer config.
 
 run_experiments:
   baselines: true
@@ -17,24 +17,24 @@ benchmarking:
   synthetic_windows_per_run: 16
 
 multiclass_task:
-  task_name: "table6-arousal-3class"
+  task_name: "table6-valence-3class"
   target_column: "emotion-id"
   use_table6_3class_targets: true
   drop_unmapped_labels: true
   class_name_mapping:
-    0: Calm
-    1: Medium aroused
-    2: Excited/Activated
+    0: Unpleasant
+    1: Neutral valence
+    2: Pleasant
   table6_class_mapping:
-    0: 0
-    1: 2
+    0: 1
+    1: 0
     2: 0
-    3: 2
-    4: 1
+    3: 0
+    4: 2
     5: 0
-    6: 2
-    11: 1
-    12: 2
+    6: 1
+    11: 2
+    12: 0
 
 # Dataset configuration shared by GNN and baselines.
 dataset:

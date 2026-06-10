@@ -1,8 +1,8 @@
-# Wrapper config for Table-6 low-vs-high arousal/valence quick comparisons.
+# Wrapper config for Table-6 low-vs-high valence quick comparisons.
 #
 # This keeps the Table-6 multiclass machinery, maps only low/high classes, and
 # drops medium/neutral labels via drop_unmapped_labels: true. This is the
-# current binary-style Table-6 setup used for recent low/high experiments.
+# current binary-style Table-6 setup used for the thesis model comparison.
 #
 # Usage:
 #   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py \
@@ -73,7 +73,7 @@ global_overrides:
 
 experiments:
   multiclass_table6_arousal_3class:
-    enabled: true
+    enabled: false
     task_type: multiclass
     experiment_group: multiclass
     scope: emotion-elicitation

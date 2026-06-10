@@ -9,6 +9,7 @@ import numpy as np
 from emotions.gnn_improvement_experiments import run_quick_v1_v2_comparison as quick_comparison
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
+    VALENCE_EXPERIMENT_ID,
     build_fixed_overrides,
     build_quick_runs,
     build_variant,
@@ -71,11 +72,11 @@ def test_quick_gnn_variants_do_not_override_shared_architecture_knobs() -> None:
         assert not (shared_knobs & set(model_cfg))
 
 
-def test_quick_payload_enables_table6_arousal_and_valence() -> None:
+def test_quick_payload_defaults_to_table6_valence_only() -> None:
     base_cfg = {
         "experiments": {
-            AROUSAL_EXPERIMENT_ID: {"enabled": False},
-            "multiclass_table6_valence_3class": {"enabled": True},
+            AROUSAL_EXPERIMENT_ID: {"enabled": True},
+            VALENCE_EXPERIMENT_ID: {"enabled": False},
         }
     }
     payload = _build_payload(
@@ -84,8 +85,8 @@ def test_quick_payload_enables_table6_arousal_and_valence() -> None:
         variant=build_variant("LightGBM"),
     )
 
-    assert payload["experiments"][AROUSAL_EXPERIMENT_ID]["enabled"] is True
-    assert payload["experiments"]["multiclass_table6_valence_3class"]["enabled"] is True
+    assert payload["experiments"][AROUSAL_EXPERIMENT_ID]["enabled"] is False
+    assert payload["experiments"][VALENCE_EXPERIMENT_ID]["enabled"] is True
     assert payload["global_overrides"]["baselines"]["models"] == ["LightGBM"]
     assert payload["global_overrides"]["run_experiments"] == {"baselines": True, "gnn": False}
 

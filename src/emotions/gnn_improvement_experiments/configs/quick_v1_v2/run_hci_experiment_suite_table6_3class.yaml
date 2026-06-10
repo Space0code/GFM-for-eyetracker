@@ -17,10 +17,8 @@ quick_comparison:
   # Diploma main comparison models. Keep old internal graph variants out of the
   # default thesis run; use --models only for ad hoc research comparisons.
   models: [Random, Majority, LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN, HeteroGCNMean, HeteroGCNMLP, HeteroGCNMLPWeights]
-  # Select one or both Table-6 tasks for the v1/v2 quick runner:
-  #   table6_tasks: [arousal]
-  table6_tasks: [valence, arousal]
-  #   table6_tasks: [arousal, valence]
+  # Thesis comparisons train and predict valence only.
+  table6_tasks: [valence]
 
 global_overrides:
   benchmarking:
@@ -83,7 +81,7 @@ global_overrides:
 
 experiments:
   multiclass_table6_arousal_3class:
-    enabled: true
+    enabled: false
     task_type: multiclass
     experiment_group: multiclass
     scope: emotion-elicitation

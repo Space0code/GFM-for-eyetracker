@@ -1,13 +1,12 @@
-"""Run a quick Table-6 arousal/valence comparison for graph models and baselines.
+"""Run a quick Table-6 low/high valence comparison for graph models and baselines.
 
 This script generates focused suite-wrapper configs and optionally runs them
 sequentially with the dataset, cross-validation, models, and training parameters
-from the selected YAML suite config. Select tasks in the wrapper config with
-`quick_comparison.table6_tasks`, for example `[arousal]`, `[valence]`, or
-`[arousal, valence]`. Select models in the wrapper config with
-`quick_comparison.models`, or override them from the command line with
-`--models`. Requested baseline models are grouped into one suite invocation so
-they share the same loaded dataset and CV splits.
+from the selected YAML suite config. The default wrapper config uses the
+low/high binary-style Table-6 valence target only. Select models in the wrapper
+config with `quick_comparison.models`, or override them from the command line
+with `--models`. Requested baseline models are grouped into one suite
+invocation so they share the same loaded dataset and CV splits.
 
 Example:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
@@ -56,6 +55,7 @@ from emotions.utils import TimestampedLineWriter
 AROUSAL_EXPERIMENT_ID = "multiclass_table6_arousal_3class"
 VALENCE_EXPERIMENT_ID = "multiclass_table6_valence_3class"
 QUICK_EXPERIMENT_IDS = [AROUSAL_EXPERIMENT_ID, VALENCE_EXPERIMENT_ID]
+DEFAULT_QUICK_EXPERIMENT_IDS = [VALENCE_EXPERIMENT_ID]
 TABLE6_TASK_TO_EXPERIMENT_ID = {
     "arousal": AROUSAL_EXPERIMENT_ID,
     "table6-arousal-3class": AROUSAL_EXPERIMENT_ID,
@@ -170,9 +170,9 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=(
             "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/"
-            "run_hci_experiment_suite_table6_3class.yaml"
+            "run_hci_experiment_suite_table6_low_high.yaml"
         ),
-        help="Base suite wrapper config.",
+        help="Base suite wrapper config. Defaults to the low/high valence config.",
     )
     parser.add_argument(
         "--output-root",
@@ -365,7 +365,7 @@ def _resolve_quick_table6_experiment_ids(wrapper_cfg: Dict[str, Any]) -> List[st
     if not isinstance(quick_cfg, dict):
         raise ValueError("quick_comparison must be a dictionary when configured.")
 
-    task_spec = quick_cfg.get("table6_tasks", quick_cfg.get("tasks", QUICK_EXPERIMENT_IDS))
+    task_spec = quick_cfg.get("table6_tasks", quick_cfg.get("tasks", DEFAULT_QUICK_EXPERIMENT_IDS))
     if isinstance(task_spec, str):
         normalized = task_spec.strip().lower().replace("_", "-")
         if normalized in {"both", "all", "arousal-valence", "valence-arousal"}:
