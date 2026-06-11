@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+import pytest
+import yaml
 
 from emotions.gnn_improvement_experiments import run_quick_v1_v2_comparison as quick_comparison
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
@@ -12,19 +14,30 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     VALENCE_EXPERIMENT_ID,
     build_fixed_overrides,
     build_quick_runs,
+    build_signal_set_variant,
     build_variant,
     _build_payload,
+    _model_names_for_signal_set,
     _ordered_models,
     _parse_cv_strategies,
     _parse_models,
+    _parse_signal_sets,
+    _resolve_report_profile,
     _resolve_requested_models,
+    _resolve_requested_signal_sets,
+    _save_thesis_metric_heatmaps,
+    _save_thesis_metric_table,
     _save_combined_confusion_matrices,
     _save_confusion_matrix_table,
     _save_fold_metric_outputs,
     _save_group_model_ranking,
     _save_label_distribution_outputs,
     _save_training_history_outputs,
+    _should_save_fold_loss_plots,
+    _thesis_model_display_name,
     _plot_test_loss_summary,
+    parse_args,
+    run_quick_comparison,
 )
 
 
@@ -37,6 +50,9 @@ def _args() -> Namespace:
         val_size=None,
         num_epochs=None,
         use_torch_compile=False,
+        signal_sets=None,
+        report_profile="thesis",
+        save_fold_loss_plots=False,
     )
 
 
@@ -121,6 +137,149 @@ def test_quick_model_parser_accepts_yaml_list() -> None:
     assert parsed == ["LightGBM", "SVM", "MLP", "GazeMAE_MLP", "BasicGCN", "HeteroGCNMLPWeights"]
 
 
+def test_quick_signal_set_parser_accepts_aliases_and_deduplicates() -> None:
+    parsed = _parse_signal_sets("gaze,gaze-only,pupil,gaze+pupil,all,full")
+
+    assert parsed == ["gaze_only", "pupil_only", "gaze_pupil", "all_signals"]
+
+
+def test_quick_signal_set_parser_rejects_invalid_names() -> None:
+    with pytest.raises(ValueError, match="Unknown signal set"):
+        _parse_signal_sets("gaze,blink_only")
+
+
+def test_quick_signal_sets_default_to_yaml_then_all_signals() -> None:
+    wrapper_cfg = {"quick_comparison": {"signal_sets": ["gaze", "pupil-only"]}}
+
+    assert _resolve_requested_signal_sets(wrapper_cfg, cli_signal_sets=None) == ["gaze_only", "pupil_only"]
+    assert _resolve_requested_signal_sets(wrapper_cfg, cli_signal_sets="all") == ["all_signals"]
+    assert _resolve_requested_signal_sets({}, cli_signal_sets=None) == ["all_signals"]
+
+
+def test_report_profile_parser_and_fold_loss_policy(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_quick_v1_v2_comparison.py",
+            "--report-profile",
+            "full",
+            "--save-fold-loss-plots",
+        ],
+    )
+    args = parse_args()
+
+    assert args.report_profile == "full"
+    assert args.save_fold_loss_plots is True
+    assert _resolve_report_profile(args) == "full"
+    assert _should_save_fold_loss_plots(args, "thesis") is True
+    assert _should_save_fold_loss_plots(Namespace(save_fold_loss_plots=False), "full") is True
+    assert _should_save_fold_loss_plots(Namespace(save_fold_loss_plots=False), "thesis") is False
+
+
+def test_signal_set_overrides_force_temporal_flags_and_active_sources() -> None:
+    pupil = build_signal_set_variant("pupil_only")
+    dataset_cfg = pupil.overrides["global_overrides"]["dataset"]
+    model_cfg = pupil.overrides["global_overrides"]["gnn"]["model"]
+
+    assert dataset_cfg["use_relative_time"] is True
+    assert dataset_cfg["use_temporal_node_feature"] is True
+    assert dataset_cfg["use_temporal_edge_features"] is True
+    assert dataset_cfg["use_temporal_edges"] is True
+    assert dataset_cfg["use_gaze_node_features"] is False
+    assert dataset_cfg["use_pupil_node_features"] is True
+    assert dataset_cfg["use_pupil_edge_features"] is True
+    assert dataset_cfg["use_spatial_edges"] is False
+    assert dataset_cfg["use_fixation_edges"] is False
+    assert dataset_cfg["dropna_columns"] == [
+        "time-rel-seconds",
+        "subject",
+        "recording",
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+    ]
+    assert dataset_cfg["signal_outlier_filter"]["columns"] == [
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+    ]
+    assert model_cfg["use_spatial_edges"] is False
+    assert model_cfg["use_fixation_edges"] is False
+
+
+def test_signal_aware_embedding_mapping_emits_one_embedding_baseline() -> None:
+    requested = ["LightGBM", "GazeMAE_MLP", "MOMENT_pupil", "BasicGCN"]
+
+    assert _model_names_for_signal_set(requested, "gaze_only") == ["LightGBM", "GazeMAE_MLP", "BasicGCN"]
+    assert _model_names_for_signal_set(requested, "pupil_only") == ["LightGBM", "MOMENT_pupil", "BasicGCN"]
+    assert _model_names_for_signal_set(requested, "gaze_pupil") == [
+        "LightGBM",
+        "MOMENT_GazeMAE_gaze_pupil",
+        "BasicGCN",
+    ]
+    assert _model_names_for_signal_set(requested, "all_signals") == [
+        "LightGBM",
+        "MOMENT_GazeMAE_all_signals",
+        "BasicGCN",
+    ]
+
+
+def test_quick_dry_run_writes_signal_set_rows_and_nested_configs(tmp_path: Path) -> None:
+    base_config = tmp_path / "wrapper.yaml"
+    output_dir = tmp_path / "quick_output"
+    payload = {
+        "suite": {},
+        "global_overrides": {
+            "cross_validation": {"strategies": ["subject_kfold"]},
+        },
+        "experiments": {
+            AROUSAL_EXPERIMENT_ID: {"enabled": False},
+            VALENCE_EXPERIMENT_ID: {"enabled": True},
+        },
+        "quick_comparison": {
+            "models": ["LightGBM", "GazeMAE_MLP", "BasicGCN"],
+            "signal_sets": ["pupil_only", "all_signals"],
+        },
+    }
+    base_config.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    args = Namespace(
+        base_config=str(base_config),
+        output_root=str(tmp_path / "unused"),
+        models=None,
+        signal_sets=None,
+        seed=None,
+        cv_strategy=None,
+        n_splits=None,
+        val_size=None,
+        num_epochs=None,
+        use_torch_compile=False,
+        report_profile="thesis",
+        save_fold_loss_plots=False,
+        dry_run=True,
+    )
+
+    run_quick_comparison(args, output_dir=output_dir)
+
+    summary = pd.read_csv(output_dir / "quick_comparison_summary.csv")
+    assert set(summary["signal_set"]) == {"pupil_only", "all_signals"}
+    assert "signal_set_description" in summary.columns
+    assert (output_dir / "generated_wrapper_configs" / "pupil_only" / "BasicGCN_and_Baselines.yaml").exists()
+    assert (output_dir / "generated_wrapper_configs" / "all_signals" / "BasicGCN_and_Baselines.yaml").exists()
+
+    pupil_cfg = yaml.safe_load(
+        (output_dir / "generated_wrapper_configs" / "pupil_only" / "BasicGCN_and_Baselines.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    all_cfg = yaml.safe_load(
+        (output_dir / "generated_wrapper_configs" / "all_signals" / "BasicGCN_and_Baselines.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert pupil_cfg["suite"]["results_dir"].endswith("model_runs/pupil_only")
+    assert all_cfg["suite"]["results_dir"].endswith("model_runs/all_signals")
+    assert pupil_cfg["global_overrides"]["baselines"]["models"] == ["LightGBM", "MOMENT_pupil"]
+    assert all_cfg["global_overrides"]["baselines"]["models"] == ["LightGBM", "MOMENT_GazeMAE_all_signals"]
+
+
 def test_quick_model_parser_accepts_moment_embedding_aliases() -> None:
     parsed = _parse_models(
         "moment_gaze,moment_pupil,moment_gaze_pupil,moment_all_signals,"
@@ -198,6 +357,12 @@ def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
         "LightGBM",
         "SVM",
     ]
+
+
+def test_thesis_model_display_names_are_plot_friendly() -> None:
+    assert _thesis_model_display_name("HeteroGCNMean") == "Hetero_GCN_Mean"
+    assert _thesis_model_display_name("HeteroGCNMLPWeights") == "Hetero_GCN_MLP_Weights"
+    assert _thesis_model_display_name("GazeMAE_MLP") == "GazeMAE_MLP"
 
 
 def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
@@ -348,6 +513,117 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> Non
     }
 
 
+def test_thesis_metric_table_ranks_by_accuracy_then_macro_f1(tmp_path: Path) -> None:
+    summary = pd.DataFrame(
+        [
+            {
+                "signal_set": "gaze_only",
+                "signal_set_description": "gaze",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "ModelB",
+                "status": "success",
+                "accuracy": 0.70,
+                "macro_f1": 0.50,
+                "balanced_accuracy": 0.60,
+                "weighted_f1": 0.55,
+                "loss": 0.9,
+            },
+            {
+                "signal_set": "gaze_only",
+                "signal_set_description": "gaze",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "ModelA",
+                "status": "success",
+                "accuracy": 0.70,
+                "macro_f1": 0.55,
+                "balanced_accuracy": 0.61,
+                "weighted_f1": 0.56,
+                "loss": 0.8,
+            },
+            {
+                "signal_set": "gaze_only",
+                "signal_set_description": "gaze",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "ModelC",
+                "status": "success",
+                "accuracy": 0.65,
+                "macro_f1": 0.60,
+                "balanced_accuracy": 0.62,
+                "weighted_f1": 0.57,
+                "loss": 0.7,
+            },
+        ]
+    )
+
+    output_path = _save_thesis_metric_table(summary=summary, output_dir=tmp_path)
+    assert output_path == tmp_path / "tables" / "thesis_signal_set_model_metrics.csv"
+
+    table = pd.read_csv(output_path)
+    assert table["model"].tolist() == ["ModelA", "ModelB", "ModelC"]
+    assert table["rank"].tolist() == [1, 2, 3]
+    assert "rank" in table.columns
+    assert not any(column.endswith("_mean") or column.endswith("_std") for column in table.columns)
+
+
+def test_thesis_metric_heatmaps_are_written(tmp_path: Path) -> None:
+    thesis_metrics = pd.DataFrame(
+        [
+            {
+                "signal_set": "gaze_only",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "LightGBM",
+                "accuracy": 0.66,
+                "macro_f1": 0.61,
+            },
+            {
+                "signal_set": "pupil_only",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "LightGBM",
+                "accuracy": 0.58,
+                "macro_f1": 0.52,
+            },
+            {
+                "signal_set": "gaze_only",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "HeteroGCNMLPWeights",
+                "accuracy": 0.63,
+                "macro_f1": 0.59,
+            },
+            {
+                "signal_set": "pupil_only",
+                "experiment_id": VALENCE_EXPERIMENT_ID,
+                "experiment_display_name": "Table-6 Valence",
+                "cv_strategy": "subject_kfold",
+                "model": "HeteroGCNMLPWeights",
+                "accuracy": 0.55,
+                "macro_f1": 0.50,
+            },
+        ]
+    )
+
+    paths = _save_thesis_metric_heatmaps(thesis_metrics=thesis_metrics, output_dir=tmp_path)
+
+    expected_paths = {
+        tmp_path / "plots" / f"thesis_accuracy_heatmap_{VALENCE_EXPERIMENT_ID}_subject_kfold.png",
+        tmp_path / "plots" / f"thesis_macro_f1_heatmap_{VALENCE_EXPERIMENT_ID}_subject_kfold.png",
+    }
+    assert set(paths) == expected_paths
+    for path in expected_paths:
+        assert path.exists()
+
+
 def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Path) -> None:
     suite_run_dir = tmp_path / "suite"
     trainer_run_dir = suite_run_dir / "trainer"
@@ -396,20 +672,18 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
         ]
     ).to_csv(fold_dir / "gnn_fold_diagnostics.csv", index=False)
 
-    paths = _save_training_history_outputs(
-        rows=[
-            {
-                "model": "HeteroGCNMLPWeights",
-                "experiment_id": AROUSAL_EXPERIMENT_ID,
-                "experiment_display_name": "Table-6 arousal 3-class",
-                "cv_strategy": "subject_kfold",
-                "status": "success",
-                "suite_run_dir": str(suite_run_dir),
-                "summary_model_name": "GNN",
-            }
-        ],
-        output_dir=tmp_path,
-    )
+    rows = [
+        {
+            "model": "HeteroGCNMLPWeights",
+            "experiment_id": AROUSAL_EXPERIMENT_ID,
+            "experiment_display_name": "Table-6 arousal 3-class",
+            "cv_strategy": "subject_kfold",
+            "status": "success",
+            "suite_run_dir": str(suite_run_dir),
+            "summary_model_name": "GNN",
+        }
+    ]
+    paths = _save_training_history_outputs(rows=rows, output_dir=tmp_path)
 
     expected_paths = {
         tmp_path / "tables" / "training_history.csv",
@@ -422,6 +696,12 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
     assert expected_paths.issubset(set(paths))
     for path in expected_paths:
         assert path.exists()
+    assert not (tmp_path / "plots" / "losses").exists()
+
+    full_paths = _save_training_history_outputs(rows=rows, output_dir=tmp_path, save_fold_loss_plots=True)
+    loss_plot_paths = [path for path in full_paths if path.parent.name == "losses"]
+    assert loss_plot_paths
+    assert all(path.exists() for path in loss_plot_paths)
 
 
 def test_test_loss_summary_plot_is_written(tmp_path: Path) -> None:

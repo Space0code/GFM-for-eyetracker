@@ -8,7 +8,9 @@ import torch
 
 from data.data import SpacioTemporalDataset
 from data.hci_signals import TIME_WINDOW_NORMALIZED_COLUMN
+from emotions.common.dataset_config import resolve_edge_attr_dims
 from emotions.common.edge_scaling import apply_edge_feature_scalers, fit_edge_feature_scalers
+from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import build_signal_set_variant
 from emotions.train_baseline import build_tabular_samples
 
 
@@ -129,3 +131,33 @@ def test_edge_feature_scalers_are_train_only_relation_specific_and_keep_directio
     assert torch.allclose(scaled_forward[:, -1], original_forward[:, -1])
     assert torch.allclose(scaled_backward[:, -1], original_backward[:, -1])
     assert not torch.allclose(scaled_forward[:, :-1], original_forward[:, :-1])
+
+
+def test_signal_set_edge_attr_dims_sync_for_all_signal_sets() -> None:
+    expected = {
+        "gaze_only": {
+            "spatial_edge_attr_dim": 6,
+            "temporal_edge_attr_dim": 7,
+            "fixation_edge_attr_dim": 6,
+        },
+        "pupil_only": {
+            "spatial_edge_attr_dim": 5,
+            "temporal_edge_attr_dim": 6,
+            "fixation_edge_attr_dim": 5,
+        },
+        "gaze_pupil": {
+            "spatial_edge_attr_dim": 8,
+            "temporal_edge_attr_dim": 9,
+            "fixation_edge_attr_dim": 8,
+        },
+        "all_signals": {
+            "spatial_edge_attr_dim": 9,
+            "temporal_edge_attr_dim": 10,
+            "fixation_edge_attr_dim": 9,
+        },
+    }
+
+    for signal_set, dims in expected.items():
+        dataset_cfg = build_signal_set_variant(signal_set).overrides["global_overrides"]["dataset"]
+
+        assert resolve_edge_attr_dims(dataset_cfg) == dims
