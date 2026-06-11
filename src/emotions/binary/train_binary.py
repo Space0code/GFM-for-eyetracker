@@ -599,6 +599,10 @@ def train_gnn_fold(
             bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
         )
         model_kwargs.setdefault(
+            "use_spatial_edges",
+            bool(config["dataset"].get("use_spatial_edges", True)),
+        )
+        model_kwargs.setdefault(
             "use_fixation_edges",
             bool(config["dataset"].get("use_fixation_edges", True)),
         )

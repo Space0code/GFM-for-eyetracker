@@ -56,6 +56,7 @@ def resolve_edge_attr_dims(dataset_cfg: Mapping[str, Any]) -> Dict[str, int]:
     """Resolve learned edge-attribute widths from enabled signal groups."""
     use_temporal_edge_features = bool(dataset_cfg.get("use_temporal_edge_features", True))
     use_gaze_edge_features = bool(dataset_cfg.get("use_gaze_edge_features", True))
+    use_pupil_edge_features = bool(dataset_cfg.get("use_pupil_edge_features", False))
     use_screen_distance_edge_feature = bool(
         dataset_cfg.get(
             "use_screen_distance_edge_feature",
@@ -63,18 +64,20 @@ def resolve_edge_attr_dims(dataset_cfg: Mapping[str, Any]) -> Dict[str, int]:
         )
     )
 
-    non_temporal_dim = 0
+    base_dim = 0
     if use_temporal_edge_features:
-        non_temporal_dim += 3  # t_i, t_j, delta_t
+        base_dim += 3  # t_i, t_j, delta_t
     if use_gaze_edge_features:
-        non_temporal_dim += 3  # delta_x, delta_y, screen-plane distance
+        base_dim += 3  # delta_x, delta_y, screen-plane distance
+    if use_pupil_edge_features:
+        base_dim += 2  # delta_pupil_left, delta_pupil_right
     if use_screen_distance_edge_feature:
-        non_temporal_dim += 1  # delta screen distance
+        base_dim += 1  # delta screen distance
 
     return {
-        "spatial_edge_attr_dim": non_temporal_dim,
-        "temporal_edge_attr_dim": non_temporal_dim + (1 if use_temporal_edge_features else 0),
-        "fixation_edge_attr_dim": non_temporal_dim,
+        "spatial_edge_attr_dim": base_dim,
+        "temporal_edge_attr_dim": base_dim + (1 if use_temporal_edge_features else 0),
+        "fixation_edge_attr_dim": base_dim,
     }
 
 
@@ -171,6 +174,7 @@ def build_graph_dataset_kwargs(
         "use_gaze_node_features": bool(dataset_cfg.get("use_gaze_node_features", True)),
         "use_gaze_edge_features": bool(dataset_cfg.get("use_gaze_edge_features", True)),
         "use_pupil_node_features": bool(dataset_cfg.get("use_pupil_node_features", True)),
+        "use_pupil_edge_features": bool(dataset_cfg.get("use_pupil_edge_features", False)),
         "use_screen_distance_node_feature": dataset_cfg.get("use_screen_distance_node_feature"),
         "use_screen_distance_edge_feature": dataset_cfg.get("use_screen_distance_edge_feature"),
         "use_fixation_node_feature": dataset_cfg.get("use_fixation_node_feature"),

@@ -210,6 +210,7 @@ def _dataset_affecting_cache_payload(dataset_cfg: Dict[str, Any]) -> Dict[str, A
         "use_gaze_node_features": bool(dataset_cfg.get("use_gaze_node_features", True)),
         "use_gaze_edge_features": bool(dataset_cfg.get("use_gaze_edge_features", True)),
         "use_pupil_node_features": bool(dataset_cfg.get("use_pupil_node_features", True)),
+        "use_pupil_edge_features": bool(dataset_cfg.get("use_pupil_edge_features", False)),
         "use_screen_distance_node_feature": dataset_cfg.get("use_screen_distance_node_feature"),
         "use_screen_distance_edge_feature": dataset_cfg.get("use_screen_distance_edge_feature"),
         "use_fixation_node_feature": dataset_cfg.get("use_fixation_node_feature"),

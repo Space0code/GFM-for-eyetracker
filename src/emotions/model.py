@@ -41,6 +41,7 @@ class ConfigurableSpatioTemporalGCN(nn.Module):
         dropout_head: float = 0.1,
         conv_type: str = "GCNConv",
         num_layers: int = 2,
+        use_spatial_edges: bool = True,
         use_fixation_edges: bool = True,
         use_delta_distance_edge_feature: bool = True,
         spatial_edge_attr_dim: int | None = None,
@@ -74,10 +75,14 @@ class ConfigurableSpatioTemporalGCN(nn.Module):
         self.pooling = "attention"
         self.readout = "attention"
         self.output_scale = output_scale
+        self.use_spatial_edges = bool(use_spatial_edges)
+        self.use_fixation_edges = bool(use_fixation_edges)
         self.use_delta_distance_edge_feature = bool(use_delta_distance_edge_feature)
 
-        relations = ("temporal_forward", "temporal_backward", "spatial")
-        if use_fixation_edges:
+        relations = ("temporal_forward", "temporal_backward")
+        if self.use_spatial_edges:
+            relations = (*relations, "spatial")
+        if self.use_fixation_edges:
             relations = (*relations, "fixation")
         self.relations = relations
 

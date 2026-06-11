@@ -16,6 +16,7 @@ from data.hci_signals import (
     DISTANCE_AVG_COLUMN,
     FIXATION_INDEX_COLUMN,
     GAZE_NODE_FEATURE_COLUMNS,
+    PUPIL_NODE_FEATURE_COLUMNS,
     TIME_WINDOW_NORMALIZED_COLUMN,
     feature_interpolation_columns,
     prepare_hci_eye_tracking_signals,
@@ -284,6 +285,7 @@ class SpacioTemporalDataset(Dataset):
             use_gaze_node_features: bool = True,
             use_gaze_edge_features: bool = True,
             use_pupil_node_features: bool = True,
+            use_pupil_edge_features: bool = False,
             use_screen_distance_node_feature: Optional[bool] = None,
             use_screen_distance_edge_feature: Optional[bool] = None,
             use_fixation_node_feature: Optional[bool] = None,
@@ -350,6 +352,7 @@ class SpacioTemporalDataset(Dataset):
         self.use_gaze_node_features = bool(use_gaze_node_features)
         self.use_gaze_edge_features = bool(use_gaze_edge_features)
         self.use_pupil_node_features = bool(use_pupil_node_features)
+        self.use_pupil_edge_features = bool(use_pupil_edge_features)
         self.use_screen_distance_node_feature = bool(
             use_distance_avg if use_screen_distance_node_feature is None else use_screen_distance_node_feature
         )
@@ -532,6 +535,7 @@ class SpacioTemporalDataset(Dataset):
             f"_usegazenode={self.use_gaze_node_features}"
             f"_usegazeedgefeat={self.use_gaze_edge_features}"
             f"_usepupilnode={self.use_pupil_node_features}"
+            f"_usepupiledgefeat={self.use_pupil_edge_features}"
             f"_usescreendistnode={self.use_screen_distance_node_feature}"
             f"_usescreendistedge={self.use_screen_distance_edge_feature}"
             f"_usefixnode={self.use_fixation_node_feature}"
@@ -576,6 +580,7 @@ class SpacioTemporalDataset(Dataset):
                     'use_gaze_node_features': self.use_gaze_node_features,
                     'use_gaze_edge_features': self.use_gaze_edge_features,
                     'use_pupil_node_features': self.use_pupil_node_features,
+                    'use_pupil_edge_features': self.use_pupil_edge_features,
                     'use_screen_distance_node_feature': self.use_screen_distance_node_feature,
                     'use_screen_distance_edge_feature': self.use_screen_distance_edge_feature,
                     'use_fixation_node_feature': self.use_fixation_node_feature,
@@ -613,6 +618,8 @@ class SpacioTemporalDataset(Dataset):
         graph_signal_cols: List[str] = []
         if self.use_spatial_edges or self.use_gaze_edge_features:
             graph_signal_cols.extend(GAZE_NODE_FEATURE_COLUMNS)
+        if self.use_pupil_edge_features:
+            graph_signal_cols.extend(PUPIL_NODE_FEATURE_COLUMNS)
         if self.use_screen_distance_edge_feature:
             graph_signal_cols.append(DISTANCE_AVG_COLUMN)
 
@@ -740,6 +747,24 @@ class SpacioTemporalDataset(Dataset):
                 dtype=torch.float32,
             )
 
+        pupil_left_values = None
+        pupil_right_values = None
+        if self.use_pupil_edge_features:
+            missing_pupil = [column for column in PUPIL_NODE_FEATURE_COLUMNS if column not in df_window.columns]
+            if missing_pupil:
+                raise ValueError(
+                    "Pupil edge features require raw pupil columns "
+                    f"{PUPIL_NODE_FEATURE_COLUMNS}. Missing: {missing_pupil}"
+                )
+            pupil_left_values = torch.tensor(
+                pd.to_numeric(df_window[PUPIL_NODE_FEATURE_COLUMNS[0]], errors="coerce").values,
+                dtype=torch.float32,
+            )
+            pupil_right_values = torch.tensor(
+                pd.to_numeric(df_window[PUPIL_NODE_FEATURE_COLUMNS[1]], errors="coerce").values,
+                dtype=torch.float32,
+            )
+
         def build_edge_features(edge_index: torch.Tensor, direction: float | None = None) -> torch.Tensor:
             """Build relation features for learned edge-weight MLPs."""
             src_idx, dst_idx = edge_index[0], edge_index[1]
@@ -752,6 +777,15 @@ class SpacioTemporalDataset(Dataset):
                 delta_y = y_values[dst_idx] - y_values[src_idx]
                 distance = torch.sqrt(delta_x.square() + delta_y.square())
                 features.extend([delta_x, delta_y, distance])
+            if self.use_pupil_edge_features:
+                if pupil_left_values is None or pupil_right_values is None:
+                    raise ValueError("Raw pupil columns are required when use_pupil_edge_features=True.")
+                features.extend(
+                    [
+                        pupil_left_values[dst_idx] - pupil_left_values[src_idx],
+                        pupil_right_values[dst_idx] - pupil_right_values[src_idx],
+                    ]
+                )
             if self.use_screen_distance_edge_feature:
                 if distance_avg_values is None:
                     raise ValueError(

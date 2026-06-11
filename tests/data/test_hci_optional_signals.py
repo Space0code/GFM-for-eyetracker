@@ -235,6 +235,75 @@ def test_dataset_can_remove_fixation_pupil_and_screen_distance_sources(tmp_path:
     assert graph["node", "temporal_forward", "node"].edge_attr.shape[1] == 7
 
 
+def test_pupil_only_graph_uses_temporal_edges_and_pupil_edge_deltas(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_pupil_only.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    dataset = SpacioTemporalDataset(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=1,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
+        use_gaze_node_features=False,
+        use_gaze_edge_features=False,
+        use_pupil_node_features=True,
+        use_pupil_edge_features=True,
+        use_spatial_edges=False,
+        use_screen_distance_node_feature=False,
+        use_screen_distance_edge_feature=False,
+        use_fixation_node_feature=False,
+        use_fixation_edges=False,
+        use_relative_time=True,
+        use_temporal_node_feature=True,
+        use_temporal_edge_features=True,
+        use_temporal_edges=True,
+    )
+
+    graph = dataset[0]
+    assert dataset.feature_columns == [
+        "pupil-size-left-avg",
+        "pupil-size-right-avg",
+        TIME_WINDOW_NORMALIZED_COLUMN,
+    ]
+    assert graph["node"].x.shape[1] == 3
+    assert set(graph.edge_types) == {
+        ("node", "temporal_forward", "node"),
+        ("node", "temporal_backward", "node"),
+    }
+
+    forward_edges = graph["node", "temporal_forward", "node"].edge_index
+    first_forward = int(torch.nonzero((forward_edges[0] == 0) & (forward_edges[1] == 1))[0])
+    forward_attr = graph["node", "temporal_forward", "node"].edge_attr[first_forward]
+
+    assert graph["node", "temporal_forward", "node"].edge_attr.shape[1] == 6
+    assert torch.allclose(forward_attr, torch.tensor([0.0, 0.1, 0.1, 0.1, -0.1, 1.0]), atol=1e-6)
+
+    model = HeteroGCNMLPWeights(
+        in_channels=3,
+        hidden_channels=8,
+        out_channels=1,
+        output_scale=1.0,
+        use_preprocess_mlp=False,
+        conv_type="GCNConv",
+        num_layers=1,
+        use_spatial_edges=False,
+        use_fixation_edges=False,
+        spatial_edge_attr_dim=5,
+        temporal_edge_attr_dim=6,
+        fixation_edge_attr_dim=5,
+    )
+    assert model.relations == ("temporal_forward", "temporal_backward")
+
+
 def test_signal_ablation_flags_participate_in_dataset_cache_key(tmp_path: Path) -> None:
     data_csv = tmp_path / "hci_cache_key.csv"
     _raw_hci_frame().to_csv(data_csv, index=False)
@@ -284,6 +353,49 @@ def test_signal_ablation_flags_participate_in_dataset_cache_key(tmp_path: Path) 
     )
 
     assert full_cache_path != ablated_cache_path
+
+
+def test_pupil_edge_flag_participates_in_dataset_cache_key(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_pupil_edge_cache_key.csv"
+    _raw_hci_frame().to_csv(data_csv, index=False)
+
+    common_kwargs = dict(
+        data_filepath=str(data_csv),
+        recursive=False,
+        kt=1,
+        ks=1,
+        window_length=10,
+        window_overlap=0.0,
+        min_samples_per_window=2,
+        use_edge_weights=True,
+        graph_version="v2",
+        edge_weight_mode="learned_signed",
+        use_cache=False,
+        target_columns=["emotion-id"],
+        dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg", "emotion-id"],
+    )
+    without_pupil_edges = SpacioTemporalDataset(**common_kwargs, use_pupil_edge_features=False)
+    with_pupil_edges = SpacioTemporalDataset(**common_kwargs, use_pupil_edge_features=True)
+
+    assert without_pupil_edges._get_cache_path(
+        root_dir=None,
+        data_filepath=str(data_csv),
+        filter_subjects=None,
+        filter_recordings=None,
+        exclude_subjects=None,
+        recursive=False,
+        ignore_dirs=None,
+        file_list=None,
+    ) != with_pupil_edges._get_cache_path(
+        root_dir=None,
+        data_filepath=str(data_csv),
+        filter_subjects=None,
+        filter_recordings=None,
+        exclude_subjects=None,
+        recursive=False,
+        ignore_dirs=None,
+        file_list=None,
+    )
 
 
 def test_fixation_dilation_offsets_use_half_up_rounding_and_no_self_loops() -> None:

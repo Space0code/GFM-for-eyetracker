@@ -272,6 +272,10 @@ def _train_gnn_fold(
             "use_delta_distance_edge_feature",
             bool(config["dataset"].get("use_delta_distance_edge_feature", True)),
         ),
+        "use_spatial_edges": model_cfg.get(
+            "use_spatial_edges",
+            bool(config["dataset"].get("use_spatial_edges", True)),
+        ),
         "use_fixation_edges": model_cfg.get(
             "use_fixation_edges",
             bool(config["dataset"].get("use_fixation_edges", True)),
