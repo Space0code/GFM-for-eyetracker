@@ -19,13 +19,15 @@ suite:
     multiclass: "src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_multiclass_hci_tagging.yaml"
 
 quick_comparison:
+  models: [Random, Majority, LightGBM, SVM, MLP, GazeMAE_MLP, BasicGCN, HeteroGCNMean, HeteroGCNMLP, HeteroGCNMLPWeights]
   table6_tasks: [valence]
+  signal_sets: [gaze_only, pupil_only, gaze_pupil, all_signals]
 
 global_overrides:
   cross_validation:
     strategies:
       - "subject_kfold"
-    n_splits: 5
+    n_splits: 7
     val_size: 1
     random_state: 42
   gnn:
