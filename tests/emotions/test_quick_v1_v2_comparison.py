@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     _save_fold_metric_outputs,
     _save_group_model_ranking,
     _save_label_distribution_outputs,
+    _save_model_benchmark_outputs,
     _save_training_history_outputs,
     _should_save_fold_loss_plots,
     _thesis_model_display_name,
@@ -148,12 +150,17 @@ def test_quick_signal_set_parser_rejects_invalid_names() -> None:
         _parse_signal_sets("gaze,blink_only")
 
 
-def test_quick_signal_sets_default_to_yaml_then_all_signals() -> None:
+def test_quick_signal_sets_default_to_yaml_then_all_groups() -> None:
     wrapper_cfg = {"quick_comparison": {"signal_sets": ["gaze", "pupil-only"]}}
 
     assert _resolve_requested_signal_sets(wrapper_cfg, cli_signal_sets=None) == ["gaze_only", "pupil_only"]
     assert _resolve_requested_signal_sets(wrapper_cfg, cli_signal_sets="all") == ["all_signals"]
-    assert _resolve_requested_signal_sets({}, cli_signal_sets=None) == ["all_signals"]
+    assert _resolve_requested_signal_sets({}, cli_signal_sets=None) == [
+        "gaze_only",
+        "pupil_only",
+        "gaze_pupil",
+        "all_signals",
+    ]
 
 
 def test_report_profile_parser_and_fold_loss_policy(monkeypatch) -> None:
@@ -261,16 +268,16 @@ def test_quick_dry_run_writes_signal_set_rows_and_nested_configs(tmp_path: Path)
     summary = pd.read_csv(output_dir / "quick_comparison_summary.csv")
     assert set(summary["signal_set"]) == {"pupil_only", "all_signals"}
     assert "signal_set_description" in summary.columns
-    assert (output_dir / "generated_wrapper_configs" / "pupil_only" / "BasicGCN_and_Baselines.yaml").exists()
-    assert (output_dir / "generated_wrapper_configs" / "all_signals" / "BasicGCN_and_Baselines.yaml").exists()
+    assert (output_dir / "generated_wrapper_configs" / "pupil_only" / "Models.yaml").exists()
+    assert (output_dir / "generated_wrapper_configs" / "all_signals" / "Models.yaml").exists()
 
     pupil_cfg = yaml.safe_load(
-        (output_dir / "generated_wrapper_configs" / "pupil_only" / "BasicGCN_and_Baselines.yaml").read_text(
+        (output_dir / "generated_wrapper_configs" / "pupil_only" / "Models.yaml").read_text(
             encoding="utf-8"
         )
     )
     all_cfg = yaml.safe_load(
-        (output_dir / "generated_wrapper_configs" / "all_signals" / "BasicGCN_and_Baselines.yaml").read_text(
+        (output_dir / "generated_wrapper_configs" / "all_signals" / "Models.yaml").read_text(
             encoding="utf-8"
         )
     )
@@ -278,6 +285,8 @@ def test_quick_dry_run_writes_signal_set_rows_and_nested_configs(tmp_path: Path)
     assert all_cfg["suite"]["results_dir"].endswith("model_runs/all_signals")
     assert pupil_cfg["global_overrides"]["baselines"]["models"] == ["LightGBM", "MOMENT_pupil"]
     assert all_cfg["global_overrides"]["baselines"]["models"] == ["LightGBM", "MOMENT_GazeMAE_all_signals"]
+    assert pupil_cfg["global_overrides"]["gnn"]["models"] == ["BasicGCN"]
+    assert all_cfg["global_overrides"]["gnn"]["models"] == ["BasicGCN"]
 
 
 def test_quick_model_parser_accepts_moment_embedding_aliases() -> None:
@@ -370,27 +379,37 @@ def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
         ["Random", "Majority", "BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights", "LightGBM"]
     )
 
-    assert [run.run_name for run in runs] == [
-        "Baselines",
+    assert [run.run_name for run in runs] == ["Models"]
+    assert runs[0].model_names == [
+        "Random",
+        "Majority",
+        "LightGBM",
         "BasicGCN",
         "HeteroGCNMean",
         "HeteroGCNMLP",
         "HeteroGCNMLPWeights",
     ]
-    assert runs[0].model_names == ["Random", "Majority", "LightGBM"]
     assert runs[0].overrides["global_overrides"]["baselines"]["models"] == [
         "Random",
         "Majority",
         "LightGBM",
     ]
+    assert runs[0].overrides["global_overrides"]["gnn"]["models"] == [
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
+    ]
+    assert runs[0].summary_model_names["HeteroGCNMLPWeights"] == "HeteroGCNMLPWeights"
 
 
 def test_quick_runs_group_basic_gcn_with_baselines_when_it_is_the_only_gnn() -> None:
     runs = build_quick_runs(["Random", "BasicGCN", "LightGBM"])
 
-    assert [run.run_name for run in runs] == ["BasicGCN_and_Baselines"]
+    assert [run.run_name for run in runs] == ["Models"]
     assert runs[0].model_names == ["Random", "LightGBM", "BasicGCN"]
-    assert runs[0].summary_model_names["BasicGCN"] == "GNN"
+    assert runs[0].summary_model_names["BasicGCN"] == "BasicGCN"
+    assert runs[0].overrides["global_overrides"]["gnn"]["models"] == ["BasicGCN"]
     assert runs[0].overrides["global_overrides"]["gnn"]["model"]["model_version"] == "BasicGCN"
 
 
@@ -801,6 +820,126 @@ def test_fold_metric_outputs_include_top_level_metrics_and_std(tmp_path: Path) -
     assert accuracy_row["n_folds"] == 2
     assert np.isclose(accuracy_row["mean"], 0.6)
     assert np.isclose(accuracy_row["std"], np.std([0.5, 0.7], ddof=1))
+
+
+def test_named_gnn_artifact_paths_are_collected(tmp_path: Path) -> None:
+    suite_run_dir = tmp_path / "suite"
+    trainer_run_dir = suite_run_dir / "trainer"
+    strategy_dir = trainer_run_dir / "subject_kfold"
+    fold_dir = strategy_dir / "fold_0"
+    model_name = "HeteroGCNMLPWeights"
+    model_dir = fold_dir / "gnn" / model_name
+    model_dir.mkdir(parents=True)
+
+    pd.DataFrame(
+        [
+            {
+                "experiment_id": AROUSAL_EXPERIMENT_ID,
+                "status": "success",
+                "trainer_run_dir": str(trainer_run_dir),
+            }
+        ]
+    ).to_csv(suite_run_dir / "suite_experiment_registry.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "model": model_name,
+                "fold_id": "fold_0",
+                "metric_type": "aggregated",
+                "accuracy": 0.75,
+                "macro_f1": 0.70,
+                "loss": 0.6,
+            }
+        ]
+    ).to_csv(strategy_dir / "fold_metrics.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "epoch": 1,
+                "train_loss": 0.9,
+                "val_loss": 0.8,
+                "val_balanced_accuracy": 0.55,
+                "val_macro_f1": 0.52,
+                "best_epoch": 1,
+            }
+        ]
+    ).to_csv(model_dir / "gnn_training_history.csv", index=False)
+    pd.DataFrame(
+        [
+            {
+                "split": "test",
+                "graph_embedding_variance": 0.12,
+                "prediction_entropy_mean": 0.7,
+            }
+        ]
+    ).to_csv(model_dir / "gnn_fold_diagnostics.csv", index=False)
+    np.save(model_dir / "test_targets.npy", np.asarray([0, 1, 1]))
+    np.save(
+        model_dir / "test_predictions.npy",
+        np.asarray(
+            [
+                [0.8, 0.2],
+                [0.3, 0.7],
+                [0.6, 0.4],
+            ]
+        ),
+    )
+    (model_dir / "model_benchmark.json").write_text(
+        json.dumps(
+                {
+                    "fold_id": "fold_0",
+                    "model": model_name,
+                    "model_family": "gnn",
+                    "fit_seconds": 3.0,
+                    "train_windows": 10,
+                    "trainable_parameters": 123,
+                    "total_parameters": 123,
+                    "accuracy": 0.75,
+                    "macro_f1": 0.70,
+                }
+        ),
+        encoding="utf-8",
+    )
+    rows = [
+        {
+            "model": model_name,
+            "experiment_id": AROUSAL_EXPERIMENT_ID,
+            "experiment_display_name": "Table-6 arousal 3-class",
+            "cv_strategy": "subject_kfold",
+            "status": "success",
+            "suite_run_dir": str(suite_run_dir),
+            "summary_model_name": model_name,
+            "signal_set": "all_signals",
+            "signal_set_description": "all",
+        }
+    ]
+
+    fold_paths = _save_fold_metric_outputs(rows=rows, output_dir=tmp_path)
+    history_paths = _save_training_history_outputs(rows=rows, output_dir=tmp_path, save_plots=False)
+    benchmark_paths = _save_model_benchmark_outputs(
+        rows=rows,
+        quick_summary=pd.DataFrame(rows),
+        output_dir=tmp_path,
+    )
+    confusion_path = _save_confusion_matrix_table(rows=rows, output_dir=tmp_path)
+
+    assert tmp_path / "tables" / "fold_metrics.csv" in fold_paths
+    assert tmp_path / "tables" / "training_history.csv" in history_paths
+    assert tmp_path / "tables" / "training_diagnostics.csv" in history_paths
+    assert tmp_path / "tables" / "model_benchmark_raw.csv" in benchmark_paths
+    assert confusion_path == tmp_path / "tables" / "confusion_matrices.csv"
+
+    history = pd.read_csv(tmp_path / "tables" / "training_history.csv")
+    diagnostics = pd.read_csv(tmp_path / "tables" / "training_diagnostics.csv")
+    benchmarks = pd.read_csv(tmp_path / "tables" / "model_benchmark_raw.csv")
+    confusion = pd.read_csv(tmp_path / "tables" / "confusion_matrices.csv")
+
+    assert history["summary_model_name"].tolist() == [model_name]
+    assert history["history_path"].str.contains(f"gnn/{model_name}/gnn_training_history.csv", regex=False).all()
+    assert diagnostics["diagnostics_path"].str.contains(f"gnn/{model_name}/gnn_fold_diagnostics.csv", regex=False).all()
+    assert benchmarks["benchmark_path"].str.contains(f"gnn/{model_name}/model_benchmark.json", regex=False).all()
+    assert set(confusion["model"]) == {model_name}
+    assert confusion["count"].sum() == 3
 
 
 def test_combined_confusion_matrices_include_random_and_majority(tmp_path: Path) -> None:

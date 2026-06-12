@@ -3,10 +3,12 @@
 This script generates focused suite-wrapper configs and optionally runs them
 sequentially with the dataset, cross-validation, models, and training parameters
 from the selected YAML suite config. The default wrapper config uses the
-low/high binary-style Table-6 valence target only. Select models in the wrapper
-config with `quick_comparison.models`, or override them from the command line
-with `--models`. Requested baseline models are grouped into one suite
-invocation so they share the same loaded dataset and CV splits.
+low/high binary-style Table-6 valence target and all four thesis signal sets:
+gaze-only, pupil-only, gaze+pupil, and all signals. Select models and signal
+sets in the wrapper config with `quick_comparison.models` and
+`quick_comparison.signal_sets`, or override them from the command line with
+`--models` and `--signal-sets`. Requested baseline models are grouped into one
+suite invocation so they share the same loaded dataset and CV splits.
 
 Example:
   python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py
@@ -483,7 +485,7 @@ def _resolve_requested_signal_sets(wrapper_cfg: Dict[str, Any], cli_signal_sets:
     if not isinstance(quick_cfg, dict):
         raise ValueError("quick_comparison must be a dictionary when configured.")
 
-    return _parse_signal_sets(quick_cfg.get("signal_sets", ["all_signals"]))
+    return _parse_signal_sets(quick_cfg.get("signal_sets", SIGNAL_SET_ORDER))
 
 
 def _parse_cv_strategies(raw_strategies: str) -> List[str]:
@@ -744,7 +746,7 @@ def build_variant(model_name: str) -> QuickVariant:
         return QuickVariant(
             model_name=model_name,
             description=descriptions[model_name],
-            summary_model_name="GNN",
+            summary_model_name=model_name,
             overrides={
                 "global_overrides": {
                     "run_experiments": {"baselines": False, "gnn": True},
@@ -780,68 +782,52 @@ def build_quick_runs(model_names: Sequence[str]) -> List[QuickRun]:
     """Group requested models into the minimum safe set of suite invocations."""
     baseline_names = [name for name in model_names if name in BASELINE_MODELS]
     gnn_names = [name for name in model_names if name in GNN_MODELS]
-    if baseline_names and len(gnn_names) == 1:
-        gnn_variant = build_variant(gnn_names[0])
-        return [
-            QuickRun(
-                run_name=f"{gnn_names[0]}_and_Baselines",
-                description=(
-                    f"{gnn_names[0]} and baselines on one shared suite run and aligned CV folds: "
-                    f"{', '.join(baseline_names)}."
-                ),
-                model_names=list(dict.fromkeys([*baseline_names, gnn_names[0]])),
-                summary_model_names={
-                    **{name: name for name in baseline_names},
-                    gnn_names[0]: gnn_variant.summary_model_name,
-                },
-                overrides=merge_many(
-                    gnn_variant.overrides,
-                    {
-                        "global_overrides": {
-                            "run_experiments": {"baselines": True, "gnn": True},
-                            "baselines": {"models": baseline_names},
-                        }
-                    },
-                ),
-            )
-        ]
+    ordered_run_models = list(dict.fromkeys([*baseline_names, *gnn_names]))
+    if not ordered_run_models:
+        return []
 
-    emitted_baseline_run = False
-    runs: List[QuickRun] = []
+    overrides: Dict[str, Any] = {
+        "global_overrides": {
+            "run_experiments": {"baselines": bool(baseline_names), "gnn": bool(gnn_names)},
+        }
+    }
+    if baseline_names:
+        overrides["global_overrides"]["baselines"] = {"models": baseline_names}
+    if gnn_names:
+        overrides["global_overrides"]["dataset"] = {
+            "graph_version": "v2",
+            "edge_weight_mode": "learned_signed",
+            "use_edge_weights": True,
+        }
+        overrides["global_overrides"]["gnn"] = {
+            "models": gnn_names,
+            "model": {
+                "model_version": gnn_names[0],
+            },
+        }
 
-    for model_name in model_names:
-        if model_name in BASELINE_MODELS:
-            if emitted_baseline_run:
-                continue
-            emitted_baseline_run = True
-            runs.append(
-                QuickRun(
-                    run_name="Baselines",
-                    description=f"Baselines on the same quick subset and folds: {', '.join(baseline_names)}.",
-                    model_names=baseline_names,
-                    summary_model_names={name: name for name in baseline_names},
-                    overrides={
-                        "global_overrides": {
-                            "run_experiments": {"baselines": True, "gnn": False},
-                            "baselines": {"models": baseline_names},
-                        }
-                    },
-                )
-            )
-            continue
-
-        variant = build_variant(model_name)
-        runs.append(
-            QuickRun(
-                run_name=variant.model_name,
-                description=variant.description,
-                model_names=[variant.model_name],
-                summary_model_names={variant.model_name: variant.summary_model_name},
-                overrides=variant.overrides,
-            )
+    if baseline_names and gnn_names:
+        run_name = "Models"
+        description = (
+            "Baselines and GNN variants on one shared suite run and aligned CV folds: "
+            f"{', '.join(ordered_run_models)}."
         )
+    elif baseline_names:
+        run_name = "Baselines"
+        description = f"Baselines on the same quick subset and folds: {', '.join(baseline_names)}."
+    else:
+        run_name = "GNNs"
+        description = f"GNN variants on one shared graph dataset and folds: {', '.join(gnn_names)}."
 
-    return runs
+    return [
+        QuickRun(
+            run_name=run_name,
+            description=description,
+            model_names=ordered_run_models,
+            summary_model_names={name: name for name in ordered_run_models},
+            overrides=overrides,
+        )
+    ]
 
 
 def _build_payload(base_cfg: Dict[str, Any], fixed_overrides: Dict[str, Any], variant: QuickVariant) -> Dict[str, Any]:
@@ -1090,6 +1076,19 @@ def _resolve_trainer_run_dir(suite_run_dir: Path, experiment_id: str) -> Path:
     return Path(str(row.iloc[-1]["trainer_run_dir"]))
 
 
+def _artifact_dir_for_summary_model(
+    fold_dir: Path,
+    summary_model_name: str,
+    model_name: str | None = None,
+) -> Path:
+    """Return the fold-level artifact directory for a summary model row."""
+    if summary_model_name in GNN_MODELS:
+        return fold_dir / "gnn" / summary_model_name
+    if summary_model_name == "GNN":
+        return fold_dir
+    return fold_dir / "baselines" / (model_name or summary_model_name)
+
+
 def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     """Build a stable summary dataframe from result rows."""
     df = pd.DataFrame(list(rows))
@@ -1246,10 +1245,14 @@ def _collect_model_benchmark_records(rows: Sequence[Dict[str, Any]]) -> pd.DataF
 
         benchmark_paths: List[Path] = []
         for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-            if summary_model_name == "GNN":
-                benchmark_paths.append(fold_dir / "model_benchmark.json")
-            else:
-                benchmark_paths.append(fold_dir / "baselines" / model_name / "model_benchmark.json")
+            benchmark_paths.append(
+                _artifact_dir_for_summary_model(
+                    fold_dir=fold_dir,
+                    summary_model_name=summary_model_name,
+                    model_name=model_name,
+                )
+                / "model_benchmark.json"
+            )
 
         benchmark_df = load_benchmark_records(benchmark_paths)
         if benchmark_df.empty:
@@ -1881,12 +1884,12 @@ def _collect_predictions_for_variant(
     all_targets: List[np.ndarray] = []
     all_preds: List[np.ndarray] = []
     for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-        if summary_model_name == "GNN":
-            pred_path = fold_dir / "test_predictions.npy"
-            target_path = fold_dir / "test_targets.npy"
-        else:
-            pred_path = fold_dir / "baselines" / summary_model_name / "test_predictions.npy"
-            target_path = fold_dir / "baselines" / summary_model_name / "test_targets.npy"
+        artifact_dir = _artifact_dir_for_summary_model(
+            fold_dir=fold_dir,
+            summary_model_name=summary_model_name,
+        )
+        pred_path = artifact_dir / "test_predictions.npy"
+        target_path = artifact_dir / "test_targets.npy"
         if not pred_path.exists() or not target_path.exists():
             continue
 
@@ -1914,10 +1917,13 @@ def _collect_fold_targets_for_variant(
 
     fold_targets: Dict[str, np.ndarray] = {}
     for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-        if summary_model_name == "GNN":
-            target_path = fold_dir / "test_targets.npy"
-        else:
-            target_path = fold_dir / "baselines" / summary_model_name / "test_targets.npy"
+        target_path = (
+            _artifact_dir_for_summary_model(
+                fold_dir=fold_dir,
+                summary_model_name=summary_model_name,
+            )
+            / "test_targets.npy"
+        )
         if not target_path.exists():
             continue
         fold_targets[fold_dir.name] = np.asarray(np.load(target_path)).reshape(-1).astype(int)
@@ -2133,7 +2139,11 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
     for row in successful_rows:
         model_name = str(row.get("model", ""))
         summary_model_name = str(row.get("summary_model_name", ""))
-        if summary_model_name != "GNN" and model_name not in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
+        if (
+            summary_model_name not in GNN_MODELS
+            and summary_model_name != "GNN"
+            and model_name not in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}
+        ):
             continue
 
         experiment_id = str(row.get("experiment_id", ""))
@@ -2154,8 +2164,15 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
         )
 
         for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-            if summary_model_name == "GNN":
-                history_path = fold_dir / "gnn_training_history.csv"
+            if summary_model_name in GNN_MODELS or summary_model_name == "GNN":
+                history_path = (
+                    _artifact_dir_for_summary_model(
+                        fold_dir=fold_dir,
+                        summary_model_name=summary_model_name,
+                        model_name=model_name,
+                    )
+                    / "gnn_training_history.csv"
+                )
                 history_kind = "gnn"
             elif model_name in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
                 history_path = fold_dir / "baselines" / model_name / "mlp_training_history.csv"
@@ -2202,7 +2219,7 @@ def _collect_training_diagnostics(rows: Sequence[Dict[str, Any]]) -> pd.DataFram
     for row in successful_rows:
         model_name = str(row.get("model", ""))
         summary_model_name = str(row.get("summary_model_name", ""))
-        if summary_model_name != "GNN":
+        if summary_model_name not in GNN_MODELS and summary_model_name != "GNN":
             continue
 
         experiment_id = str(row.get("experiment_id", ""))
@@ -2218,7 +2235,14 @@ def _collect_training_diagnostics(rows: Sequence[Dict[str, Any]]) -> pd.DataFram
             continue
 
         for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-            diagnostics_path = fold_dir / "gnn_fold_diagnostics.csv"
+            diagnostics_path = (
+                _artifact_dir_for_summary_model(
+                    fold_dir=fold_dir,
+                    summary_model_name=summary_model_name,
+                    model_name=model_name,
+                )
+                / "gnn_fold_diagnostics.csv"
+            )
             if not diagnostics_path.exists():
                 continue
 
@@ -2289,9 +2313,14 @@ def _load_fold_test_losses(
 
     losses: Dict[str, float] = {}
     for fold_dir in sorted(path for path in strategy_dir.iterdir() if path.is_dir()):
-        if summary_model_name == "GNN":
-            prediction_path = fold_dir / "test_predictions.npy"
-            target_path = fold_dir / "test_targets.npy"
+        if summary_model_name in GNN_MODELS or summary_model_name == "GNN":
+            artifact_dir = _artifact_dir_for_summary_model(
+                fold_dir=fold_dir,
+                summary_model_name=summary_model_name,
+                model_name=model_name,
+            )
+            prediction_path = artifact_dir / "test_predictions.npy"
+            target_path = artifact_dir / "test_targets.npy"
         elif model_name in {"MLP", "GazeMAE_MLP", *MOMENT_MODEL_NAMES}:
             prediction_path = fold_dir / "baselines" / model_name / "test_predictions.npy"
             target_path = fold_dir / "baselines" / model_name / "test_targets.npy"
