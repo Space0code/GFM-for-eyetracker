@@ -48,7 +48,7 @@ dataset:
   use_cache: false
   dropping_emotion_threshold: -1
   standardize_features: true
-  target_aggregation: mean
+  target_aggregation: constant
   feature_columns: ["x-avg", "y-avg", "pupil-size-left-avg", "pupil-size-right-avg"]
   dropna_columns: [
     "time-rel-seconds",

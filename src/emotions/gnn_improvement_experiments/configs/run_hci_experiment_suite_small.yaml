@@ -72,7 +72,7 @@ global_overrides:
       - "138.avi"
       - "detroit_f.avi"
       - "dallas_f.avi"
-    target_aggregation: mean
+    target_aggregation: constant
     signal_outlier_filter:
       enabled: true
       lower_quantile: 0.01

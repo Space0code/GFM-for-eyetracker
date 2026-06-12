@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from data.hci_signals import DISTANCE_AVG_COLUMN, FIXATION_DURATION_COLUMN
 from emotions.train_baseline import (
@@ -84,6 +85,25 @@ def test_tabular_baseline_samples_include_extended_signal_and_fixation_features(
     assert np.isclose(features["fixation-duration_fixation_sum"], 600.0)
     assert np.isclose(features["fixation-duration_fixation_mean"], 150.0)
     assert np.isclose(features["fixation-duration_fixation_max"], 200.0)
+
+
+def test_tabular_constant_target_aggregation_rejects_mixed_labels(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_mixed_labels.csv"
+    frame = _baseline_feature_frame()
+    frame["emotion-id"] = [1, 1, 2, 2, 2]
+    frame.to_csv(data_csv, index=False)
+
+    with pytest.raises(ValueError, match="Expected constant target column 'emotion-id'"):
+        build_tabular_samples(
+            data_filepath=str(data_csv),
+            window_length=1,
+            window_overlap=0.0,
+            min_samples_per_window=2,
+            feature_columns=["x-avg", "y-avg"],
+            target_columns=["emotion-id"],
+            target_aggregation="constant",
+            dropna_columns=["time-rel-seconds", "x-avg", "y-avg", "emotion-id"],
+        )
 
 
 def test_select_tabular_feature_columns_keeps_all_aggregates_and_exact_embedding_columns() -> None:

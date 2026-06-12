@@ -1549,9 +1549,10 @@ def run_training_from_config(config_path: str) -> str:
     task_def = _resolve_task_definition(multiclass_task_cfg, dataset_cfg=dataset_cfg)
     standardize_features = bool(dataset_cfg.get("standardize_features", False))
     target_aggregation = dataset_cfg.get("target_aggregation", "mean")
-    if target_aggregation not in {"mean", "last"}:
+    if target_aggregation not in {"mean", "last", "constant"}:
         raise ValueError(
-            f"Unsupported dataset.target_aggregation='{target_aggregation}'. Use 'mean' or 'last'."
+            f"Unsupported dataset.target_aggregation='{target_aggregation}'. "
+            "Use 'mean', 'last', or 'constant'."
         )
 
     print("Multiclass Task:")

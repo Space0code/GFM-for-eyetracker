@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 
 from data.data import SpacioTemporalDataset
@@ -69,6 +70,41 @@ def test_tabular_samples_include_window_local_normalized_time_mean(tmp_path: Pat
         samples[0].features[f"{TIME_WINDOW_NORMALIZED_COLUMN}_mean"],
         np.mean([0.0, 0.1, 0.2, 0.3]),
     )
+
+
+def test_graph_constant_target_aggregation_rejects_mixed_labels(tmp_path: Path) -> None:
+    data_csv = tmp_path / "hci_mixed_graph_labels.csv"
+    frame = _frame(offset=20.0, subject="P1", recording="r1")
+    frame["emotion-id"] = [1, 1, 2, 2]
+    frame.to_csv(data_csv, index=False)
+
+    with pytest.raises(ValueError, match="Expected constant target column 'emotion-id'"):
+        SpacioTemporalDataset(
+            data_filepath=str(data_csv),
+            recursive=False,
+            kt=1,
+            ks=1,
+            window_length=1,
+            window_overlap=0.0,
+            min_samples_per_window=2,
+            use_cache=False,
+            target_columns=["emotion-id"],
+            target_aggregation="constant",
+            dropna_columns=[
+                "time-rel-seconds",
+                "x-avg",
+                "y-avg",
+                "pupil-size-left-avg",
+                "pupil-size-right-avg",
+                "emotion-id",
+            ],
+            feature_columns=[
+                "x-avg",
+                "y-avg",
+                "pupil-size-left-avg",
+                "pupil-size-right-avg",
+            ],
+        )
 
 
 def test_edge_feature_scalers_are_train_only_relation_specific_and_keep_direction(tmp_path: Path) -> None:

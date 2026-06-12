@@ -103,6 +103,38 @@ def infer_default_target_columns(df: pd.DataFrame) -> List[str]:
     return sorted(targets)
 
 
+def aggregate_target_values(
+    df_window: pd.DataFrame,
+    target_cols: List[str],
+    target_aggregation: str,
+) -> np.ndarray:
+    """Aggregate target columns for one window.
+
+    Use ``constant`` for categorical labels: it asserts that each target column
+    has exactly one value in the window, then returns that value. This prevents
+    accidental averaging of class labels.
+    """
+    if target_aggregation == "mean":
+        return df_window[target_cols].mean(axis=0).values
+    if target_aggregation == "last":
+        return df_window[target_cols].iloc[-1].values
+    if target_aggregation == "constant":
+        target_values = []
+        for col in target_cols:
+            values = pd.to_numeric(df_window[col], errors="coerce").dropna().unique()
+            if len(values) != 1:
+                raise ValueError(
+                    f"Expected constant target column '{col}' within one window, "
+                    f"but found {len(values)} distinct values: {sorted(values.tolist())}."
+                )
+            target_values.append(float(values[0]))
+        return np.asarray(target_values, dtype=float)
+    raise ValueError(
+        f"Unsupported target_aggregation='{target_aggregation}'. "
+        "Use 'mean', 'last', or 'constant'."
+    )
+
+
 def _round_half_up(value: float) -> int:
     """Round halves up, matching the fixation dilation definition."""
     return int(math.floor(float(value) + 0.5))
@@ -816,15 +848,11 @@ class SpacioTemporalDataset(Dataset):
         #### Extract graph-level targets
         target_cols = self._resolve_target_columns(df_window)
         if target_cols:
-            if self.target_aggregation == "mean":
-                target_values = df_window[target_cols].mean(axis=0).values
-            elif self.target_aggregation == "last":
-                target_values = df_window[target_cols].iloc[-1].values
-            else:
-                raise ValueError(
-                    f"Unsupported target_aggregation='{self.target_aggregation}'. "
-                    "Use 'mean' or 'last'."
-                )
+            target_values = aggregate_target_values(
+                df_window=df_window,
+                target_cols=target_cols,
+                target_aggregation=self.target_aggregation,
+            )
             y = torch.tensor(target_values, dtype=torch.float32)
         else:
             y = None

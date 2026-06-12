@@ -14,7 +14,7 @@ from typing import Callable, List, Dict, Any, Tuple, Optional
 from tqdm import tqdm
 
 from emotions.baseline_model import get_baseline_by_name
-from data.data import clean_dataset
+from data.data import aggregate_target_values, clean_dataset
 from data.hci_signals import (
     BASE_NODE_FEATURE_COLUMNS,
     FIXATION_COLUMN,
@@ -177,15 +177,13 @@ def aggregate_window(
     targets: Dict[str, float] = {}
     for col in target_columns:
         if col in window_df.columns:
-            if target_aggregation == "mean":
-                targets[col] = float(window_df[col].mean())
-            elif target_aggregation == "last":
-                targets[col] = float(window_df[col].iloc[-1])
-            else:
-                raise ValueError(
-                    f"Unsupported target_aggregation='{target_aggregation}'. "
-                    "Use 'mean' or 'last'."
-                )
+            targets[col] = float(
+                aggregate_target_values(
+                    df_window=window_df,
+                    target_cols=[col],
+                    target_aggregation=target_aggregation,
+                )[0]
+            )
     
     return {**feats, **targets}
 
@@ -307,9 +305,10 @@ def build_tabular_samples(data_dir: str = None, data_filepath: str = None,
         raise ValueError("Must provide exactly one of: data_dir or data_filepath")
     
     samples: List[TabularWindowSample] = []
-    if target_aggregation not in {"mean", "last"}:
+    if target_aggregation not in {"mean", "last", "constant"}:
         raise ValueError(
-            f"Unsupported target_aggregation='{target_aggregation}'. Use 'mean' or 'last'."
+            f"Unsupported target_aggregation='{target_aggregation}'. "
+            "Use 'mean', 'last', or 'constant'."
         )
     if not (0 <= window_overlap < 1):
         raise ValueError("window_overlap must be in [0, 1).")
