@@ -21,7 +21,7 @@ def _args() -> Namespace:
     )
 
 
-def test_signal_ablation_variants_are_gnn_v2_only() -> None:
+def test_signal_ablation_variants_use_final_weighted_hetero_gcn() -> None:
     for variant_name in DEFAULT_VARIANTS:
         variant = build_signal_ablation_variant(variant_name)
         global_overrides = variant.overrides["global_overrides"]
@@ -29,7 +29,7 @@ def test_signal_ablation_variants_are_gnn_v2_only() -> None:
         assert global_overrides["run_experiments"] == {"baselines": False, "gnn": True}
         assert global_overrides["dataset"]["graph_version"] == "v2"
         assert global_overrides["dataset"]["edge_weight_mode"] == "learned_signed"
-        assert global_overrides["gnn"]["model"]["model_version"] == "v2"
+        assert global_overrides["gnn"]["model"]["model_version"] == "HeteroGCNMLPWeights"
         assert global_overrides["gnn"]["model"]["use_fixation_edges"] is True
 
 

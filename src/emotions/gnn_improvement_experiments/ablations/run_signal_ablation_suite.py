@@ -1,9 +1,9 @@
-"""Run signal-source ablations for the final GNN v2 architecture.
+"""Run signal-source ablations for the final weighted heterogeneous GCN.
 
-This workflow keeps the GNN v2 model family fixed and removes one information
-source at a time from graph construction: node features, learned edge features,
-and graph relations derived from that source. It reuses the existing HCI suite
-wrapper configs and trainers.
+This workflow keeps the `HeteroGCNMLPWeights` architecture fixed and removes
+one information source at a time from graph construction: node features, learned
+edge features, and graph relations derived from that source. It reuses the
+existing HCI suite wrapper configs and trainers.
 
 Examples:
   python src/emotions/gnn_improvement_experiments/ablations/run_signal_ablation_suite.py
@@ -62,7 +62,7 @@ class SignalAblationVariant:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Run final GNN v2 signal ablations")
+    parser = argparse.ArgumentParser(description="Run final weighted heterogeneous GCN signal ablations")
     parser.add_argument("--base-config", type=str, default=DEFAULT_BASE_CONFIG, help="Base suite wrapper YAML.")
     parser.add_argument(
         "--output-root",
@@ -159,13 +159,13 @@ def _dataset_overrides(
 
 
 def _fixed_gnn_overrides() -> Dict[str, Any]:
-    """Return GNN v2 overrides shared by all ablations."""
+    """Return final weighted heterogeneous GCN overrides shared by all ablations."""
     return {
         "benchmarking": {"enabled": False},
         "run_experiments": {"baselines": False, "gnn": True},
         "gnn": {
             "model": {
-                "model_version": "v2",
+                "model_version": "HeteroGCNMLPWeights",
                 "edge_weight_mode": "learned_signed",
                 # Keep the final architecture's fixation relation module even
                 # when the dataset variant removes fixation edges.
