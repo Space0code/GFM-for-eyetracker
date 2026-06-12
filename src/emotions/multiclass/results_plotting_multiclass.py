@@ -20,6 +20,13 @@ from emotions.label_names import (
     resolve_multiclass_label_name_mapping,
 )
 
+GNN_MODEL_NAMES = {
+    "BasicGCN",
+    "HeteroGCNMean",
+    "HeteroGCNMLP",
+    "HeteroGCNMLPWeights",
+}
+
 
 def _discover_strategy_dirs(run_dir: Path, summary_file: str) -> List[Path]:
     return sorted(
@@ -50,6 +57,15 @@ def _infer_models_for_cm(strategy_dirs: Sequence[Path], preferred_order: Sequenc
         for fold_dir in fold_dirs:
             if (fold_dir / "test_predictions.npy").exists() and (fold_dir / "test_targets.npy").exists():
                 has_gnn = True
+            gnn_dir = fold_dir / "gnn"
+            if gnn_dir.exists():
+                for model_dir in gnn_dir.iterdir():
+                    if (
+                        model_dir.is_dir()
+                        and (model_dir / "test_predictions.npy").exists()
+                        and (model_dir / "test_targets.npy").exists()
+                    ):
+                        discovered_models.add(model_dir.name)
             baselines_dir = fold_dir / "baselines"
             if baselines_dir.exists():
                 for model_dir in baselines_dir.iterdir():
@@ -64,6 +80,15 @@ def _infer_models_for_cm(strategy_dirs: Sequence[Path], preferred_order: Sequenc
             models.append(model_name)
     models.extend(sorted([m for m in discovered_models if m not in preferred_order]))
     return models
+
+
+def _prediction_artifact_dir(fold_dir: Path, model_name: str) -> Path:
+    """Return prediction artifact directory for legacy, named-GNN, or baseline layouts."""
+    if model_name in GNN_MODEL_NAMES:
+        return fold_dir / "gnn" / model_name
+    if model_name == "GNN":
+        return fold_dir
+    return fold_dir / "baselines" / model_name
 
 
 def _save_figure(fig: plt.Figure, output_path: Path) -> Path:
@@ -230,12 +255,9 @@ def _plot_confusion_matrices(
             all_preds: List[np.ndarray] = []
 
             for fold_dir in fold_dirs:
-                if model_name == "GNN":
-                    pred_path = fold_dir / "test_predictions.npy"
-                    target_path = fold_dir / "test_targets.npy"
-                else:
-                    pred_path = fold_dir / "baselines" / model_name / "test_predictions.npy"
-                    target_path = fold_dir / "baselines" / model_name / "test_targets.npy"
+                artifact_dir = _prediction_artifact_dir(fold_dir=fold_dir, model_name=model_name)
+                pred_path = artifact_dir / "test_predictions.npy"
+                target_path = artifact_dir / "test_targets.npy"
 
                 if not pred_path.exists() or not target_path.exists():
                     continue
@@ -319,6 +341,10 @@ def generate_and_save_multiclass_results_plots(
         "weighted_auc_ovr",
     ),
     preferred_baseline_order: Sequence[str] = (
+        "BasicGCN",
+        "HeteroGCNMean",
+        "HeteroGCNMLP",
+        "HeteroGCNMLPWeights",
         "Mean",
         "SVM",
         "LightGBM",

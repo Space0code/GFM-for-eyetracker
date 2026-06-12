@@ -302,6 +302,7 @@ def collect_strategy_benchmark_records(strategy_dir: Path | str) -> pd.DataFrame
     """Collect all fold-level benchmark JSON files under one CV strategy dir."""
     root = Path(strategy_dir)
     paths = sorted(root.glob("*/model_benchmark.json"))
+    paths.extend(sorted(root.glob("*/gnn/*/model_benchmark.json")))
     paths.extend(sorted(root.glob("*/baselines/*/model_benchmark.json")))
     return load_benchmark_records(paths)
 

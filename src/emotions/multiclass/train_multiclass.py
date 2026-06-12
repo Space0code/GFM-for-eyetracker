@@ -131,6 +131,57 @@ BaselineSplit = Tuple[
 ]
 
 EmbeddingSampleMap = Dict[str, List[Any]]
+GNNFoldData = Tuple[List[Any], List[Any], List[Any], DataLoader, DataLoader, DataLoader]
+
+GNN_MODEL_CLASSES = {
+    "basicgcn": MulticlassBasicGCN,
+    "basic_gcn": MulticlassBasicGCN,
+    "heterogcnmean": MulticlassHeteroGCNMean,
+    "hetero_gcn_mean": MulticlassHeteroGCNMean,
+    "heterogcnmlp": MulticlassHeteroGCNMLP,
+    "hetero_gcn_mlp": MulticlassHeteroGCNMLP,
+    "heterogcnmlpweights": MulticlassHeteroGCNMLPWeights,
+    "hetero_gcn_mlp_weights": MulticlassHeteroGCNMLPWeights,
+}
+GNN_MODEL_DISPLAY_NAMES = {
+    "basicgcn": "BasicGCN",
+    "basic_gcn": "BasicGCN",
+    "heterogcnmean": "HeteroGCNMean",
+    "hetero_gcn_mean": "HeteroGCNMean",
+    "heterogcnmlp": "HeteroGCNMLP",
+    "hetero_gcn_mlp": "HeteroGCNMLP",
+    "heterogcnmlpweights": "HeteroGCNMLPWeights",
+    "hetero_gcn_mlp_weights": "HeteroGCNMLPWeights",
+}
+
+
+def _canonical_gnn_model_name(model_name: Any) -> str:
+    """Return the canonical active thesis GNN model name."""
+    model_key = str(model_name).strip().lower().replace("-", "_")
+    if model_key not in GNN_MODEL_CLASSES:
+        raise ValueError(
+            f"Unsupported GNN model '{model_name}'. "
+            "Choose BasicGCN, HeteroGCNMean, HeteroGCNMLP, or HeteroGCNMLPWeights."
+        )
+    return GNN_MODEL_DISPLAY_NAMES[model_key]
+
+
+def resolve_gnn_model_names(config: Dict[str, Any]) -> List[str]:
+    """Resolve one or more active GNN model names from config."""
+    gnn_cfg = config.get("gnn", {})
+    raw_models = gnn_cfg.get("models")
+    if raw_models is None:
+        raw_models = [gnn_cfg.get("model", {}).get("model_version", "HeteroGCNMLPWeights")]
+    elif isinstance(raw_models, str):
+        raw_models = [token.strip() for token in raw_models.split(",") if token.strip()]
+    elif not isinstance(raw_models, Sequence):
+        raise ValueError("gnn.models must be a list or comma-separated string when configured.")
+
+    model_names = [_canonical_gnn_model_name(model_name) for model_name in raw_models]
+    model_names = list(dict.fromkeys(model_names))
+    if not model_names:
+        raise ValueError("gnn.models must select at least one GNN model.")
+    return model_names
 
 
 def parse_args() -> argparse.Namespace:
@@ -741,57 +792,13 @@ def _is_loader_thread_error(exc: RuntimeError) -> bool:
     )
 
 
-def _train_gnn_fold(
+def _build_gnn_model_kwargs(
     config: Dict[str, Any],
-    train_idx: np.ndarray,
-    val_idx: np.ndarray,
-    test_idx: np.ndarray,
-    dataset: SpacioTemporalDataset,
-    fold_dir: str,
-    test_name: str,
-    device: torch.device,
-    task_def: Dict[str, Any],
-    fold_context: Dict[str, Any],
-    class_to_index: Dict[int, int],
     class_labels: List[int],
-    standardize_features: bool,
-    verbose: bool,
 ) -> Dict[str, Any]:
-    benchmark_cfg = resolve_benchmark_config(config)
+    """Build shared constructor kwargs for active thesis GNN models."""
     model_cfg = config["gnn"]["model"]
-    training_cfg = config["gnn"]["training"]
-
-    model_version = str(model_cfg.get("model_version", "HeteroGCNMLPWeights"))
-    model_key = model_version.lower().replace("-", "_")
-    model_classes = {
-        "basicgcn": MulticlassBasicGCN,
-        "basic_gcn": MulticlassBasicGCN,
-        "heterogcnmean": MulticlassHeteroGCNMean,
-        "hetero_gcn_mean": MulticlassHeteroGCNMean,
-        "heterogcnmlp": MulticlassHeteroGCNMLP,
-        "hetero_gcn_mlp": MulticlassHeteroGCNMLP,
-        "heterogcnmlpweights": MulticlassHeteroGCNMLPWeights,
-        "hetero_gcn_mlp_weights": MulticlassHeteroGCNMLPWeights,
-    }
-    model_display_names = {
-        "basicgcn": "BasicGCN",
-        "basic_gcn": "BasicGCN",
-        "heterogcnmean": "HeteroGCNMean",
-        "hetero_gcn_mean": "HeteroGCNMean",
-        "heterogcnmlp": "HeteroGCNMLP",
-        "hetero_gcn_mlp": "HeteroGCNMLP",
-        "heterogcnmlpweights": "HeteroGCNMLPWeights",
-        "hetero_gcn_mlp_weights": "HeteroGCNMLPWeights",
-    }
-    if model_key not in model_classes:
-        raise ValueError(
-            f"Unsupported gnn.model.model_version='{model_version}'. "
-            "Choose BasicGCN, HeteroGCNMean, HeteroGCNMLP, or HeteroGCNMLPWeights."
-        )
-    model_cls = model_classes[model_key]
-    benchmark_model_name = model_display_names[model_key]
-
-    model_kwargs = {
+    return {
         "in_channels": model_cfg["in_channels"],
         "hidden_channels": model_cfg["hidden_channels"],
         "num_classes": len(class_labels),
@@ -820,14 +827,24 @@ def _train_gnn_fold(
         "fixation_edge_attr_dim": model_cfg.get("fixation_edge_attr_dim"),
     }
 
-    model = model_cls(**model_kwargs).to(device)
-    parameter_counts = count_torch_parameters(model)
 
-    use_compile = training_cfg.get("use_torch_compile", True)
-    if use_compile and hasattr(torch, "compile"):
-        model = torch.compile(model, mode="default")
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg["learning_rate"]))
+def _prepare_gnn_fold_data(
+    config: Dict[str, Any],
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+    test_idx: np.ndarray,
+    dataset: SpacioTemporalDataset,
+    fold_dir: str,
+    device: torch.device,
+    task_def: Dict[str, Any],
+    fold_context: Dict[str, Any],
+    class_to_index: Dict[int, int],
+    standardize_features: bool,
+) -> GNNFoldData:
+    """Prepare shared graph fold data and loaders for one fold."""
+    training_cfg = config["gnn"]["training"]
+    gnn_root_dir = Path(fold_dir) / "gnn"
+    gnn_root_dir.mkdir(parents=True, exist_ok=True)
 
     num_workers = int(training_cfg.get("num_workers", 4))
     loader_kwargs = {
@@ -840,12 +857,12 @@ def _train_gnn_fold(
     scaler: StandardScaler | None = None
     if standardize_features:
         scaler = _fit_graph_feature_scaler(dataset=dataset, train_idx=train_idx)
-        joblib.dump(scaler, os.path.join(fold_dir, "gnn_feature_scaler.pkl"))
+        joblib.dump(scaler, gnn_root_dir / "gnn_feature_scaler.pkl")
 
     edge_scalers: EdgeScalerDict | None = None
     if bool(config["dataset"].get("standardize_edge_features", False)):
         edge_scalers = fit_edge_feature_scalers(dataset=dataset, train_idx=train_idx)
-        joblib.dump(edge_scalers, os.path.join(fold_dir, "gnn_edge_feature_scalers.pkl"))
+        joblib.dump(edge_scalers, gnn_root_dir / "gnn_edge_feature_scalers.pkl")
 
     train_graphs = _build_graph_subset(
         dataset=dataset,
@@ -878,6 +895,44 @@ def _train_gnn_fold(
     train_loader = DataLoader(train_graphs, shuffle=True, **loader_kwargs)
     val_loader = DataLoader(val_graphs, shuffle=False, **loader_kwargs)
     test_loader = DataLoader(test_graphs, shuffle=False, **loader_kwargs)
+    return train_graphs, val_graphs, test_graphs, train_loader, val_loader, test_loader
+
+
+def _train_one_gnn_model(
+    *,
+    config: Dict[str, Any],
+    model_name: str,
+    model_dir: Path,
+    fold_id: str,
+    test_name: str,
+    device: torch.device,
+    task_def: Dict[str, Any],
+    fold_context: Dict[str, Any],
+    class_labels: List[int],
+    train_graphs: List[Any],
+    val_graphs: List[Any],
+    test_graphs: List[Any],
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    verbose: bool,
+) -> Dict[str, Any]:
+    """Train one named GNN model using already-prepared graph fold data."""
+    benchmark_cfg = resolve_benchmark_config(config)
+    training_cfg = config["gnn"]["training"]
+    model_key = model_name.lower().replace("-", "_")
+    model_cls = GNN_MODEL_CLASSES[model_key]
+    model_kwargs = _build_gnn_model_kwargs(config=config, class_labels=class_labels)
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model = model_cls(**model_kwargs).to(device)
+    parameter_counts = count_torch_parameters(model)
+
+    use_compile = training_cfg.get("use_torch_compile", True)
+    if use_compile and hasattr(torch, "compile"):
+        model = torch.compile(model, mode="default")
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=float(training_cfg["learning_rate"]))
 
     best_val_loss = float("inf")
     best_epoch = 0
@@ -893,7 +948,7 @@ def _train_gnn_fold(
     if early_stopping_enabled and early_stopping_patience < 1:
         raise ValueError("gnn.training.early_stopping_patience must be >= 1 when early stopping is enabled.")
 
-    print(f"Training multiclass GNN for {test_name}...")
+    print(f"Training {model_name} for {test_name}...")
     for epoch in range(int(training_cfg["num_epochs"])):
         epoch_start_time = time.perf_counter()
         train_loss, grad_norm_stats = _train_gnn_epoch(
@@ -927,13 +982,14 @@ def _train_gnn_fold(
             best_val_loss = val_loss
             best_epoch = epoch
             no_improve_epochs = 0
-            torch.save(model.state_dict(), os.path.join(fold_dir, "best_model.pt"))
+            torch.save(model.state_dict(), model_dir / "best_model.pt")
         else:
             no_improve_epochs += 1
 
         history_rows.append(
             {
                 "epoch": epoch + 1,
+                "model": model_name,
                 "train_loss": float(train_loss),
                 "val_loss": float(val_loss),
                 "val_balanced_accuracy": float(val_balanced_accuracy),
@@ -959,7 +1015,7 @@ def _train_gnn_fold(
         row["best_epoch"] = best_epoch + 1
         row["best_val_loss"] = float(best_val_loss)
         row["early_stopped"] = int(early_stopped)
-    pd.DataFrame(history_rows).to_csv(os.path.join(fold_dir, "gnn_training_history.csv"), index=False)
+    pd.DataFrame(history_rows).to_csv(model_dir / "gnn_training_history.csv", index=False)
 
     print(f"  Best model at epoch {best_epoch + 1}")
     if early_stopped:
@@ -970,16 +1026,17 @@ def _train_gnn_fold(
             "but evaluation still uses the best checkpoint for comparability."
         )
     fit_seconds = time.perf_counter() - start_time
-    print(f"  GNN train time: {fit_seconds:.2f} seconds")
+    print(f"  {model_name} train time: {fit_seconds:.2f} seconds")
 
-    model.load_state_dict(torch.load(os.path.join(fold_dir, "best_model.pt")))
+    model.load_state_dict(torch.load(model_dir / "best_model.pt"))
     save_gnn_fold_diagnostics(
         model=model,
         loaders={"train": train_loader, "val": val_loader, "test": test_loader},
         device=device,
-        output_path=os.path.join(fold_dir, "gnn_fold_diagnostics.csv"),
+        output_path=model_dir / "gnn_fold_diagnostics.csv",
         task_kind="multiclass",
         metadata={
+            "model": model_name,
             "best_epoch": best_epoch + 1,
             "best_val_loss": float(best_val_loss),
             "early_stopped": int(early_stopped),
@@ -992,21 +1049,21 @@ def _train_gnn_fold(
         class_labels=class_labels,
     )
 
-    np.save(os.path.join(fold_dir, "test_predictions.npy"), test_pred)
-    np.save(os.path.join(fold_dir, "test_targets.npy"), test_true)
+    np.save(model_dir / "test_predictions.npy", test_pred)
+    np.save(model_dir / "test_targets.npy", test_true)
 
     if verbose:
         test_acc = test_metrics["standard"]["aggregated"].get("accuracy", np.nan)
-        print(f"  ❗GNN - Test Accuracy: {test_acc:.4f}")
+        print(f"  ❗{model_name} - Test Accuracy: {test_acc:.4f}")
 
     if benchmark_cfg["enabled"]:
         aggregated = test_metrics["standard"]["aggregated"]
         benchmark_record: Dict[str, Any] = {
             "task_name": str(task_def["task_name"]),
             "cv_strategy": str(fold_context.get("cv_strategy", "")),
-            "fold_id": Path(fold_dir).name,
-            "model": "GNN",
-            "model_display_name": benchmark_model_name,
+            "fold_id": fold_id,
+            "model": model_name,
+            "model_display_name": model_name,
             "model_family": "gnn",
             "parameter_scope": "torch_model",
             "device": str(device),
@@ -1039,9 +1096,80 @@ def _train_gnn_fold(
             )
         except Exception as benchmark_exc:
             benchmark_record["benchmark_error"] = str(benchmark_exc)
-        write_benchmark_record(Path(fold_dir) / "model_benchmark.json", benchmark_record)
+        write_benchmark_record(model_dir / "model_benchmark.json", benchmark_record)
 
     return test_metrics
+
+
+def _train_gnn_fold(
+    config: Dict[str, Any],
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+    test_idx: np.ndarray,
+    dataset: SpacioTemporalDataset,
+    fold_dir: str,
+    test_name: str,
+    device: torch.device,
+    task_def: Dict[str, Any],
+    fold_context: Dict[str, Any],
+    class_to_index: Dict[int, int],
+    class_labels: List[int],
+    standardize_features: bool,
+    verbose: bool,
+) -> Dict[str, Dict[str, Any]]:
+    """Train all configured GNN variants for one fold using shared graph data."""
+    model_names = resolve_gnn_model_names(config)
+    gnn_root_dir = Path(fold_dir) / "gnn"
+    gnn_root_dir.mkdir(parents=True, exist_ok=True)
+    train_graphs, val_graphs, test_graphs, train_loader, val_loader, test_loader = _prepare_gnn_fold_data(
+        config=config,
+        train_idx=train_idx,
+        val_idx=val_idx,
+        test_idx=test_idx,
+        dataset=dataset,
+        fold_dir=fold_dir,
+        device=device,
+        task_def=task_def,
+        fold_context=fold_context,
+        class_to_index=class_to_index,
+        standardize_features=standardize_features,
+    )
+
+    results: Dict[str, Dict[str, Any]] = {}
+    failures: List[Dict[str, str]] = []
+    for model_name in model_names:
+        model_dir = gnn_root_dir / model_name
+        try:
+            results[model_name] = _train_one_gnn_model(
+                config=config,
+                model_name=model_name,
+                model_dir=model_dir,
+                fold_id=Path(fold_dir).name,
+                test_name=test_name,
+                device=device,
+                task_def=task_def,
+                fold_context=fold_context,
+                class_labels=class_labels,
+                train_graphs=train_graphs,
+                val_graphs=val_graphs,
+                test_graphs=test_graphs,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                test_loader=test_loader,
+                verbose=verbose,
+            )
+        except RuntimeError as exc:
+            if _is_loader_thread_error(exc):
+                raise
+            failures.append({"model": model_name, "error": str(exc)})
+            print(f"  Warning: {model_name} failed on {test_name}: {exc}")
+        except Exception as exc:
+            failures.append({"model": model_name, "error": str(exc)})
+            print(f"  Warning: {model_name} failed on {test_name}: {exc}")
+
+    if failures:
+        pd.DataFrame(failures).to_csv(gnn_root_dir / "gnn_failures.csv", index=False)
+    return results
 
 
 def _save_mlp_training_history(model: Any, output_path: str) -> None:
@@ -1450,6 +1578,9 @@ def run_training_from_config(config_path: str) -> str:
         print(f"Results will be saved to: {run_dir}")
         print(f"Run baselines: {run_experiments['baselines']}")
         print(f"Run GNN: {run_experiments['gnn']}")
+        gnn_model_names = resolve_gnn_model_names(config) if run_experiments["gnn"] else []
+        if gnn_model_names:
+            print(f"Configured GNN models: {', '.join(gnn_model_names)}")
 
         with open(os.path.join(run_dir, "config.yaml"), "w", encoding="utf-8") as handle:
             yaml.safe_dump(config, handle, sort_keys=False)
@@ -1719,7 +1850,7 @@ def run_training_from_config(config_path: str) -> str:
                 if run_experiments["baselines"]
                 else {}
             )
-            gnn_results_all_folds: Dict[str, Dict[str, Any]] = {}
+            gnn_results_all_folds: Dict[str, Dict[str, Any]] = {name: {} for name in gnn_model_names}
 
             baseline_entries: List[Dict[str, Any]] = []
             gnn_entries: List[Dict[str, Any]] = []
@@ -1862,7 +1993,7 @@ def run_training_from_config(config_path: str) -> str:
 
                 if run_experiments["gnn"] and base_gnn_dataset is not None:
                     try:
-                        gnn_metrics = _train_gnn_fold(
+                        gnn_metrics_by_model = _train_gnn_fold(
                             config=config,
                             train_idx=gnn_train_idx,
                             val_idx=gnn_val_idx,
@@ -1891,7 +2022,7 @@ def run_training_from_config(config_path: str) -> str:
                             "pin_memory=false, persistent_workers=false and applying "
                             "those settings for subsequent folds."
                         )
-                        gnn_metrics = _train_gnn_fold(
+                        gnn_metrics_by_model = _train_gnn_fold(
                             config=config,
                             train_idx=gnn_train_idx,
                             val_idx=gnn_val_idx,
@@ -1907,13 +2038,20 @@ def run_training_from_config(config_path: str) -> str:
                             standardize_features=standardize_features,
                             verbose=verbose,
                         )
-                    gnn_results_all_folds[test_id] = gnn_metrics
+                    for model_name, gnn_metrics in gnn_metrics_by_model.items():
+                        gnn_results_all_folds.setdefault(model_name, {})[test_id] = gnn_metrics
 
             combined_results: Dict[str, Dict[str, Any]] = {}
             if run_experiments["baselines"]:
                 combined_results.update(baseline_results_all_folds)
             if run_experiments["gnn"]:
-                combined_results["GNN"] = gnn_results_all_folds
+                combined_results.update(
+                    {
+                        model_name: model_results
+                        for model_name, model_results in gnn_results_all_folds.items()
+                        if model_results
+                    }
+                )
 
             all_strategies_results[strategy] = combined_results
 
@@ -1926,7 +2064,7 @@ def run_training_from_config(config_path: str) -> str:
         print("\nGenerating multiclass result plots...")
         models_for_cm: List[str] = []
         if run_experiments["gnn"]:
-            models_for_cm.append("GNN")
+            models_for_cm.extend(gnn_model_names)
         if run_experiments["baselines"]:
             models_for_cm.extend(config["baselines"]["models"])
         models_for_cm = list(dict.fromkeys(models_for_cm))
