@@ -358,20 +358,24 @@ def test_quick_plot_model_order_keeps_sanity_baselines_first() -> None:
     assert ordered == [
         "Random",
         "Majority",
+        "SVM",
+        "LightGBM",
+        "MLP",
         "BasicGCN",
         "HeteroGCNMean",
         "HeteroGCNMLP",
         "HeteroGCNMLPWeights",
-        "MLP",
-        "LightGBM",
-        "SVM",
     ]
 
 
 def test_thesis_model_display_names_are_plot_friendly() -> None:
-    assert _thesis_model_display_name("HeteroGCNMean") == "Hetero_GCN_Mean"
-    assert _thesis_model_display_name("HeteroGCNMLPWeights") == "Hetero_GCN_MLP_Weights"
-    assert _thesis_model_display_name("GazeMAE_MLP") == "GazeMAE_MLP"
+    assert _thesis_model_display_name("Random") == "Naključni"
+    assert _thesis_model_display_name("Majority") == "Večinski"
+    assert _thesis_model_display_name("BasicGCN") == "GCN"
+    assert _thesis_model_display_name("HeteroGCNMean") == "HeteroGCN-mean"
+    assert _thesis_model_display_name("HeteroGCNMLP") == "HeteroGCN-MLP"
+    assert _thesis_model_display_name("HeteroGCNMLPWeights") == "HeteroGCN-MLP-w"
+    assert _thesis_model_display_name("GazeMAE_MLP") == "GazeMAE+MLP"
 
 
 def test_quick_runs_group_baselines_into_one_suite_invocation() -> None:
@@ -518,21 +522,27 @@ def test_group_model_ranking_plot_is_written(tmp_path: Path, monkeypatch) -> Non
     assert output_path == tmp_path / "plots" / "classification_group_model_ranking.png"
     assert output_path.exists()
     assert barplot_calls
-    assert barplot_calls[0]["x"] == "metric"
+    assert barplot_calls[0]["x"] == "metric_display"
     assert barplot_calls[0]["y"] == "value"
-    assert barplot_calls[0]["hue"] == "model"
-    assert barplot_calls[0]["order"] == ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
-    assert barplot_calls[0]["hue_order"] == ["Random", "Majority", "HeteroGCNMean", "HeteroGCNMLPWeights", "LightGBM"]
+    assert barplot_calls[0]["hue"] == "model_display"
+    assert barplot_calls[0]["order"] == ["točnost", "uravnotežena točnost", "makro F1", "utežen F1", "AUC"]
+    assert barplot_calls[0]["hue_order"] == ["Naključni", "Večinski", "LightGBM", "HeteroGCN-mean", "HeteroGCN-MLP-w"]
     assert barplot_calls[0]["palette"] == {
-        "Random": quick_comparison.MODEL_COLOR_PALETTE["Random"],
-        "Majority": quick_comparison.MODEL_COLOR_PALETTE["Majority"],
-        "HeteroGCNMean": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMean"],
-        "HeteroGCNMLPWeights": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMLPWeights"],
+        "Naključni": quick_comparison.MODEL_COLOR_PALETTE["Random"],
+        "Večinski": quick_comparison.MODEL_COLOR_PALETTE["Majority"],
         "LightGBM": quick_comparison.MODEL_COLOR_PALETTE["LightGBM"],
+        "HeteroGCN-mean": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMean"],
+        "HeteroGCN-MLP-w": quick_comparison.MODEL_COLOR_PALETTE["HeteroGCNMLPWeights"],
     }
+    assert quick_comparison._group_model_ranking_title(
+        signal_set="gaze_only",
+        experiment_id=VALENCE_EXPERIMENT_ID,
+        cv_strategy="subject_kfold",
+        has_signal_set=True,
+    ) == "Primerjava modelov za prepoznavanje valence iz signalov pogleda"
 
 
-def test_thesis_metric_table_ranks_by_accuracy_then_macro_f1(tmp_path: Path) -> None:
+def test_thesis_metric_table_uses_fixed_model_order(tmp_path: Path) -> None:
     summary = pd.DataFrame(
         [
             {
@@ -585,8 +595,8 @@ def test_thesis_metric_table_ranks_by_accuracy_then_macro_f1(tmp_path: Path) -> 
 
     table = pd.read_csv(output_path)
     assert table["model"].tolist() == ["ModelA", "ModelB", "ModelC"]
-    assert table["rank"].tolist() == [1, 2, 3]
-    assert "rank" in table.columns
+    assert table["model_order"].tolist() == [1, 2, 3]
+    assert "rank" not in table.columns
     assert not any(column.endswith("_mean") or column.endswith("_std") for column in table.columns)
 
 
@@ -662,6 +672,7 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
         [
             {
                 "epoch": 1,
+                "model": "HeteroGCNMLPWeights",
                 "train_loss": 1.1,
                 "val_loss": 1.0,
                 "val_balanced_accuracy": 0.4,
@@ -670,6 +681,7 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
             },
             {
                 "epoch": 2,
+                "model": "HeteroGCNMLPWeights",
                 "train_loss": 0.9,
                 "val_loss": 0.8,
                 "val_balanced_accuracy": 0.5,
@@ -716,6 +728,9 @@ def test_training_history_outputs_include_loss_and_validation_plots(tmp_path: Pa
     for path in expected_paths:
         assert path.exists()
     assert not (tmp_path / "plots" / "losses").exists()
+    history = pd.read_csv(tmp_path / "tables" / "training_history.csv")
+    assert history["model"].tolist() == ["HeteroGCNMLPWeights", "HeteroGCNMLPWeights"]
+    assert "history_source_model" not in history.columns
 
     full_paths = _save_training_history_outputs(rows=rows, output_dir=tmp_path, save_fold_loss_plots=True)
     loss_plot_paths = [path for path in full_paths if path.parent.name == "losses"]

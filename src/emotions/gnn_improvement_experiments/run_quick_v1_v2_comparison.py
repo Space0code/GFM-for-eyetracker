@@ -78,11 +78,14 @@ BASELINE_MODELS = {"Random", "Majority", "Mean", "SVM", "LightGBM", "MLP", "Gaze
 GNN_MODELS = {"BasicGCN", "HeteroGCNMean", "HeteroGCNMLP", "HeteroGCNMLPWeights"}
 PREFERRED_MODEL_ORDER = [
     "Random",
+    "random",
     "Majority",
-    "BasicGCN",
-    "HeteroGCNMean",
-    "HeteroGCNMLP",
-    "HeteroGCNMLPWeights",
+    "majority",
+    "MajorityClassifier",
+    "majority_classifier",
+    "SVM",
+    "LightGBM",
+    "MLP",
     "GazeMAE_MLP",
     "MOMENT_gaze",
     "MOMENT_pupil",
@@ -90,9 +93,12 @@ PREFERRED_MODEL_ORDER = [
     "MOMENT_all_signals",
     "MOMENT_GazeMAE_gaze_pupil",
     "MOMENT_GazeMAE_all_signals",
-    "MLP",
-    "LightGBM",
-    "SVM",
+    "BasicGCN",
+    "HeteroGCNMean",
+    "HeteroGCNMLP",
+    "GeteroGCNMLP",
+    "HeteroGCNMLPWeights",
+    "GeteroGCNMLPWeights",
 ]
 VALID_CV_STRATEGIES = {"subject_loo", "recording_loo", "recording_kfold", "subject_kfold"}
 REPORT_PROFILES = {"thesis", "full", "minimal"}
@@ -102,6 +108,40 @@ SIGNAL_SET_DESCRIPTIONS = {
     "pupil_only": "Pupil left/right nodes with temporal graph relations only.",
     "gaze_pupil": "Gaze x/y plus pupil nodes with temporal and spatial graph relations.",
     "all_signals": "Gaze, pupil, screen distance, and fixation-duration nodes with all graph relations.",
+}
+SIGNAL_SET_VALENCE_TITLES_SL = {
+    "gaze_only": "Primerjava modelov za prepoznavanje valence iz signalov pogleda",
+    "pupil_only": "Primerjava modelov za prepoznavanje valence iz signalov zenice",
+    "gaze_pupil": "Primerjava modelov za prepoznavanje valence iz signalov pogleda in zenice",
+    "all_signals": "Primerjava modelov za prepoznavanje valence iz signalov pogleda, zenice, fiksacij ter oddaljenosti od zaslona",
+}
+METRIC_DISPLAY_NAMES_SL = {
+    "accuracy": "točnost",
+    "balanced_accuracy": "uravnotežena točnost",
+    "macro_f1": "makro F1",
+    "weighted_f1": "utežen F1",
+    "auc": "AUC",
+}
+MODEL_DISPLAY_NAMES_SL = {
+    "Random": "Naključni",
+    "random": "Naključni",
+    "Majority": "Večinski",
+    "majority": "Večinski",
+    "MajorityClassifier": "Večinski",
+    "majority_classifier": "Večinski",
+    "BasicGCN": "GCN",
+    "HeteroGCNMean": "HeteroGCN-mean",
+    "HeteroGCNMLP": "HeteroGCN-MLP",
+    "GeteroGCNMLP": "HeteroGCN-MLP",
+    "HeteroGCNMLPWeights": "HeteroGCN-MLP-w",
+    "GeteroGCNMLPWeights": "HeteroGCN-MLP-w",
+    "GazeMAE_MLP": "GazeMAE+MLP",
+    "MOMENT_gaze": "MOMENT+MLP",
+    "MOMENT_pupil": "MOMENT+MLP",
+    "MOMENT_gaze_pupil": "MOMENT+MLP",
+    "MOMENT_all_signals": "MOMENT+MLP",
+    "MOMENT_GazeMAE_gaze_pupil": "MOMENT+GazeMAE+MLP",
+    "MOMENT_GazeMAE_all_signals": "MOMENT+GazeMAE+MLP",
 }
 SIGNAL_SET_ALIASES = {
     "gaze": "gaze_only",
@@ -153,23 +193,29 @@ MODEL_COLOR_PALETTE = {
     "Mean": "#CCB974",
 }
 THESIS_MODEL_DISPLAY_NAMES = {
-    "Random": "Random",
-    "Majority": "Majority",
+    "Random": "Naključni",
+    "random": "Naključni",
+    "Majority": "Večinski",
+    "majority": "Večinski",
+    "MajorityClassifier": "Večinski",
+    "majority_classifier": "Večinski",
     "Mean": "Mean",
     "SVM": "SVM",
     "LightGBM": "LightGBM",
     "MLP": "MLP",
-    "GazeMAE_MLP": "GazeMAE_MLP",
-    "MOMENT_gaze": "MOMENT_Gaze",
-    "MOMENT_pupil": "MOMENT_Pupil",
-    "MOMENT_gaze_pupil": "MOMENT_Gaze_Pupil",
-    "MOMENT_all_signals": "MOMENT_All_Signals",
-    "MOMENT_GazeMAE_gaze_pupil": "MOMENT_GazeMAE_Gaze_Pupil",
-    "MOMENT_GazeMAE_all_signals": "MOMENT_GazeMAE_All_Signals",
-    "BasicGCN": "Basic_GCN",
-    "HeteroGCNMean": "Hetero_GCN_Mean",
-    "HeteroGCNMLP": "Hetero_GCN_MLP",
-    "HeteroGCNMLPWeights": "Hetero_GCN_MLP_Weights",
+    "GazeMAE_MLP": "GazeMAE+MLP",
+    "MOMENT_gaze": "MOMENT+MLP",
+    "MOMENT_pupil": "MOMENT+MLP",
+    "MOMENT_gaze_pupil": "MOMENT+MLP",
+    "MOMENT_all_signals": "MOMENT+MLP",
+    "MOMENT_GazeMAE_gaze_pupil": "MOMENT+GazeMAE+MLP",
+    "MOMENT_GazeMAE_all_signals": "MOMENT+GazeMAE+MLP",
+    "BasicGCN": "GCN",
+    "HeteroGCNMean": "HeteroGCN-mean",
+    "HeteroGCNMLP": "HeteroGCN-MLP",
+    "GeteroGCNMLP": "HeteroGCN-MLP",
+    "HeteroGCNMLPWeights": "HeteroGCN-MLP-w",
+    "GeteroGCNMLPWeights": "HeteroGCN-MLP-w",
 }
 LOSS_METRIC_COLUMNS = ["train_loss", "val_loss", "test_loss"]
 LOSS_AXIS_UPPER_LIMIT = 2.0
@@ -502,11 +548,23 @@ def _parse_cv_strategies(raw_strategies: str) -> List[str]:
 def _ordered_models(model_names: Iterable[str]) -> List[str]:
     """Return model names in the preferred quick-comparison display order."""
     unique_models = list(dict.fromkeys(model_names))
-    preferred_idx = {name: idx for idx, name in enumerate(PREFERRED_MODEL_ORDER)}
     return sorted(
         unique_models,
-        key=lambda name: (preferred_idx.get(name, len(preferred_idx)), str(name).lower()),
+        key=lambda name: (_model_order_index(name), str(name).lower()),
     )
+
+
+def _model_order_index(model_name: Any) -> int:
+    """Return the thesis complexity-order index for a model name."""
+    preferred_idx = {name: idx for idx, name in enumerate(PREFERRED_MODEL_ORDER)}
+    name = str(model_name)
+    if name in preferred_idx:
+        return preferred_idx[name]
+    display_idx = {
+        _thesis_model_display_name(preferred_name): idx
+        for idx, preferred_name in enumerate(PREFERRED_MODEL_ORDER)
+    }
+    return display_idx.get(name, len(preferred_idx))
 
 
 def _model_color_map(model_names: Sequence[str]) -> Dict[str, str]:
@@ -523,9 +581,49 @@ def _model_color_map(model_names: Sequence[str]) -> Dict[str, str]:
     return color_map
 
 
+def _ranking_model_display_name(model_name: str) -> str:
+    """Return the display name for grouped model-ranking plots."""
+    return MODEL_DISPLAY_NAMES_SL.get(str(model_name), str(model_name))
+
+
+def _ranking_metric_display_name(metric_name: str) -> str:
+    """Return the display name for grouped model-ranking plot metrics."""
+    return METRIC_DISPLAY_NAMES_SL.get(str(metric_name), str(metric_name))
+
+
+def _group_model_ranking_title(
+    *,
+    signal_set: str,
+    experiment_id: str,
+    cv_strategy: str,
+    has_signal_set: bool,
+) -> str:
+    """Return the display title for grouped model-ranking plots."""
+    if experiment_id == VALENCE_EXPERIMENT_ID and signal_set in SIGNAL_SET_VALENCE_TITLES_SL:
+        return SIGNAL_SET_VALENCE_TITLES_SL[signal_set]
+
+    experiment_name = EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id)
+    title_suffix = f" - {cv_strategy}" if cv_strategy else ""
+    signal_prefix = f"{signal_set}: " if has_signal_set and signal_set else ""
+    return f"{signal_prefix}Quick {experiment_name} Metrics by Model{title_suffix}"
+
+
 def _thesis_model_display_name(model_name: str) -> str:
     """Return a thesis-facing model name for plots."""
-    return THESIS_MODEL_DISPLAY_NAMES.get(str(model_name), str(model_name).replace("-", "_"))
+    name = str(model_name)
+    if name in set(THESIS_MODEL_DISPLAY_NAMES.values()):
+        return name
+    return THESIS_MODEL_DISPLAY_NAMES.get(name, name.replace("-", "_"))
+
+
+def _insert_model_display_column(df: pd.DataFrame, *, after: str = "model") -> pd.DataFrame:
+    """Insert or refresh a thesis-facing model display-name column."""
+    if "model" not in df.columns:
+        return df
+    result = df.drop(columns=["model_display"], errors="ignore").copy()
+    insert_at = result.columns.get_loc(after) + 1 if after in result.columns else len(result.columns)
+    result.insert(insert_at, "model_display", result["model"].map(_thesis_model_display_name))
+    return result
 
 
 def _resolve_report_profile(args: argparse.Namespace) -> str:
@@ -1094,14 +1192,44 @@ def _rows_to_dataframe(rows: Iterable[Dict[str, Any]]) -> pd.DataFrame:
     df = pd.DataFrame(list(rows))
     if df.empty:
         return df
+    if "model" in df.columns:
+        df["_model_order"] = df["model"].map(_model_order_index)
     sort_cols = [
         col
-        for col in ["status", "signal_set", "experiment_id", "cv_strategy", "balanced_accuracy", "macro_f1", "model"]
+        for col in ["status", "signal_set", "experiment_id", "cv_strategy", "_model_order", "model"]
         if col in df.columns
     ]
-    descending_metric_cols = {"balanced_accuracy", "macro_f1"}
-    ascending = [col not in descending_metric_cols for col in sort_cols]
-    return df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
+    result = df.sort_values(sort_cols, ascending=True).reset_index(drop=True)
+    result = result.drop(columns=["_model_order"], errors="ignore")
+    return _insert_model_display_column(result)
+
+
+def _prepend_metadata_columns(
+    frame: pd.DataFrame,
+    metadata: Sequence[tuple[str, Any]],
+    *,
+    source_prefix: str,
+) -> pd.DataFrame:
+    """Prepend command-level metadata while preserving conflicting source columns."""
+    enriched = frame.copy()
+    metadata_names = {name for name, _ in metadata}
+
+    for column, value in reversed(list(metadata)):
+        if column in enriched.columns:
+            value_text = "" if value is None else str(value)
+            existing_text = enriched[column].fillna("").astype(str)
+            if existing_text.eq(value_text).all():
+                enriched = enriched.drop(columns=[column])
+            else:
+                source_column = f"{source_prefix}_{column}"
+                suffix = 2
+                while source_column in enriched.columns or source_column in metadata_names:
+                    source_column = f"{source_prefix}_{column}_{suffix}"
+                    suffix += 1
+                enriched = enriched.rename(columns={column: source_column})
+        enriched.insert(0, column, value)
+
+    return enriched
 
 
 def _collect_fold_metrics(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
@@ -1133,18 +1261,29 @@ def _collect_fold_metrics(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
             continue
 
         model_metrics = model_metrics.rename(columns={"model": "metric_source_model"})
-        model_metrics.insert(0, "fold_metrics_path", str(fold_metrics_path))
-        model_metrics.insert(0, "trainer_run_dir", str(trainer_run_dir))
-        model_metrics.insert(0, "suite_run_dir", str(suite_run_dir))
-        model_metrics.insert(0, "summary_model_name", summary_model_name)
-        model_metrics.insert(0, "model", model_name)
-        model_metrics.insert(0, "cv_strategy", cv_strategy)
-        model_metrics.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
-        model_metrics.insert(0, "experiment_id", experiment_id)
-        if "signal_set_description" in row:
-            model_metrics.insert(0, "signal_set_description", str(row.get("signal_set_description", "")))
+        metadata: List[tuple[str, Any]] = []
         if "signal_set" in row:
-            model_metrics.insert(0, "signal_set", str(row.get("signal_set", "")))
+            metadata.append(("signal_set", str(row.get("signal_set", ""))))
+        if "signal_set_description" in row:
+            metadata.append(("signal_set_description", str(row.get("signal_set_description", ""))))
+        metadata.extend(
+            [
+                ("experiment_id", experiment_id),
+                ("experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id)),
+                ("cv_strategy", cv_strategy),
+                ("model", model_name),
+                ("summary_model_name", summary_model_name),
+                ("suite_run_dir", str(suite_run_dir)),
+                ("trainer_run_dir", str(trainer_run_dir)),
+                ("fold_metrics_path", str(fold_metrics_path)),
+            ]
+        )
+        model_metrics = _prepend_metadata_columns(
+            model_metrics,
+            metadata,
+            source_prefix="metric_source",
+        )
+        model_metrics = _insert_model_display_column(model_metrics)
         records.append(model_metrics)
 
     if not records:
@@ -1160,6 +1299,7 @@ def _build_metric_summary_with_std(fold_metrics: pd.DataFrame) -> pd.DataFrame:
         "experiment_display_name",
         "cv_strategy",
         "model",
+        *([column for column in ["model_display"] if column in fold_metrics.columns]),
         "summary_model_name",
         "metric_type",
     ]
@@ -1196,7 +1336,14 @@ def _build_metric_summary_with_std(fold_metrics: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
     )
     summary["std"] = summary["std"].fillna(0.0)
-    return summary.sort_values([*group_columns, "metric"]).reset_index(drop=True)
+    summary["_model_order"] = summary["model"].map(_model_order_index)
+    sort_columns = [
+        *[column for column in group_columns if column not in {"model", "model_display"}],
+        "_model_order",
+        "model",
+        "metric",
+    ]
+    return summary.sort_values(sort_columns).drop(columns=["_model_order"]).reset_index(drop=True)
 
 
 def _save_fold_metric_outputs(rows: Sequence[Dict[str, Any]], output_dir: Path) -> List[Path]:
@@ -1363,12 +1510,21 @@ def _save_model_benchmark_outputs(
         )
 
     summary_path = tables_dir / "model_benchmark_summary.csv"
+    benchmark_summary = _insert_model_display_column(benchmark_summary)
+    benchmark_summary["_model_order"] = benchmark_summary["model"].map(_model_order_index)
+    benchmark_summary = benchmark_summary.sort_values(
+        [
+            column
+            for column in ["signal_set", "experiment_id", "cv_strategy", "_model_order", "model"]
+            if column in benchmark_summary.columns
+        ]
+    ).drop(columns=["_model_order"], errors="ignore")
     benchmark_summary.to_csv(summary_path, index=False)
     saved_paths.append(summary_path)
 
     main_models = [
-        "LightGBM",
         "SVM",
+        "LightGBM",
         "MLP",
         "GazeMAE_MLP",
         "MOMENT_gaze",
@@ -1426,6 +1582,7 @@ def _save_model_benchmark_outputs(
                 "accuracy / macro-F1",
             ]
         ]
+        main_report["model"] = main_report["model"].map(_thesis_model_display_name)
         main_csv_path = tables_dir / "main_model_complexity_report.csv"
         main_md_path = tables_dir / "main_model_complexity_report.md"
         main_report.to_csv(main_csv_path, index=False)
@@ -1435,7 +1592,12 @@ def _save_model_benchmark_outputs(
     return saved_paths
 
 
-def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path | None:
+def _save_group_model_ranking(
+    summary: pd.DataFrame,
+    output_dir: Path,
+    *,
+    output_filename: str = "classification_group_model_ranking.png",
+) -> Path | None:
     """Save a command-level metric comparison plot from quick summary metrics."""
     metric_columns = ["accuracy", "balanced_accuracy", "macro_f1", "weighted_f1", "auc"]
     available_metrics = [metric for metric in metric_columns if metric in summary.columns]
@@ -1476,12 +1638,19 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
     ).dropna(subset=["value"])
     if long_df.empty:
         return None
+    long_df["metric_display"] = long_df["metric"].map(_ranking_metric_display_name)
+    long_df["model_display"] = long_df["model"].map(_ranking_model_display_name)
 
     metric_order = [metric for metric in metric_columns if metric in available_metrics]
-    palette = _model_color_map(model_order)
+    metric_display_order = [_ranking_metric_display_name(metric) for metric in metric_order]
+    model_display_order = list(dict.fromkeys(_ranking_model_display_name(model_name) for model_name in model_order))
+    palette = {
+        _ranking_model_display_name(model_name): color
+        for model_name, color in _model_color_map(model_order).items()
+    }
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
-    output_path = plots_dir / "classification_group_model_ranking.png"
+    output_path = plots_dir / output_filename
 
     n_panels = len(signal_order) * len(experiment_order) * len(strategy_order)
     fig, axes = plt.subplots(
@@ -1497,14 +1666,12 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
             if "signal_set" in long_df.columns
             else long_df
         )
-        signal_title = SIGNAL_SET_DESCRIPTIONS.get(str(signal_set), str(signal_set))
         for experiment_id in experiment_order:
             experiment_df = (
                 signal_df[signal_df["experiment_id"].astype(str) == experiment_id]
                 if "experiment_id" in signal_df.columns
                 else signal_df
             )
-            experiment_name = EXPERIMENT_DISPLAY_NAMES.get(str(experiment_id), str(experiment_id))
             for strategy in strategy_order:
                 ax = axes[row_idx, 0]
                 strategy_df = (
@@ -1517,11 +1684,11 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
                     continue
                 sns.barplot(
                     data=strategy_df,
-                    x="metric",
+                    x="metric_display",
                     y="value",
-                    hue="model",
-                    order=metric_order,
-                    hue_order=model_order,
+                    hue="model_display",
+                    order=metric_display_order,
+                    hue_order=model_display_order,
                     palette=palette,
                     ax=ax,
                     width=0.80,
@@ -1530,7 +1697,7 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
                 if legend is not None:
                     legend.remove()
 
-                for container, model_name in zip(ax.containers, model_order):
+                for container, model_name in zip(ax.containers, model_display_order):
                     for patch in container:
                         height = patch.get_height()
                         if not pd.notna(height):
@@ -1562,36 +1729,62 @@ def _save_group_model_ranking(summary: pd.DataFrame, output_dir: Path) -> Path |
                                 fontweight="bold",
                                 clip_on=True,
                             )
-                title_suffix = f" - {strategy}" if "cv_strategy" in experiment_df.columns else ""
-                signal_prefix = f"{signal_set}: " if "signal_set" in long_df.columns else ""
                 ax.set_title(
-                    f"{signal_prefix}Quick {experiment_name} Metrics by Model{title_suffix}",
+                    _group_model_ranking_title(
+                        signal_set=str(signal_set),
+                        experiment_id=str(experiment_id),
+                        cv_strategy=str(strategy) if "cv_strategy" in experiment_df.columns else "",
+                        has_signal_set="signal_set" in long_df.columns,
+                    ),
                     fontsize=14,
-                    pad=10,
+                    pad=14,
                 )
-                if "signal_set" in long_df.columns:
-                    ax.text(
-                        0.0,
-                        1.01,
-                        signal_title,
-                        transform=ax.transAxes,
-                        ha="left",
-                        va="bottom",
-                        fontsize=9,
-                        color="#555555",
-                    )
                 ax.set_xlabel("")
-                ax.set_ylabel("metric value", fontsize=11)
+                ax.set_ylabel("")
                 ax.set_ylim(0.0, 1.0)
-                ax.tick_params(axis="x", rotation=20, labelsize=11)
+                ax.tick_params(axis="x", rotation=0, labelsize=11)
                 ax.tick_params(axis="y", labelsize=10)
                 ax.grid(axis="y", alpha=0.30)
                 ax.grid(axis="x", visible=False)
                 row_idx += 1
-    fig.subplots_adjust(top=0.965, bottom=0.035, left=0.06, right=0.995, hspace=0.50)
-    fig.savefig(output_path, dpi=300)
+    fig.subplots_adjust(top=0.90, bottom=0.075, left=0.045, right=0.995, hspace=0.50)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     return output_path
+
+
+def _save_suite_grouped_metric_rankings(rows: Sequence[Dict[str, Any]]) -> List[Path]:
+    """Save thesis-style grouped metric plots inside each suite run directory."""
+    summary = pd.DataFrame(list(rows))
+    if summary.empty or "suite_run_dir" not in summary.columns:
+        return []
+
+    saved_paths: List[Path] = []
+    successful = summary[summary["status"].astype(str) == "success"].copy()
+    if successful.empty:
+        return saved_paths
+
+    group_columns = [
+        column
+        for column in ["signal_set", "suite_run_dir", "run_name"]
+        if column in successful.columns
+    ]
+    if not group_columns:
+        return saved_paths
+
+    for _, group in successful.groupby(group_columns, sort=False, dropna=False):
+        suite_run_dir = Path(str(group.iloc[0].get("suite_run_dir", "")))
+        if not suite_run_dir.exists():
+            continue
+        plot_path = _save_group_model_ranking(
+            summary=group,
+            output_dir=suite_run_dir,
+            output_filename="classification_group_model_ranking_grouped_metrics.png",
+        )
+        if plot_path is not None:
+            saved_paths.append(plot_path)
+
+    return saved_paths
 
 
 def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Path) -> Path | None:
@@ -1638,7 +1831,14 @@ def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Pat
     model_order = _ordered_models(long_df["model"].astype(str).unique().tolist())
     metric_order = [metric for metric in metric_columns if metric in available_metrics]
     group_order = list(dict.fromkeys(long_df["group"].astype(str).tolist()))
-    palette = _model_color_map(model_order)
+    model_display_order = list(dict.fromkeys(_thesis_model_display_name(model_name) for model_name in model_order))
+    metric_display_order = [_ranking_metric_display_name(metric_name) for metric_name in metric_order]
+    long_df["model_display"] = long_df["model"].map(_thesis_model_display_name)
+    long_df["metric_display"] = long_df["metric"].map(_ranking_metric_display_name)
+    palette = {
+        _thesis_model_display_name(model_name): color
+        for model_name, color in _model_color_map(model_order).items()
+    }
 
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -1651,24 +1851,24 @@ def _save_group_model_ranking_interactive(summary: pd.DataFrame, output_dir: Pat
 
     fig = px.bar(
         long_df,
-        x="metric",
+        x="metric_display",
         y="value",
-        color="model",
+        color="model_display",
         color_discrete_map=palette,
         facet_row="group",
         barmode="group",
-        text="model",
+        text="model_display",
         category_orders={
-            "model": model_order,
-            "metric": metric_order,
+            "model_display": model_display_order,
+            "metric_display": metric_display_order,
             "group": group_order,
         },
         hover_data=hover_data,
         title="Quick Metrics by Model",
         height=max(420, 360 * len(group_order)),
     )
-    fig.update_xaxes(title_text="metric")
-    fig.update_yaxes(range=[0.0, 1.0], title_text="metric value")
+    fig.update_xaxes(title_text="")
+    fig.update_yaxes(range=[0.0, 1.0], title_text="")
     fig.update_traces(textangle=-90, textposition="inside", insidetextanchor="middle")
     fig.update_layout(
         legend_title_text="model",
@@ -1707,26 +1907,23 @@ def _save_thesis_metric_table(summary: pd.DataFrame, output_dir: Path) -> Path |
         *available_metrics,
     ]
     table = table.loc[:, output_columns].copy()
-    sort_columns = [*group_columns, "accuracy"]
-    ascending = [True] * len(group_columns) + [False]
-    if "macro_f1" in table.columns:
-        sort_columns.append("macro_f1")
-        ascending.append(False)
-    sort_columns.append("model")
-    ascending.append(True)
+    table["_model_order"] = table["model"].map(_model_order_index)
+    sort_columns = [*group_columns, "_model_order", "model"]
+    ascending = [True] * len(sort_columns)
     table = table.sort_values(sort_columns, ascending=ascending).reset_index(drop=True)
 
     if group_columns:
-        table["rank"] = table.groupby(group_columns, dropna=False).cumcount() + 1
+        table["model_order"] = table.groupby(group_columns, dropna=False).cumcount() + 1
     else:
-        table["rank"] = np.arange(1, len(table) + 1)
+        table["model_order"] = np.arange(1, len(table) + 1)
+    table["model"] = table["model"].map(_thesis_model_display_name)
 
     table = table.loc[
         :,
         [
             *group_columns,
             *([column for column in ["signal_set_description"] if column in table.columns]),
-            "rank",
+            "model_order",
             "model",
             *available_metrics,
         ],
@@ -1758,6 +1955,9 @@ def _save_one_thesis_metric_heatmap(
         return None
 
     model_order = _ordered_models(plot_df["model"].astype(str).tolist())
+    model_display_order = list(dict.fromkeys(_thesis_model_display_name(model_name) for model_name in model_order))
+    plot_df = plot_df.copy()
+    plot_df["model_display"] = plot_df["model"].map(_thesis_model_display_name)
     signal_order = (
         [signal_set for signal_set in SIGNAL_SET_ORDER if signal_set in set(plot_df["signal_set"].astype(str))]
         if "signal_set" in plot_df.columns
@@ -1767,18 +1967,19 @@ def _save_one_thesis_metric_heatmap(
         return None
 
     if "signal_set" not in plot_df.columns:
-        heatmap_df = pd.DataFrame([plot_df.set_index("model")[metric]], index=["all"])
+        heatmap_df = pd.DataFrame([plot_df.set_index("model_display")[metric]], index=["all"])
     else:
         heatmap_df = plot_df.pivot_table(
             index="signal_set",
-            columns="model",
+            columns="model_display",
             values=metric,
             aggfunc="first",
         )
-    heatmap_df = heatmap_df.reindex(index=signal_order, columns=model_order)
+    heatmap_df = heatmap_df.reindex(index=signal_order, columns=model_display_order)
     if heatmap_df.dropna(how="all").empty:
         return None
 
+    metric_display = _ranking_metric_display_name(metric)
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     output_path = (
@@ -1798,12 +1999,12 @@ def _save_one_thesis_metric_heatmap(
         vmax=1.0,
         linewidths=0.5,
         linecolor="white",
-        cbar_kws={"label": metric},
+        cbar_kws={"label": metric_display},
         ax=ax,
     )
-    ax.set_title(f"{experiment_name} - {cv_strategy} - {metric}")
+    ax.set_title(f"{experiment_name} - {cv_strategy} - {metric_display}")
     ax.set_xlabel("model")
-    ax.set_ylabel("signal set")
+    ax.set_ylabel("signalni nabor")
     ax.tick_params(axis="x", rotation=35)
     ax.tick_params(axis="y", rotation=0)
     fig.tight_layout()
@@ -2190,20 +2391,30 @@ def _collect_training_history(rows: Sequence[Dict[str, Any]]) -> pd.DataFrame:
             if test_loss is not None and np.isfinite(test_loss):
                 history["test_loss"] = float(test_loss)
 
-            history.insert(0, "history_kind", history_kind)
-            history.insert(0, "history_path", str(history_path))
-            history.insert(0, "trainer_run_dir", str(trainer_run_dir))
-            history.insert(0, "suite_run_dir", str(suite_run_dir))
-            history.insert(0, "fold_id", fold_dir.name)
-            history.insert(0, "model", model_name)
-            history.insert(0, "summary_model_name", summary_model_name)
-            history.insert(0, "cv_strategy", cv_strategy)
-            history.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
-            history.insert(0, "experiment_id", experiment_id)
-            if "signal_set_description" in row:
-                history.insert(0, "signal_set_description", str(row.get("signal_set_description", "")))
+            metadata: List[tuple[str, Any]] = []
             if "signal_set" in row:
-                history.insert(0, "signal_set", str(row.get("signal_set", "")))
+                metadata.append(("signal_set", str(row.get("signal_set", ""))))
+            if "signal_set_description" in row:
+                metadata.append(("signal_set_description", str(row.get("signal_set_description", ""))))
+            metadata.extend(
+                [
+                    ("experiment_id", experiment_id),
+                    ("experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id)),
+                    ("cv_strategy", cv_strategy),
+                    ("summary_model_name", summary_model_name),
+                    ("model", model_name),
+                    ("fold_id", fold_dir.name),
+                    ("suite_run_dir", str(suite_run_dir)),
+                    ("trainer_run_dir", str(trainer_run_dir)),
+                    ("history_path", str(history_path)),
+                    ("history_kind", history_kind),
+                ]
+            )
+            history = _prepend_metadata_columns(
+                history,
+                metadata,
+                source_prefix="history_source",
+            )
             records.append(history)
 
     if not records:
@@ -2250,19 +2461,29 @@ def _collect_training_diagnostics(rows: Sequence[Dict[str, Any]]) -> pd.DataFram
             if diagnostics.empty or "split" not in diagnostics.columns:
                 continue
 
-            diagnostics.insert(0, "diagnostics_path", str(diagnostics_path))
-            diagnostics.insert(0, "trainer_run_dir", str(trainer_run_dir))
-            diagnostics.insert(0, "suite_run_dir", str(suite_run_dir))
-            diagnostics.insert(0, "fold_id", fold_dir.name)
-            diagnostics.insert(0, "model", model_name)
-            diagnostics.insert(0, "summary_model_name", summary_model_name)
-            diagnostics.insert(0, "cv_strategy", cv_strategy)
-            diagnostics.insert(0, "experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id))
-            diagnostics.insert(0, "experiment_id", experiment_id)
-            if "signal_set_description" in row:
-                diagnostics.insert(0, "signal_set_description", str(row.get("signal_set_description", "")))
+            metadata: List[tuple[str, Any]] = []
             if "signal_set" in row:
-                diagnostics.insert(0, "signal_set", str(row.get("signal_set", "")))
+                metadata.append(("signal_set", str(row.get("signal_set", ""))))
+            if "signal_set_description" in row:
+                metadata.append(("signal_set_description", str(row.get("signal_set_description", ""))))
+            metadata.extend(
+                [
+                    ("experiment_id", experiment_id),
+                    ("experiment_display_name", EXPERIMENT_DISPLAY_NAMES.get(experiment_id, experiment_id)),
+                    ("cv_strategy", cv_strategy),
+                    ("summary_model_name", summary_model_name),
+                    ("model", model_name),
+                    ("fold_id", fold_dir.name),
+                    ("suite_run_dir", str(suite_run_dir)),
+                    ("trainer_run_dir", str(trainer_run_dir)),
+                    ("diagnostics_path", str(diagnostics_path)),
+                ]
+            )
+            diagnostics = _prepend_metadata_columns(
+                diagnostics,
+                metadata,
+                source_prefix="diagnostics_source",
+            )
             records.append(diagnostics)
 
     if not records:
@@ -2613,7 +2834,7 @@ def _plot_training_curve_grid(
                     min_values,
                     max_values,
                     color=color,
-                    label=model_name,
+                    label=_thesis_model_display_name(model_name),
                     linestyle=line_style_by_metric.get(metric, "-"),
                 )
                 line = ax.lines[-1]
@@ -2647,7 +2868,7 @@ def _plot_training_curve_grid(
     if len(legend_handles) > 1:
         fig.legend(
             handles=[legend_handles[model] for model in model_order if model in legend_handles],
-            labels=[model for model in model_order if model in legend_handles],
+            labels=[_thesis_model_display_name(model) for model in model_order if model in legend_handles],
             loc="upper center",
             ncol=min(len(legend_handles), 4),
             frameon=False,
@@ -2763,7 +2984,7 @@ def _plot_training_loss_combined(history: pd.DataFrame, output_dir: Path) -> Pat
                 )
 
             if row_idx == 0:
-                ax.set_title(model_name, fontsize=11)
+                ax.set_title(_thesis_model_display_name(model_name), fontsize=11)
             if col_idx == 0:
                 ax.set_ylabel("loss")
                 if n_rows > 1:
@@ -2852,7 +3073,7 @@ def _save_fold_loss_plots(history: pd.DataFrame, output_dir: Path) -> List[Path]
             continue
 
         filename_base = _slugify_filename(f"{signal_prefix}{experiment_id}_{cv_strategy}_{model_name}_{fold_id}")
-        title = f"{signal_title_prefix}{experiment_name} - {cv_strategy} - {model_name} - {fold_id}"
+        title = f"{signal_title_prefix}{experiment_name} - {cv_strategy} - {_thesis_model_display_name(model_name)} - {fold_id}"
 
         combined_path = losses_dir / f"{filename_base}_combined.png"
         fig, ax = plt.subplots(1, 1, figsize=(9.0, 4.8))
@@ -2906,6 +3127,8 @@ def _plot_best_epoch_distribution(history: pd.DataFrame, output_dir: Path) -> Pa
         squeeze=False,
     )
     model_order = _ordered_models(best_df["model"].astype(str).unique().tolist())
+    model_display_order = list(dict.fromkeys(_thesis_model_display_name(model_name) for model_name in model_order))
+    best_df["model_display"] = best_df["model"].map(_thesis_model_display_name)
     for row_idx, group_values in enumerate(groups):
         group = dict(zip(group_keys, group_values))
         experiment_name = group.get("experiment_display_name", group.get("experiment_id", "Experiment"))
@@ -2918,17 +3141,17 @@ def _plot_best_epoch_distribution(history: pd.DataFrame, output_dir: Path) -> Pa
             group_df = group_df[group_df[key].astype(str) == str(value)]
         sns.boxplot(
             data=group_df,
-            x="model",
+            x="model_display",
             y="best_epoch",
-            order=model_order,
+            order=model_display_order,
             color="#D9EAF7",
             ax=ax,
         )
         sns.stripplot(
             data=group_df,
-            x="model",
+            x="model_display",
             y="best_epoch",
-            order=model_order,
+            order=model_display_order,
             color="#1F4E79",
             size=4,
             jitter=0.15,
@@ -2975,6 +3198,8 @@ def _plot_test_loss_summary(summary: pd.DataFrame, output_dir: Path) -> Path | N
         squeeze=False,
     )
     model_order = _ordered_models(plot_df["model"].astype(str).unique().tolist())
+    model_display_order = list(dict.fromkeys(_thesis_model_display_name(model_name) for model_name in model_order))
+    plot_df["model_display"] = plot_df["model"].map(_thesis_model_display_name)
     for row_idx, group_values in enumerate(groups):
         group = dict(zip(group_keys, group_values))
         experiment_name = group.get("experiment_display_name", group.get("experiment_id", "Experiment"))
@@ -2987,17 +3212,17 @@ def _plot_test_loss_summary(summary: pd.DataFrame, output_dir: Path) -> Path | N
             group_df = group_df[group_df[key].astype(str) == str(value)]
         sns.barplot(
             data=group_df,
-            x="model",
+            x="model_display",
             y="loss",
-            order=model_order,
+            order=model_display_order,
             color="#D9EAF7",
             ax=ax,
         )
         sns.stripplot(
             data=group_df,
-            x="model",
+            x="model_display",
             y="loss",
-            order=model_order,
+            order=model_display_order,
             color="#1F4E79",
             size=4,
             jitter=0.1,
@@ -3446,6 +3671,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     thesis_heatmap_paths: List[Path] = []
     ranking_path: Path | None = None
     interactive_ranking_path: Path | None = None
+    suite_ranking_paths: List[Path] = []
     test_loss_path: Path | None = None
     if report_profile in {"thesis", "full"}:
         thesis_metrics_path = _save_thesis_metric_table(summary=summary, output_dir=output_dir)
@@ -3464,6 +3690,7 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
     label_distribution_paths: List[Path] = []
     training_history_paths: List[Path] = []
     if not args.dry_run:
+        suite_ranking_paths = _save_suite_grouped_metric_rankings(rows)
         fold_metric_paths = _save_fold_metric_outputs(rows=rows, output_dir=output_dir)
         benchmark_paths = _save_model_benchmark_outputs(
             rows=rows,
@@ -3513,6 +3740,8 @@ def run_quick_comparison(args: argparse.Namespace, output_dir: Path | None = Non
         print(f"Saved ranking plot: {ranking_path}")
     if interactive_ranking_path is not None:
         print(f"Saved interactive ranking plot: {interactive_ranking_path}")
+    for suite_ranking_path in suite_ranking_paths:
+        print(f"Saved suite grouped metric ranking plot: {suite_ranking_path}")
     if test_loss_path is not None:
         print(f"Saved test loss plot: {test_loss_path}")
     for fold_metric_path in fold_metric_paths:
