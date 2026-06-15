@@ -1,0 +1,34 @@
+| signal_set  | task            | cv_strategy   | model              | trainable_parameters | total_parameters | train_ms_per_window  | inference_ms_per_window | accuracy / macro-F1 |
+| ----------- | --------------- | ------------- | ------------------ | -------------------- | ---------------- | -------------------- | ----------------------- | ------------------- |
+| all_signals | Table-6 Valence | subject_kfold | SVM                |                      |                  | 0.4361904850808384   | 0.1063091246368918      | 0.6855 / 0.6761     |
+| all_signals | Table-6 Valence | subject_kfold | LightGBM           |                      |                  | 0.024490125075610682 | 0.0016786533224400874   | 0.6902 / 0.6826     |
+| all_signals | Table-6 Valence | subject_kfold | MLP                | 8706.0               | 8706.0           | 0.4181887745780249   | 0.0010799449891067537   | 0.6725 / 0.6622     |
+| all_signals | Table-6 Valence | subject_kfold | MOMENT+GazeMAE+MLP | 180738.0             | 127217238.0      | 0.3079240637988355   | 0.0010919999092229484   | 0.6612 / 0.6565     |
+| all_signals | Table-6 Valence | subject_kfold | GCN                | 26179.0              | 26179.0          | 24.496491977560286   | 0.33253076506899054     | 0.5958 / 0.5764     |
+| all_signals | Table-6 Valence | subject_kfold | HeteroGCN-mean     | 51139.0              | 51139.0          | 35.797417687831995   | 0.360763806463326       | 0.6180 / 0.5969     |
+| all_signals | Table-6 Valence | subject_kfold | HeteroGCN-MLP      | 92355.0              | 92355.0          | 27.067515014290784   | 0.3916448083696441      | 0.6054 / 0.5655     |
+| all_signals | Table-6 Valence | subject_kfold | HeteroGCN-MLP-w    | 92664.0              | 92664.0          | 29.296985647742662   | 0.3444495947712418      | 0.6274 / 0.6084     |
+| gaze_only   | Table-6 Valence | subject_kfold | SVM                |                      |                  | 0.36977910636303     | 0.07510142054733064     | 0.6748 / 0.6720     |
+| gaze_only   | Table-6 Valence | subject_kfold | LightGBM           |                      |                  | 0.09571793995895547  | 0.0016332518618214446   | 0.6968 / 0.6944     |
+| gaze_only   | Table-6 Valence | subject_kfold | MLP                | 6082.0               | 6082.0           | 0.5445179228439407   | 0.0008737004934948406   | 0.6702 / 0.6667     |
+| gaze_only   | Table-6 Valence | subject_kfold | GazeMAE+MLP        | 82434.0              | 2118934.0        | 0.2527216136268162   | 2.6449338720238096      | 0.6572 / 0.6516     |
+| gaze_only   | Table-6 Valence | subject_kfold | GCN                | 25923.0              | 25923.0          | 27.901862696170845   | 0.17316476931359356     | 0.6436 / 0.6407     |
+| gaze_only   | Table-6 Valence | subject_kfold | HeteroGCN-mean     | 42563.0              | 42563.0          | 23.97668422459098    | 0.193532576401974       | 0.6169 / 0.5922     |
+| gaze_only   | Table-6 Valence | subject_kfold | HeteroGCN-MLP      | 75587.0              | 75587.0          | 35.1409144780405     | 0.19592964037685062     | 0.6590 / 0.6583     |
+| gaze_only   | Table-6 Valence | subject_kfold | HeteroGCN-MLP-w    | 75842.0              | 75842.0          | 33.582997081010234   | 0.18743577263346795     | 0.6432 / 0.6398     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | SVM                |                      |                  | 0.38558969720398856  | 0.07886625780189958     | 0.7052 / 0.6966     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | LightGBM           |                      |                  | 0.0416396205292413   | 0.0016788776119402988   | 0.6957 / 0.6880     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | MLP                | 7234.0               | 7234.0           | 0.39023071245531216  | 0.0009491290818634101   | 0.6871 / 0.6758     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | MOMENT+GazeMAE+MLP | 180738.0             | 127217238.0      | 0.2632198102452545   | 0.0010965886928991405   | 0.6557 / 0.6525     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | GCN                | 26051.0              | 26051.0          | 20.726527588350947   | 0.19002606476707373     | 0.6543 / 0.6392     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | HeteroGCN-mean     | 42691.0              | 42691.0          | 26.64146885477868    | 0.2007286037991859      | 0.6383 / 0.6111     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | HeteroGCN-MLP      | 75715.0              | 75715.0          | 22.271953063314346   | 0.2009569063772049      | 0.6425 / 0.6284     |
+| gaze_pupil  | Table-6 Valence | subject_kfold | HeteroGCN-MLP-w    | 76006.0              | 76006.0          | 21.742147654028557   | 0.19306325192220716     | 0.6550 / 0.6438     |
+| pupil_only  | Table-6 Valence | subject_kfold | SVM                |                      |                  | 0.3702169105236507   | 0.07411021226074395     | 0.6206 / 0.6072     |
+| pupil_only  | Table-6 Valence | subject_kfold | LightGBM           |                      |                  | 0.11726834849469707  | 0.003237324304803178    | 0.6306 / 0.6190     |
+| pupil_only  | Table-6 Valence | subject_kfold | MLP                | 6082.0               | 6082.0           | 0.31338382104101875  | 0.0008642204767063922   | 0.6199 / 0.6030     |
+| pupil_only  | Table-6 Valence | subject_kfold | MOMENT+MLP         | 115202.0             | 125115202.0      | 0.23547346179196657  | 0.0008888176236908631   | 0.6048 / 0.6008     |
+| pupil_only  | Table-6 Valence | subject_kfold | GCN                | 25923.0              | 25923.0          | 5.104201616871631    | 0.12408652573131095     | 0.6105 / 0.5836     |
+| pupil_only  | Table-6 Valence | subject_kfold | HeteroGCN-mean     | 34243.0              | 34243.0          | 7.63955236167789     | 0.14028208992416036     | 0.5858 / 0.5573     |
+| pupil_only  | Table-6 Valence | subject_kfold | HeteroGCN-MLP      | 59075.0              | 59075.0          | 9.027221801772829    | 0.1434371282051282      | 0.5915 / 0.5603     |
+| pupil_only  | Table-6 Valence | subject_kfold | HeteroGCN-MLP-w    | 59312.0              | 59312.0          | 7.737606337175573    | 0.13352959425785482     | 0.5842 / 0.5447     |

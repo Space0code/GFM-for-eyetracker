@@ -1,0 +1,9 @@
+signal_set,signal_set_description,experiment_id,experiment_display_name,cv_strategy,source_model,split,class_index,class_name,count,total,proportion
+all_signals,"Gaze, pupil, screen distance, and fixation-duration nodes with all graph relations.",multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,0,Low valence,1914,3672,0.5212418300653595
+all_signals,"Gaze, pupil, screen distance, and fixation-duration nodes with all graph relations.",multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,1,High valence,1758,3672,0.47875816993464054
+gaze_only,Gaze x/y nodes with temporal and spatial graph relations.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,0,Low valence,1947,3715,0.5240915208613728
+gaze_only,Gaze x/y nodes with temporal and spatial graph relations.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,1,High valence,1768,3715,0.47590847913862716
+gaze_pupil,Gaze x/y plus pupil nodes with temporal and spatial graph relations.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,0,Low valence,1918,3685,0.5204884667571235
+gaze_pupil,Gaze x/y plus pupil nodes with temporal and spatial graph relations.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,1,High valence,1767,3685,0.47951153324287654
+pupil_only,Pupil left/right nodes with temporal graph relations only.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,0,Low valence,1924,3692,0.5211267605633803
+pupil_only,Pupil left/right nodes with temporal graph relations only.,multiclass_table6_valence_3class,Table-6 Valence,subject_kfold,Random,test,1,High valence,1768,3692,0.4788732394366197

@@ -1,0 +1,276 @@
+run_experiments:
+  baselines: true
+  gnn: true
+benchmarking:
+  enabled: true
+  warmup_runs: 1
+  timed_runs: 3
+  synthetic_windows_per_run: 16
+multiclass_task:
+  task_name: table6-valence-3class
+  target_column: emotion-id
+  use_table6_3class_targets: true
+  drop_unmapped_labels: true
+  class_name_mapping:
+    0: Low valence
+    2: High valence
+  table6_class_mapping:
+    1: 0
+    2: 0
+    3: 0
+    4: 2
+    5: 0
+    11: 2
+    12: 0
+dataset:
+  data_filepath: results/quick_v1_v2_comparison/2026-06-12_16-29-08/model_runs/gaze_only/2026-06-12_16-29-11/experiments/multiclass_table6_valence_3class_emotion-elicitation/snapshot.csv
+  label_mapping_spec_path: specifications/hci_to_GFM_spec.yaml
+  exclude_subjects:
+  - P9
+  - P12
+  - P15
+  recursive: true
+  ignore_dirs: []
+  window_length: 10
+  window_overlap: 0
+  min_samples_per_window: 60
+  kt: 1
+  ks: 1
+  use_edge_weights: true
+  graph_version: v2
+  edge_weight_mode: learned_signed
+  use_relative_time: true
+  use_distance_avg: false
+  use_fixation_duration: false
+  use_delta_distance_edge_feature: false
+  use_fixation_edges: false
+  fixation_dilation_k: 3
+  tau: 0.05
+  cache_dir: data/cache
+  use_cache: true
+  dropping_emotion_threshold: -1
+  standardize_features: true
+  standardize_edge_features: true
+  target_aggregation: mean
+  feature_columns:
+  - x-avg
+  - y-avg
+  - pupil-size-left-avg
+  - pupil-size-right-avg
+  dropna_columns:
+  - time-rel-seconds
+  - subject
+  - recording
+  - x-avg
+  - y-avg
+  - emotion-id
+  experiment_type_column: experiment-type
+  allowed_experiment_types:
+  - emotion-elicitation
+  label_quality_column: emotion-derivation-status
+  allowed_label_quality_values:
+  - ok
+  signal_outlier_filter:
+    enabled: true
+    lower_quantile: 0.01
+    upper_quantile: 0.99
+    columns:
+    - x-avg
+    - y-avg
+  use_temporal_node_feature: true
+  use_temporal_edge_features: true
+  use_temporal_edges: true
+  use_spatial_edges: true
+  use_gaze_node_features: true
+  use_gaze_edge_features: true
+  use_pupil_node_features: false
+  use_pupil_edge_features: false
+  use_screen_distance_node_feature: false
+  use_screen_distance_edge_feature: false
+  use_fixation_node_feature: false
+  snapshot_manifest_path: results/quick_v1_v2_comparison/2026-06-12_16-29-08/model_runs/gaze_only/2026-06-12_16-29-11/experiments/multiclass_table6_valence_3class_emotion-elicitation/snapshot_manifest.yaml
+  snapshot_hash: 7a49408a4fdd181ca91189b85076de4ac13d111672f5fd3fc8983e05e99e183f
+  snapshot_cache_key: 42c07797b3fc51b96f7e3987728a69491974d6ac84cb5944549914971f1f9f5e
+  filter_subjects: null
+  filter_recordings: null
+cross_validation:
+  strategies:
+  - subject_kfold
+  n_splits: 7
+  val_size: 1
+  random_state: 42
+baselines:
+  models:
+  - Random
+  - Majority
+  - LightGBM
+  - SVM
+  - MLP
+  - GazeMAE_MLP
+  hyperparameters:
+    Mean: {}
+    SVM:
+      probability: true
+      random_state: 42
+    LightGBM:
+      n_estimators: 100
+      n_jobs: -1
+      verbose: -1
+      random_state: 42
+    MLP:
+      hidden_layer_size: 64
+      max_iter: 200
+      random_state: 42
+      early_stopping: true
+      early_stopping_patience: 15
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.1
+      batch_size: 128
+      device: auto
+    GazeMAE_MLP:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_gaze:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_gaze_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_all_signals:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_GazeMAE_gaze_pupil:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+    MOMENT_GazeMAE_all_signals:
+      hidden_layer_size: 128
+      num_epochs: 100
+      learning_rate: 0.001
+      weight_decay: 0.0001
+      dropout: 0.2
+      early_stopping_patience: 15
+      batch_size: 128
+      random_state: 42
+      device: auto
+gazemae:
+  model_pos: models/gazemae/pos-i3738-encoder-state.pt
+  model_vel: models/gazemae/vel-i8528-encoder-state.pt
+  screen_width: 1280
+  screen_height: 800
+  clip_to_screen: true
+  target_hz: 500
+  chunk_seconds: 2.0
+  chunk_pooling: mean_std
+  batch_size: 256
+  device: auto
+  cache_embeddings: true
+moment:
+  model_name: AutonLab/MOMENT-1-base
+  sequence_length: 512
+  batch_size: 64
+  device: auto
+  cache_embeddings: true
+  cache_dir: data/cache/moment_embeddings
+  local_files_only: false
+gnn:
+  model:
+    model_version: BasicGCN
+    in_channels: 3
+    hidden_channels: 64
+    num_layers: 2
+    head_pooling: attention
+    graph_pooling: attention
+    use_preprocess_mlp: true
+    add_self_loops: true
+    dropout_mlp: 0.1
+    dropout_gnn: 0.1
+    dropout_head: 0.1
+    aggr: mean
+    conv_type: GCNConv
+    use_spatial_edges: true
+    use_fixation_edges: false
+    use_delta_distance_edge_feature: false
+    spatial_edge_attr_dim: 6
+    temporal_edge_attr_dim: 7
+    fixation_edge_attr_dim: 6
+  training:
+    num_epochs: 350
+    batch_size: 256
+    learning_rate: 5.0e-05
+    grad_clip_max_norm: 1.0
+    device: auto
+    random_seed: 42
+    num_workers: 4
+    pin_memory: true
+    persistent_workers: true
+    use_torch_compile: false
+    early_stopping_enabled: true
+    early_stopping_patience: 20
+    early_stopping_min_delta: 0.0
+    early_stopping_restore_best: true
+  models:
+  - BasicGCN
+  - HeteroGCNMean
+  - HeteroGCNMLP
+  - HeteroGCNMLPWeights
+metrics:
+- accuracy
+- balanced_accuracy
+- macro_precision
+- macro_recall
+- macro_f1
+- macro_auc_ovr
+- weighted_precision
+- weighted_recall
+- weighted_f1
+- weighted_auc_ovr
+logging:
+  results_dir: results/quick_v1_v2_comparison/2026-06-12_16-29-08/model_runs/gaze_only/2026-06-12_16-29-11
+  verbose: false
+  run_name_prefix: multiclass_table6_valence_3class_emotion-elicitation

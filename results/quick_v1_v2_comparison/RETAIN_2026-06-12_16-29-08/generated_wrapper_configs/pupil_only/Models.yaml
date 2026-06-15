@@ -1,0 +1,159 @@
+suite:
+  results_dir: results/quick_v1_v2_comparison/2026-06-12_16-29-08/model_runs/pupil_only
+  snapshot_cache_dir: results/_snapshot_cache
+  seed: 42
+  source_data_root: data/processed/hci-tagging
+  base_configs:
+    binary: src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_binary_hci_tagging.yaml
+    multiclass: src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/quick_v1_v2_train_multiclass_hci_tagging.yaml
+quick_comparison:
+  models:
+  - Random
+  - Majority
+  - LightGBM
+  - SVM
+  - MLP
+  - GazeMAE_MLP
+  - BasicGCN
+  - HeteroGCNMean
+  - HeteroGCNMLP
+  - HeteroGCNMLPWeights
+  table6_tasks:
+  - valence
+  signal_sets:
+  - gaze_only
+  - pupil_only
+  - gaze_pupil
+  - all_signals
+global_overrides:
+  cross_validation:
+    strategies:
+    - subject_kfold
+    n_splits: 7
+    val_size: 1
+    random_state: 42
+  gnn:
+    model:
+      conv_type: GCNConv
+      model_version: BasicGCN
+      head_pooling: attention
+      graph_pooling: attention
+      num_layers: 2
+      hidden_channels: 64
+      use_spatial_edges: false
+      use_fixation_edges: false
+      use_delta_distance_edge_feature: false
+    training:
+      early_stopping_enabled: true
+      early_stopping_patience: 20
+      early_stopping_min_delta: 0.0
+      early_stopping_restore_best: true
+      learning_rate: 5.0e-05
+      num_epochs: 350
+      batch_size: 256
+      num_workers: 4
+      use_torch_compile: false
+    models:
+    - BasicGCN
+    - HeteroGCNMean
+    - HeteroGCNMLP
+    - HeteroGCNMLPWeights
+  dataset:
+    use_cache: true
+    label_mapping_spec_path: specifications/hci_to_GFM_spec.yaml
+    kt: 1
+    ks: 1
+    use_edge_weights: true
+    graph_version: v2
+    edge_weight_mode: learned_signed
+    use_relative_time: true
+    use_distance_avg: false
+    use_fixation_duration: false
+    use_delta_distance_edge_feature: false
+    use_fixation_edges: false
+    fixation_dilation_k: 3
+    standardize_edge_features: true
+    filter_subjects: null
+    exclude_subjects:
+    - P9
+    - P12
+    - P15
+    filter_recordings: null
+    min_samples_per_window: 60
+    target_aggregation: mean
+    signal_outlier_filter:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+      columns:
+      - pupil-size-left-avg
+      - pupil-size-right-avg
+    use_temporal_node_feature: true
+    use_temporal_edge_features: true
+    use_temporal_edges: true
+    use_spatial_edges: false
+    use_gaze_node_features: false
+    use_gaze_edge_features: false
+    use_pupil_node_features: true
+    use_pupil_edge_features: true
+    use_screen_distance_node_feature: false
+    use_screen_distance_edge_feature: false
+    use_fixation_node_feature: false
+    dropna_columns:
+    - time-rel-seconds
+    - subject
+    - recording
+    - pupil-size-left-avg
+    - pupil-size-right-avg
+  run_experiments:
+    baselines: true
+    gnn: true
+  baselines:
+    models:
+    - Random
+    - Majority
+    - LightGBM
+    - SVM
+    - MLP
+    - MOMENT_pupil
+experiments:
+  multiclass_table6_arousal_3class:
+    enabled: false
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-arousal-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Low arousal
+      2: High arousal
+    table6_class_mapping:
+      0: 0
+      1: 2
+      2: 0
+      3: 2
+      5: 0
+      6: 2
+      12: 2
+  multiclass_table6_valence_3class:
+    enabled: true
+    task_type: multiclass
+    experiment_group: multiclass
+    scope: emotion-elicitation
+    task_name: table6-valence-3class
+    use_table6_3class_targets: true
+    target_column: emotion-id
+    drop_unmapped_labels: true
+    class_name_mapping:
+      0: Low valence
+      2: High valence
+    table6_class_mapping:
+      1: 0
+      2: 0
+      3: 0
+      4: 2
+      5: 0
+      11: 2
+      12: 0
