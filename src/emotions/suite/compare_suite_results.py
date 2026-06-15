@@ -15,6 +15,123 @@ import seaborn as sns
 
 
 CLASSIFICATION_TASK_TYPES = {"binary", "multiclass"}
+PREFERRED_MODEL_ORDER = [
+    "Random",
+    "random",
+    "Majority",
+    "majority",
+    "MajorityClassifier",
+    "majority_classifier",
+    "SVM",
+    "LightGBM",
+    "MLP",
+    "GazeMAE_MLP",
+    "MOMENT_gaze",
+    "MOMENT_pupil",
+    "MOMENT_gaze_pupil",
+    "MOMENT_all_signals",
+    "MOMENT_GazeMAE_gaze_pupil",
+    "MOMENT_GazeMAE_all_signals",
+    "BasicGCN",
+    "HeteroGCNMean",
+    "HeteroGCNMLP",
+    "GeteroGCNMLP",
+    "HeteroGCNMLPWeights",
+    "GeteroGCNMLPWeights",
+]
+MODEL_DISPLAY_NAMES = {
+    "Random": "Naključni",
+    "random": "Naključni",
+    "Majority": "Večinski",
+    "majority": "Večinski",
+    "MajorityClassifier": "Večinski",
+    "majority_classifier": "Večinski",
+    "GazeMAE_MLP": "GazeMAE+MLP",
+    "MOMENT_gaze": "MOMENT+MLP",
+    "MOMENT_pupil": "MOMENT+MLP",
+    "MOMENT_gaze_pupil": "MOMENT+MLP",
+    "MOMENT_all_signals": "MOMENT+MLP",
+    "MOMENT_GazeMAE_gaze_pupil": "MOMENT+GazeMAE+MLP",
+    "MOMENT_GazeMAE_all_signals": "MOMENT+GazeMAE+MLP",
+    "BasicGCN": "GCN",
+    "HeteroGCNMean": "HeteroGCN-mean",
+    "HeteroGCNMLP": "HeteroGCN-MLP",
+    "GeteroGCNMLP": "HeteroGCN-MLP",
+    "HeteroGCNMLPWeights": "HeteroGCN-MLP-w",
+    "GeteroGCNMLPWeights": "HeteroGCN-MLP-w",
+}
+METRIC_DISPLAY_NAMES = {
+    "accuracy": "točnost",
+    "balanced_accuracy": "uravnotežena točnost",
+    "macro_f1": "makro F1",
+    "weighted_f1": "utežen F1",
+    "f1_comparable": "F1",
+    "auc_comparable": "AUC",
+    "auc": "AUC",
+}
+
+
+def _model_display_name(model_name: str) -> str:
+    """Return the thesis-facing model display name."""
+    name = str(model_name)
+    if name in set(MODEL_DISPLAY_NAMES.values()):
+        return name
+    return MODEL_DISPLAY_NAMES.get(name, name)
+
+
+def _model_order_index(model_name: str) -> int:
+    """Return fixed simple-to-complex model order index."""
+    preferred_idx = {name: idx for idx, name in enumerate(PREFERRED_MODEL_ORDER)}
+    name = str(model_name)
+    if name in preferred_idx:
+        return preferred_idx[name]
+    display_idx = {
+        _model_display_name(preferred_name): idx
+        for idx, preferred_name in enumerate(PREFERRED_MODEL_ORDER)
+    }
+    return display_idx.get(name, len(preferred_idx))
+
+
+def _ordered_model_labels(model_names: List[str]) -> List[str]:
+    """Return unique model labels in fixed simple-to-complex order."""
+    unique = list(dict.fromkeys(str(model_name) for model_name in model_names))
+    ordered = sorted(unique, key=lambda name: (_model_order_index(name), name.lower()))
+    return list(dict.fromkeys(_model_display_name(name) for name in ordered))
+
+
+def _metric_display_name(metric_name: str) -> str:
+    """Return the thesis-facing metric display name."""
+    return METRIC_DISPLAY_NAMES.get(str(metric_name), str(metric_name))
+
+
+def _insert_model_display_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Insert or refresh thesis-facing model labels in a comparison table."""
+    if df.empty or "model" not in df.columns:
+        return df
+    result = df.drop(columns=["model_display"], errors="ignore").copy()
+    insert_at = result.columns.get_loc("model") + 1
+    result.insert(insert_at, "model_display", result["model"].map(_model_display_name))
+    return result
+
+
+def _sort_by_model_order(df: pd.DataFrame) -> pd.DataFrame:
+    """Sort comparison rows by experiment metadata and fixed model order."""
+    if df.empty or "model" not in df.columns:
+        return df
+    result = df.copy()
+    result["_model_order"] = result["model"].map(_model_order_index)
+    sort_columns = [
+        column
+        for column in [
+            "suite_experiment_id",
+            "experiment_id",
+            "strategy",
+            "_model_order",
+            "model",
+        ]
+        if column in result.columns
+    ]
+    return result.sort_values(sort_columns).drop(columns=["_model_order"]).reset_index(drop=True)
 
 
 def _discover_strategy_summaries(run_dir: Path) -> List[Path]:
@@ -64,6 +181,7 @@ def _save_heatmap(
         return
 
     numeric_df = df[["suite_experiment_id", "model", value_col]].copy()
+    numeric_df["model_display"] = numeric_df["model"].map(_model_display_name)
     numeric_df[value_col] = pd.to_numeric(numeric_df[value_col], errors="coerce")
     numeric_df = numeric_df.dropna(subset=[value_col])
     if numeric_df.empty:
@@ -71,7 +189,7 @@ def _save_heatmap(
 
     pivot = numeric_df.pivot_table(
         index="suite_experiment_id",
-        columns="model",
+        columns="model_display",
         values=value_col,
         aggfunc="mean",
     )
@@ -79,6 +197,8 @@ def _save_heatmap(
     pivot = pivot.dropna(axis=0, how="all").dropna(axis=1, how="all")
     if pivot.empty:
         return
+    model_order = _ordered_model_labels(numeric_df["model"].astype(str).tolist())
+    pivot = pivot.reindex(columns=[model for model in model_order if model in pivot.columns])
 
     fig, ax = plt.subplots(figsize=(max(8, pivot.shape[1] * 1.3), max(4, pivot.shape[0] * 0.5)))
     sns.heatmap(
@@ -92,7 +212,7 @@ def _save_heatmap(
     )
     ax.set_title(title)
     ax.set_xlabel("model")
-    ax.set_ylabel("experiment")
+    ax.set_ylabel("eksperiment")
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -116,12 +236,23 @@ def _save_group_ranking_barplot(
     if agg.empty:
         return
 
-    agg = agg.sort_values(["experiment_group", metric_col], ascending=[True, not higher_is_better])
+    agg["model_display"] = agg["model"].map(_model_display_name)
+    agg["_model_order"] = agg["model"].map(_model_order_index)
+    agg = agg.sort_values(["experiment_group", "_model_order", "model"], ascending=True)
+    model_order = _ordered_model_labels(agg["model"].astype(str).tolist())
 
     fig, ax = plt.subplots(figsize=(12, max(4, 0.35 * len(agg))))
-    sns.barplot(data=agg, x=metric_col, y="model", hue="experiment_group", ax=ax, orient="h")
+    sns.barplot(
+        data=agg,
+        x=metric_col,
+        y="model_display",
+        hue="experiment_group",
+        order=model_order,
+        ax=ax,
+        orient="h",
+    )
     ax.set_title(title)
-    ax.set_xlabel(metric_col)
+    ax.set_xlabel(_metric_display_name(metric_col))
     ax.set_ylabel("model")
     ax.legend(loc="best")
     fig.tight_layout()
@@ -217,6 +348,9 @@ def build_suite_comparison_artifacts(
 
     if not classification_df.empty:
         classification_df = _build_comparable_classification_columns(classification_df)
+        classification_df = _insert_model_display_column(_sort_by_model_order(classification_df))
+    if not regression_df.empty:
+        regression_df = _insert_model_display_column(_sort_by_model_order(regression_df))
 
     cls_out = output_root / "classification_master_comparison.csv"
     reg_out = output_root / "regression_master_comparison.csv"
@@ -228,7 +362,7 @@ def build_suite_comparison_artifacts(
             classification_df,
             value_col="accuracy",
             output_path=plots_dir / "classification_heatmap_accuracy.png",
-            title="Classification Accuracy (experiment x model)",
+            title="Klasifikacijska točnost (eksperiment x model)",
             vmin=0.0,
             vmax=1.0,
         )
@@ -236,7 +370,7 @@ def build_suite_comparison_artifacts(
             classification_df,
             value_col="balanced_accuracy",
             output_path=plots_dir / "classification_heatmap_balanced_accuracy.png",
-            title="Classification Balanced Accuracy (experiment x model)",
+            title="Uravnotežena klasifikacijska točnost (eksperiment x model)",
             vmin=0.0,
             vmax=1.0,
         )
@@ -244,7 +378,7 @@ def build_suite_comparison_artifacts(
             classification_df,
             value_col="f1_comparable",
             output_path=plots_dir / "classification_heatmap_f1.png",
-            title="Classification F1 (experiment x model)",
+            title="Klasifikacijski F1 (eksperiment x model)",
             vmin=0.0,
             vmax=1.0,
         )
@@ -252,7 +386,7 @@ def build_suite_comparison_artifacts(
             classification_df,
             value_col="auc_comparable",
             output_path=plots_dir / "classification_heatmap_auc.png",
-            title="Classification AUC (experiment x model)",
+            title="Klasifikacijski AUC (eksperiment x model)",
             vmin=0.0,
             vmax=1.0,
         )
@@ -264,7 +398,7 @@ def build_suite_comparison_artifacts(
             classification_df,
             metric_col=ranking_metric,
             output_path=plots_dir / "classification_group_model_ranking.png",
-            title="Classification Model Ranking by Experiment Group",
+            title="Primerjava modelov po skupinah eksperimentov",
             higher_is_better=True,
         )
 
