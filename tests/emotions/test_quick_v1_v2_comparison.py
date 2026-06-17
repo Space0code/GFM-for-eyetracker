@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from emotions.gnn_improvement_experiments import run_quick_v1_v2_comparison as quick_comparison
+from emotions.gnn_improvement_experiments.run_conv_type_comparison import run_conv_type_comparison
 from emotions.gnn_improvement_experiments.run_quick_v1_v2_comparison import (
     AROUSAL_EXPERIMENT_ID,
     VALENCE_EXPERIMENT_ID,
@@ -287,6 +288,59 @@ def test_quick_dry_run_writes_signal_set_rows_and_nested_configs(tmp_path: Path)
     assert all_cfg["global_overrides"]["baselines"]["models"] == ["LightGBM", "MOMENT_GazeMAE_all_signals"]
     assert pupil_cfg["global_overrides"]["gnn"]["models"] == ["BasicGCN"]
     assert all_cfg["global_overrides"]["gnn"]["models"] == ["BasicGCN"]
+
+
+def test_conv_type_comparison_dry_run_writes_variant_metadata(tmp_path: Path) -> None:
+    base_config = tmp_path / "wrapper.yaml"
+    payload = {
+        "suite": {},
+        "global_overrides": {
+            "cross_validation": {"strategies": ["subject_kfold"]},
+        },
+        "experiments": {
+            AROUSAL_EXPERIMENT_ID: {"enabled": False},
+            VALENCE_EXPERIMENT_ID: {"enabled": True},
+        },
+        "quick_comparison": {
+            "models": ["BasicGCN", "HeteroGCNMLPWeights"],
+            "signal_sets": ["gaze_pupil"],
+            "table6_tasks": ["valence"],
+        },
+    }
+    base_config.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    args = Namespace(
+        base_config=str(base_config),
+        output_root=str(tmp_path / "conv_type_output"),
+        seed=None,
+        n_splits=7,
+        val_size=None,
+        num_epochs=None,
+        cv_strategy="subject_kfold",
+        only_variant="HeteroGCNMLPWeights_GINEConv",
+        use_torch_compile=False,
+        enable_benchmarking=False,
+        dry_run=True,
+    )
+
+    output_dir = run_conv_type_comparison(args)
+
+    summary = pd.read_csv(output_dir / "conv_type_comparison_summary.csv")
+    assert summary.loc[0, "variant_id"] == "HeteroGCNMLPWeights_GINEConv"
+    assert summary.loc[0, "architecture"] == "HeteroGCNMLPWeights"
+    assert summary.loc[0, "conv_type"] == "GINEConv"
+    assert summary.loc[0, "edge_info_mode"] == "edge_attr_plus_relation_mlp_scalar_weight"
+    assert summary.loc[0, "signal_set"] == "gaze_pupil"
+    assert summary.loc[0, "status"] == "dry_run"
+
+    config_path = output_dir / "generated_wrapper_configs" / "gaze_pupil" / "HeteroGCNMLPWeights_GINEConv.yaml"
+    generated = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert generated["global_overrides"]["gnn"]["models"] == ["HeteroGCNMLPWeights"]
+    assert generated["global_overrides"]["gnn"]["model"]["model_version"] == "HeteroGCNMLPWeights"
+    assert generated["global_overrides"]["gnn"]["model"]["conv_type"] == "GINEConv"
+    assert generated["global_overrides"]["dataset"]["use_gaze_node_features"] is True
+    assert generated["global_overrides"]["dataset"]["use_pupil_node_features"] is True
+    assert generated["global_overrides"]["benchmarking"]["enabled"] is False
+    assert (output_dir / "variant_manifest.csv").exists()
 
 
 def test_quick_model_parser_accepts_moment_embedding_aliases() -> None:

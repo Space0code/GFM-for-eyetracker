@@ -230,6 +230,66 @@ def test_basic_gcn_forward_uses_v2_graph_and_ignores_edge_attributes() -> None:
     assert model.readout == "attention"
 
 
+def test_conv_type_comparison_basic_variants_forward_pass() -> None:
+    loader = DataLoader(
+        [_build_basic_gcn_graph("P1", "r1"), _build_basic_gcn_graph("P2", "r2")],
+        batch_size=2,
+        shuffle=False,
+    )
+    batch = next(iter(loader))
+
+    for conv_type in ["GCNConv", "GATConv", "GraphConv", "GINConv"]:
+        model = BasicGCN(
+            in_channels=4,
+            hidden_channels=8,
+            out_channels=3,
+            output_scale=1.0,
+            use_preprocess_mlp=False,
+            conv_type=conv_type,
+            num_layers=2,
+        )
+        model.eval()
+        with torch.no_grad():
+            out = model(batch)
+
+        assert tuple(out.shape) == (2, 3)
+        assert model.conv_type == conv_type
+        assert model.use_edge_weights is False
+        assert model.edge_weight_mode == "none"
+
+
+def test_conv_type_comparison_weighted_hetero_variants_forward_pass() -> None:
+    loader = DataLoader([_build_v2_graph("P1", "r1"), _build_v2_graph("P2", "r2")], batch_size=2)
+    batch = next(iter(loader))
+
+    for conv_type in ["GCNConv", "GATConv", "GraphConv", "GINEConv"]:
+        model = HeteroGCNMLPWeights(
+            in_channels=4,
+            hidden_channels=8,
+            out_channels=3,
+            output_scale=1.0,
+            use_preprocess_mlp=False,
+            conv_type=conv_type,
+            num_layers=2,
+            use_delta_distance_edge_feature=False,
+            use_fixation_edges=False,
+        )
+        model.eval()
+        with torch.no_grad():
+            out = model(batch)
+
+        assert tuple(out.shape) == (2, 3)
+        assert model.conv_type == conv_type
+        if conv_type == "GATConv":
+            assert model.use_edge_weights is False
+            assert model.edge_weight_mode == "native_attention_edge_attr"
+            assert not hasattr(model, "temporal_edge_weight_mlp")
+        else:
+            assert model.use_edge_weights is True
+            assert model.edge_weight_mode == "learned_signed"
+            assert hasattr(model, "temporal_edge_weight_mlp")
+
+
 def test_unweighted_hetero_variants_do_not_use_scalar_edge_weights() -> None:
     for model_cls in [HeteroGCNMean, HeteroGCNMLP]:
         model = model_cls(
