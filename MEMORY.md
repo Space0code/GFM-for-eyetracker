@@ -134,6 +134,17 @@ recent work, plans, or decisions.
 ## Current Config Context
 
 - Quick v1/v2 configs live under `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/`.
+- 2026-06-22 thesis protocol decision: final main thesis comparison uses low/high
+  Table-6 valence, all four signal sets (`gaze_only`, `pupil_only`,
+  `gaze_pupil`, `all_signals`), and 7-fold subject k-fold. 3-class tasks and
+  arousal are appendix/supporting context only, mainly for hyperparameter tuning
+  and label-noise motivation. Subject LOO is mentioned as a prior robustness
+  check on `all_signals` and should be compared to subject 7-fold in an appendix
+  table. There is no separate signal-ablation study in the final thesis plan.
+  For MAHNOB-HCI class targets, `target_aggregation` has no serious practical
+  role because target classes are constant within each 10s window; do not treat
+  `mean` vs `constant` as a meaningful methodological difference for retained
+  final results.
 - Thesis-facing implementation notes for the frozen `GazeMAE_MLP` transfer baseline are in `docs/appendix/gazemae_mlp_baseline.md`; use this as the detailed code-grounded source when writing the diploma comparison section.
 - The quick runner defaults to `src/emotions/gnn_improvement_experiments/configs/quick_v1_v2/run_hci_experiment_suite_table6_low_high.yaml`.
 - Shared architecture settings, especially `gnn.model.conv_type`, live in the wrapper YAML; Python variant overrides should only select variant identity.
