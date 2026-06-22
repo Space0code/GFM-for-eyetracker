@@ -43,6 +43,18 @@ recent work, plans, or decisions.
 - Treat `MAHNOB_dataset_report.md` as the canonical source for local MAHNOB-HCI counts and subject-exclusion rationale.
 - Keep scripts configurable with sensible defaults; terminal scripts should run as `python <script_name>.py` where feasible and log final arguments at startup.
 - Normalize confusion-matrix rows to per-class percentages, use fixed color scale `[0.0, 1.0]`, and use the `Blues` color scheme for heatmaps.
+- Never use LLM-generated or otherwise generative images for thesis results,
+  plots, diagrams, or data visualizations. Thesis figures must be reproducible
+  from concrete data or explicit code using Python plotting tools, TikZ, SVG, or
+  another traceable programmatic workflow; record source data and generation
+  scripts in thesis comments when figures are copied into `diploma-latex`.
+- Thesis result plots copied or regenerated for `diploma-latex` should match the
+  visual style of the main experiment runner/post-processing scripts. In
+  particular, heatmaps and confusion matrices should use the runner's
+  `seaborn.heatmap` style with `Blues`, values as proportions in `[0, 1]`, and
+  row-normalized confusion matrices. The current class-distribution figures in
+  `diploma-latex/slike/podatki` are an approved exception and should be kept in
+  their custom diploma style.
 - For questions about recent experiments, trainings, models, or data, check the latest git commits and explicitly state the assumption that the user likely means the most recently modified experiment context.
 - When making git commits, keep them granular by functionality or goal and write high-quality commit messages that are clear but not overly wordy.
 - Before committing generated results, check staged paths against `.gitignore` and check staged file sizes; warn the user about any file over 100 MB and do not commit it unless the user explicitly requests Git LFS or otherwise explicitly approves tracking that large file.
