@@ -9,10 +9,10 @@ Example:
     conda run -n gfm python scripts/create_thesis_gnn_graph_examples.py
 
 Useful options:
-    conda run -n gfm python scripts/create_thesis_gnn_graph_examples.py \
+    python scripts/create_thesis_gnn_graph_examples.py \
         --num-candidates 50 \
         --output-dir ../diploma-latex/slike/konstrukcija_grafa \
-        --formats svg png
+        --formats png pdf
 """
 
 from __future__ import annotations
@@ -77,13 +77,8 @@ RELATION_STYLES = {
     },
 }
 
-NODE_FILL_COLORS = [
-    PALETTE["teal"],
-    PALETTE["orange"],
-    PALETTE["purple"],
-    PALETTE["pink"],
-    PALETTE["blue"],
-]
+NODE_FILL_COLOR = "#CCAAE0"
+NODE_HIGHLIGHT_COLOR = "#C298DA"
 
 FIGURE_TITLE = "Majhen primer konstrukcije grafa iz podatkov sledilnika pogleda"
 PANEL_FILE_STEMS = {
@@ -170,7 +165,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--formats",
         nargs="+",
-        default=["svg", "png"],
+        default=["png", "pdf"],
         choices=["svg", "png", "pdf"],
         help="Output formats for selected figures.",
     )
@@ -507,7 +502,7 @@ def _draw_edges(
 
 def _node_color_map(nodes: pd.DataFrame) -> dict[float, str]:
     ids = list(dict.fromkeys(float(value) for value in nodes["fixation-index"].tolist()))
-    return {fixation_id: NODE_FILL_COLORS[idx % len(NODE_FILL_COLORS)] for idx, fixation_id in enumerate(ids)}
+    return {fixation_id: NODE_FILL_COLOR for fixation_id in ids}
 
 
 def _draw_nodes(
@@ -554,6 +549,7 @@ def _draw_nodes(
             slots = np.linspace(label_y_min, label_y_max, len(ordered_side))
             for idx, label_y in zip(ordered_side, slots):
                 label_positions[idx] = (label_x, float(label_y))
+    detail_index = int(nodes["local_index"].iloc[len(nodes) // 2]) if detailed_labels else -1
     for _, row in nodes.iterrows():
         idx = int(row["local_index"])
         fixation_id = float(row["fixation-index"])
@@ -570,7 +566,7 @@ def _draw_nodes(
                 [x],
                 [y],
                 s=detailed_node_size,
-                color=colors[fixation_id],
+                color=NODE_HIGHLIGHT_COLOR if idx == detail_index else colors[fixation_id],
                 edgecolor=PALETTE["dark"],
                 linewidth=0.9,
                 zorder=4,
@@ -585,32 +581,34 @@ def _draw_nodes(
                 color=PALETTE["dark"],
                 zorder=6,
             )
-            label_x, label_y = label_positions[idx]
-            ax.annotate(
-                label,
-                xy=(x, y),
-                xytext=(label_x, label_y),
-                ha="center",
-                va="center",
-                fontsize=detail_label_fontsize,
-                color=PALETTE["dark"],
-                zorder=5,
-                arrowprops={
-                    "arrowstyle": "-",
-                    "color": PALETTE["dark"],
-                    "alpha": 0.55,
-                    "linewidth": 0.65,
-                    "shrinkA": 4,
-                    "shrinkB": 4,
-                },
-                bbox={
-                    "boxstyle": f"round,pad={label_box_pad},rounding_size=0.08",
-                    "facecolor": colors[fixation_id],
-                    "edgecolor": PALETTE["dark"],
-                    "linewidth": 0.65,
-                    "alpha": 1.0,
-                },
-            )
+            if idx == detail_index:
+                label_x = float(np.min(x_values)) + 0.15 * x_span
+                label_y = float(np.min(y_values)) - 0.20 * y_span
+                ax.annotate(
+                    label,
+                    xy=(x, y),
+                    xytext=(label_x, label_y),
+                    ha="center",
+                    va="center",
+                    fontsize=detail_label_fontsize,
+                    color=PALETTE["dark"],
+                    zorder=5,
+                    arrowprops={
+                        "arrowstyle": "-",
+                        "color": PALETTE["dark"],
+                        "alpha": 0.55,
+                        "linewidth": 0.85,
+                        "shrinkA": 5,
+                        "shrinkB": 5,
+                    },
+                    bbox={
+                        "boxstyle": f"round,pad={label_box_pad},rounding_size=0.08",
+                        "facecolor": "#F7F2FF",
+                        "edgecolor": PALETTE["dark"],
+                        "linewidth": 0.75,
+                        "alpha": 1.0,
+                    },
+                )
         else:
             ax.scatter(
                 [x],
@@ -653,15 +651,15 @@ def _style_axis(
 
 def _panel_title(candidate: CandidateGraph, panel: str) -> str:
     if panel == "all":
-        return "vse povezave; barva vozlišča = fiksacija"
+        return "Primer časovno-prostorskega grafa"
     if panel == "all_plain":
         return "vse povezave"
     if panel == "temporal":
-        return f"časovne povezave, $k_t={candidate.kt}$"
+        return f"Časovne povezave v izseku grafa, $k_t={candidate.kt}$"
     if panel == "spatial":
-        return f"prostorske povezave, $k_s={candidate.ks}$"
+        return f"Prostorske povezave v izseku grafa, $k_s={candidate.ks}$"
     if panel == "fixation":
-        return f"fiksacijske povezave, $k_f={candidate.fixation_dilation_k}$"
+        return f"Fiksacijske povezave v izseku grafa, $k_f={candidate.fixation_dilation_k}$"
     raise ValueError(f"Unknown panel: {panel}")
 
 
@@ -701,12 +699,12 @@ def _draw_panel(
             ax,
             nodes,
             detailed_labels=True,
-            detailed_node_size=185.0 if single_panel else 118.0,
-            detailed_node_fontsize=12.6 if single_panel else 9.2,
-            detail_label_fontsize=19.5 if single_panel else 8.2,
+            detailed_node_size=300.0 if single_panel else 150.0,
+            detailed_node_fontsize=16.0 if single_panel else 10.5,
+            detail_label_fontsize=17.0 if single_panel else 8.8,
             label_box_pad=0.26 if single_panel else 0.18,
-            label_vertical_span_factor=1.05 if single_panel else 0.58,
-            label_side_offset_factor=0.82 if single_panel else 0.56,
+            label_vertical_span_factor=0.82 if single_panel else 0.58,
+            label_side_offset_factor=0.72 if single_panel else 0.56,
         )
     else:
         _draw_nodes(
@@ -718,15 +716,15 @@ def _draw_panel(
         )
 
     if single_panel:
-        padding_factor = 1.80 if panel == "all" else 0.50 if panel == "all_plain" else 0.43
+        padding_factor = 0.45 if panel == "all" else 0.50 if panel == "all_plain" else 0.43
         _style_axis(
             ax,
             nodes,
             _panel_title(candidate, panel),
             padding_factor=padding_factor,
-            title_fontsize=21.0,
-            axis_label_fontsize=18.0,
-            tick_fontsize=15.0,
+            title_fontsize=23.0,
+            axis_label_fontsize=19.0,
+            tick_fontsize=16.0,
             title_pad=17.0,
         )
     else:
@@ -801,7 +799,7 @@ def _plot_candidate_panel(
     image_format: str,
 ) -> None:
     transparent = image_format == "svg"
-    figure_size = (18.5, 12.4) if panel == "all" else (12.0, 9.0) if panel == "all_plain" else (10.8, 8.4)
+    figure_size = (13.8, 9.2) if panel == "all" else (12.0, 9.0) if panel == "all_plain" else (10.8, 8.4)
     fig, ax = plt.subplots(figsize=figure_size, facecolor=PALETTE["background"])
     _draw_panel(ax, candidate, panel, single_panel=True)
     relations = _panel_relations(panel)
