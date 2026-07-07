@@ -627,9 +627,9 @@ def _style_axis(
     nodes: pd.DataFrame,
     title: str,
     padding_factor: float = 0.32,
-    title_fontsize: float = 14.0,
-    axis_label_fontsize: float = 12.0,
-    tick_fontsize: float = 10.0,
+    title_fontsize: float = 15.0,
+    axis_label_fontsize: float = 14.0,
+    tick_fontsize: float = 12.0,
     title_pad: float = 11.0,
 ) -> None:
     x_values = nodes["x-avg"].to_numpy(dtype=float)
@@ -699,9 +699,9 @@ def _draw_panel(
             ax,
             nodes,
             detailed_labels=True,
-            detailed_node_size=300.0 if single_panel else 150.0,
-            detailed_node_fontsize=16.0 if single_panel else 10.5,
-            detail_label_fontsize=17.0 if single_panel else 8.8,
+            detailed_node_size=340.0 if single_panel else 180.0,
+            detailed_node_fontsize=18.0 if single_panel else 11.8,
+            detail_label_fontsize=19.0 if single_panel else 9.8,
             label_box_pad=0.26 if single_panel else 0.18,
             label_vertical_span_factor=0.82 if single_panel else 0.58,
             label_side_offset_factor=0.72 if single_panel else 0.56,
@@ -711,8 +711,8 @@ def _draw_panel(
             ax,
             nodes,
             detailed_labels=False,
-            node_size=420.0 if single_panel else 165.0,
-            node_fontsize=15.4 if single_panel else 10.2,
+            node_size=470.0 if single_panel else 190.0,
+            node_fontsize=17.0 if single_panel else 11.2,
         )
 
     if single_panel:
@@ -722,9 +722,9 @@ def _draw_panel(
             nodes,
             _panel_title(candidate, panel),
             padding_factor=padding_factor,
-            title_fontsize=23.0,
-            axis_label_fontsize=19.0,
-            tick_fontsize=16.0,
+            title_fontsize=24.0,
+            axis_label_fontsize=21.0,
+            tick_fontsize=18.0,
             title_pad=17.0,
         )
     else:
