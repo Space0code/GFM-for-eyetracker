@@ -145,10 +145,10 @@ MODEL_COLORS = {
     "HeteroGCN-MLP-w": "#4292C6",
 }
 CLASS_NAMES = {
-    "Low valence": "nizka valenca",
-    "High valence": "visoka valenca",
+    "Low valence": "neprijetna",
+    "High valence": "prijetna",
     "Unpleasant": "neprijetno",
-    "Neutral valence": "nevtralna valenca",
+    "Neutral valence": "nevtralna",
     "Pleasant": "prijetno",
     "Calm": "nizka vzburjenost",
     "Medium aroused": "srednja vzburjenost",
