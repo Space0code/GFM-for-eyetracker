@@ -172,6 +172,22 @@ recent work, plans, or decisions.
 - 2026-06-12 Table-6/multiclass classification configs now use `dataset.target_aggregation: constant` instead of `mean`, so graph and tabular window builders assert that categorical targets such as `emotion-id` are constant within each window and fail loudly if mixed labels appear. Regression and older continuous binary configs keep `mean`.
 - 2026-06-17 gaze+pupil conv-type comparison implementation: `src/emotions/model.py` now supports `GCNConv`, `GATConv`, `GraphConv`, `GINConv`, and `GINEConv` for the active thesis GNN wrappers. `BasicGCN` keeps collapsed structural semantics with no edge attributes/scalar weights. `HeteroGCNMLPWeights` uses learned scalar edge weights for `GCNConv`, `GraphConv`, and weighted `GINEConv`, while `GATConv` uses native attention with relation `edge_attr` and no scalar edge-weight MLP. One-time runner: `src/emotions/gnn_improvement_experiments/run_conv_type_comparison.py`, defaulting to low/high Table-6 valence, `gaze_pupil`, 7-fold subject CV, variants `BasicGCN_{GCNConv,GATConv,GraphConv,GINConv}` and `HeteroGCNMLPWeights_{GCNConv,GATConv,GraphConv,GINEConv}`. Dry-run output: `results/conv_type_comparison/2026-06-17_09-00-23`; 1-epoch smoke `BasicGCN_GCNConv` succeeded at `results/conv_type_comparison/2026-06-17_09-00-32`.
 - 2026-07-07 thesis graph example figures were regenerated with larger node sizes and larger x/y axis labels and tick labels in `scripts/create_thesis_gnn_graph_examples.py`, so figure 5.1 and the related appendix panels are more readable at thesis size.
+- 2026-07-23 `scripts/benchmark_moment_full_inference.py` measures the two
+  previously missing Table 8.2 inference values for `MOMENT_pupil` and
+  `MOMENT_GazeMAE_gaze_pupil`. It reuses the retained 2026-06-12 fold heads and
+  frozen encoders, times the forward path from prepared tensors through
+  encoder(s), GazeMAE pooling where applicable, MLP head, and softmax, and
+  aggregates elapsed time across all seven folds. The final CUDA benchmark with
+  16 windows per run, one warm-up run, and three timed runs gave
+  `1.694824 ms/window` for `MOMENT_pupil` and `6.115708 ms/window` for
+  `MOMENT_GazeMAE_gaze_pupil`; the full artifact is
+  `results/quick_v1_v2_comparison/RETAIN_2026-06-12_16-29-08/tables/missing_full_inference_benchmark.json`.
+  A separate identical-scope GazeMAE recheck across the same seven folds gave
+  `2.628094 ms/window`, confirming the earlier approximately `2.64 ms/window`;
+  its artifact is `tables/gazemae_full_inference_recheck.json` under the same
+  retained result root. The fusion uses four MOMENT channels (gaze and pupils),
+  whereas standalone `MOMENT_pupil` uses two; MOMENT reshapes its transformer
+  input to `batch_size * n_channels`, so their encoder times are not equal.
 - As of 2026-05-14, new multiclass `summary.csv` files keep only `metric_type=aggregated`; the redundant `emotion_multiclass` row was removed, and multiclass plotting reads the `aggregated` row directly.
 - 2026-05-14 3-class quick comparison run `results/quick_v1_v2_comparison/2026-05-14_13-26-54` failed during `GNN_v1` subject-kfold 2 with `Pin memory thread exited unexpectedly`; `GNN_v2` never ran. Multiclass GNN training now retries this DataLoader failure with `num_workers=0`, `pin_memory=false`, `persistent_workers=false`, and the quick 3-class wrapper uses those safe defaults.
 - 2026-06-03 quick comparison default model selection moved into the wrapper YAML via `quick_comparison.models`; running `python src/emotions/gnn_improvement_experiments/run_quick_v1_v2_comparison.py` with no `--models` now uses that config-driven diploma list.
