@@ -749,7 +749,7 @@ def _add_legend(fig: plt.Figure, relations: list[str], fontsize: float, y_anchor
 
 
 def _plot_candidate(candidate: CandidateGraph, output_path: Path, image_format: str) -> None:
-    transparent = image_format == "svg"
+    transparent = True
     fig = plt.figure(figsize=(16.0, 12.4), facecolor=PALETTE["background"])
     grid = GridSpec(
         2,
@@ -798,7 +798,7 @@ def _plot_candidate_panel(
     output_path: Path,
     image_format: str,
 ) -> None:
-    transparent = image_format == "svg"
+    transparent = True
     figure_size = (13.8, 9.2) if panel == "all" else (12.0, 9.0) if panel == "all_plain" else (10.8, 8.4)
     fig, ax = plt.subplots(figsize=figure_size, facecolor=PALETTE["background"])
     _draw_panel(ax, candidate, panel, single_panel=True)
